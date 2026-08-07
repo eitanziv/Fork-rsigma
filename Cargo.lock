@@ -4692,6 +4692,7 @@ dependencies = [
  "p12-keystore",
  "pastey",
  "phf 0.14.0",
+ "rcgen",
  "regex",
  "reqwest 0.13.4",
  "rustls",

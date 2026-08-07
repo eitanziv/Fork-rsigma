@@ -1,0 +1,585 @@
+{
+  "manifest_rows_total": 44,
+  "manifest_rows_by_disposition": {
+    "tested": 39,
+    "report_only": 5
+  },
+  "traceability_header": "req_id,section,test_case,verification,disposition,outcome",
+  "checklist_row_count": 44,
+  "table_51": [
+    {
+      "req_id": "REQ-TXC-3.1.1",
+      "test_case": "Missing Authorization Parameter",
+      "section": "3.1.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.1.2",
+      "test_case": "Authorization Parameter Error",
+      "section": "3.1.2",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.1.3",
+      "test_case": "Certificate-Based Authentication",
+      "section": "3.1.3",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.1.4",
+      "test_case": "HTTP Basic Authentication",
+      "section": "3.1.4",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.10.1",
+      "test_case": "Add Envelope Resource",
+      "section": "3.10.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.11.1",
+      "test_case": "Get Status Resource",
+      "section": "3.11.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.11.2",
+      "test_case": "Get All Status Properties",
+      "section": "3.11.2",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.12.1",
+      "test_case": "Delete",
+      "section": "3.12.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.1",
+      "test_case": "added_after",
+      "section": "3.13.1.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.10",
+      "test_case": "Duplicate Filter Parameter",
+      "section": "3.13.1.10",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.2",
+      "test_case": "limit",
+      "section": "3.13.1.2",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.3",
+      "test_case": "match[id]",
+      "section": "3.13.1.3",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.4",
+      "test_case": "match[type]",
+      "section": "3.13.1.4",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.5",
+      "test_case": "match[version]",
+      "section": "3.13.1.5",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.6",
+      "test_case": "match[spec_version]",
+      "section": "3.13.1.6",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.7",
+      "test_case": "Logical OR Operator",
+      "section": "3.13.1.7",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.8",
+      "test_case": "Logical AND Operator",
+      "section": "3.13.1.8",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.9",
+      "test_case": "Logical OR and AND Operators",
+      "section": "3.13.1.9",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.1",
+      "test_case": "Tier 1",
+      "section": "3.13.2.1",
+      "verification": "Optional",
+      "disposition": "REPORT_ONLY",
+      "expected_result": "Pending (optional additional filters)"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.2",
+      "test_case": "Tier 2",
+      "section": "3.13.2.2",
+      "verification": "Optional",
+      "disposition": "REPORT_ONLY",
+      "expected_result": "Pending (optional additional filters)"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.3",
+      "test_case": "Tier 3",
+      "section": "3.13.2.3",
+      "verification": "Optional",
+      "disposition": "REPORT_ONLY",
+      "expected_result": "Pending (optional additional filters)"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.4",
+      "test_case": "Relationships",
+      "section": "3.13.2.4",
+      "verification": "Optional",
+      "disposition": "REPORT_ONLY",
+      "expected_result": "Pending (optional additional filters)"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.5",
+      "test_case": "Calculation",
+      "section": "3.13.2.5",
+      "verification": "Optional",
+      "disposition": "REPORT_ONLY",
+      "expected_result": "Pending (optional additional filters)"
+    },
+    {
+      "req_id": "REQ-TXC-3.14.1",
+      "test_case": "Pagination",
+      "section": "3.14.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.15.1",
+      "test_case": "Custom Properties",
+      "section": "3.15.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.2.1",
+      "test_case": "Get Discovery Resource",
+      "section": "3.2.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.3.1",
+      "test_case": "Get API Root Resource",
+      "section": "3.3.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.3.2",
+      "test_case": "Incorrect API Root Information",
+      "section": "3.3.2",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.4.1",
+      "test_case": "Get Collections Resource",
+      "section": "3.4.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.1.1",
+      "test_case": "Write-Only Collection Resource",
+      "section": "3.5.1.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.1.2",
+      "test_case": "Read-Write Collection Resource",
+      "section": "3.5.1.2",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.1.3",
+      "test_case": "Read-Only Collection Resource",
+      "section": "3.5.1.3",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.1.4",
+      "test_case": "No-Read-No-Write Collection Resource",
+      "section": "3.5.1.4",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.2.1",
+      "test_case": "Read Request for Write-only Collection",
+      "section": "3.5.2.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.2.2",
+      "test_case": "Write Request to Read-only Collection",
+      "section": "3.5.2.2",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.2.3",
+      "test_case": "Delete Request to Read-only or Write-only Collection",
+      "section": "3.5.2.3",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.2.4",
+      "test_case": "Delete Request to No-Read, No-Write Collection",
+      "section": "3.5.2.4",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.3",
+      "test_case": "Incorrect Collection Information",
+      "section": "3.5.3",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.6.1",
+      "test_case": "Get Manifest Resource",
+      "section": "3.6.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.7.1",
+      "test_case": "Get Envelope Resource (Get Objects)",
+      "section": "3.7.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.7.2",
+      "test_case": "No Objects",
+      "section": "3.7.2",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.8.1",
+      "test_case": "Get Envelope Resource (Get an Object)",
+      "section": "3.8.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.8.2",
+      "test_case": "Object Not Found",
+      "section": "3.8.2",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.9.1",
+      "test_case": "Get Versions Resource",
+      "section": "3.9.1",
+      "verification": "Mandatory",
+      "disposition": "TESTED",
+      "expected_result": "Pass"
+    }
+  ],
+  "traceability_rows": [
+    {
+      "req_id": "REQ-TXC-3.1.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.1.2",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.1.3",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.1.4",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.2.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.3.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.3.2",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.4.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.1.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.1.2",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.1.3",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.1.4",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.2.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.2.2",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.2.3",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.2.4",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.5.3",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.6.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.7.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.7.2",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.8.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.8.2",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.9.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.10.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.11.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.11.2",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.12.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.2",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.3",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.4",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.5",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.6",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.7",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.8",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.9",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.1.10",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.1",
+      "disposition": "REPORT_ONLY",
+      "expected_outcome": "REPORT_ONLY"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.2",
+      "disposition": "REPORT_ONLY",
+      "expected_outcome": "REPORT_ONLY"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.3",
+      "disposition": "REPORT_ONLY",
+      "expected_outcome": "REPORT_ONLY"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.4",
+      "disposition": "REPORT_ONLY",
+      "expected_outcome": "REPORT_ONLY"
+    },
+    {
+      "req_id": "REQ-TXC-3.13.2.5",
+      "disposition": "REPORT_ONLY",
+      "expected_outcome": "REPORT_ONLY"
+    },
+    {
+      "req_id": "REQ-TXC-3.14.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    },
+    {
+      "req_id": "REQ-TXC-3.15.1",
+      "disposition": "TESTED",
+      "expected_outcome": "Pass"
+    }
+  ]
+}

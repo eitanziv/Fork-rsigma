@@ -1,0 +1,395 @@
+# OASIS TAXII 2.1 Interop TXC traceability matrix.
+# Authority: TAXII 2.1 Interoperability Test Document Version 1.0 CSD01 (2022-03-30).
+# Persona checklist: §4.1 Table 51.
+
+[[requirement]]
+req_id = "REQ-TXC-3.1.1"
+section = "3.1.1"
+test_case = "Missing Authorization Parameter"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_1_1_missing_authorization"
+
+[[requirement]]
+req_id = "REQ-TXC-3.1.2"
+section = "3.1.2"
+test_case = "Authorization Parameter Error"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_1_2_authorization_error"
+
+[[requirement]]
+req_id = "REQ-TXC-3.1.3"
+section = "3.1.3"
+test_case = "Certificate-Based Authentication"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_1_3_certificate_auth"
+
+[[requirement]]
+req_id = "REQ-TXC-3.1.4"
+section = "3.1.4"
+test_case = "HTTP Basic Authentication"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_1_4_http_basic"
+
+[[requirement]]
+req_id = "REQ-TXC-3.2.1"
+section = "3.2.1"
+test_case = "Get Discovery Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_2_1_get_discovery"
+
+[[requirement]]
+req_id = "REQ-TXC-3.3.1"
+section = "3.3.1"
+test_case = "Get API Root Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_3_1_get_api_root"
+
+[[requirement]]
+req_id = "REQ-TXC-3.3.2"
+section = "3.3.2"
+test_case = "Incorrect API Root Information"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_3_2_incorrect_api_root"
+
+[[requirement]]
+req_id = "REQ-TXC-3.4.1"
+section = "3.4.1"
+test_case = "Get Collections Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_4_1_get_collections"
+
+[[requirement]]
+req_id = "REQ-TXC-3.5.1.1"
+section = "3.5.1.1"
+test_case = "Write-Only Collection Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_5_1_1_write_only_collection"
+
+[[requirement]]
+req_id = "REQ-TXC-3.5.1.2"
+section = "3.5.1.2"
+test_case = "Read-Write Collection Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_5_1_2_read_write_collection"
+
+[[requirement]]
+req_id = "REQ-TXC-3.5.1.3"
+section = "3.5.1.3"
+test_case = "Read-Only Collection Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_5_1_3_read_only_collection"
+
+[[requirement]]
+req_id = "REQ-TXC-3.5.1.4"
+section = "3.5.1.4"
+test_case = "No-Read-No-Write Collection Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_5_1_4_no_read_no_write_collection"
+
+[[requirement]]
+req_id = "REQ-TXC-3.5.2.1"
+section = "3.5.2.1"
+test_case = "Read Request for Write-only Collection"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_5_2_1_read_write_only_forbidden"
+
+[[requirement]]
+req_id = "REQ-TXC-3.5.2.2"
+section = "3.5.2.2"
+test_case = "Write Request to Read-only Collection"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_5_2_2_write_read_only_forbidden"
+
+[[requirement]]
+req_id = "REQ-TXC-3.5.2.3"
+section = "3.5.2.3"
+test_case = "Delete Request to Read-only or Write-only Collection"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_5_2_3_delete_forbidden"
+
+[[requirement]]
+req_id = "REQ-TXC-3.5.2.4"
+section = "3.5.2.4"
+test_case = "Delete Request to No-Read, No-Write Collection"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_5_2_4_delete_not_found"
+
+[[requirement]]
+req_id = "REQ-TXC-3.5.3"
+section = "3.5.3"
+test_case = "Incorrect Collection Information"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_5_3_incorrect_collection"
+
+[[requirement]]
+req_id = "REQ-TXC-3.6.1"
+section = "3.6.1"
+test_case = "Get Manifest Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_6_1_get_manifest"
+
+[[requirement]]
+req_id = "REQ-TXC-3.7.1"
+section = "3.7.1"
+test_case = "Get Envelope Resource (Get Objects)"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_7_1_get_objects"
+
+[[requirement]]
+req_id = "REQ-TXC-3.7.2"
+section = "3.7.2"
+test_case = "No Objects"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_7_2_no_objects"
+
+[[requirement]]
+req_id = "REQ-TXC-3.8.1"
+section = "3.8.1"
+test_case = "Get Envelope Resource (Get an Object)"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_8_1_get_object"
+
+[[requirement]]
+req_id = "REQ-TXC-3.8.2"
+section = "3.8.2"
+test_case = "Object Not Found"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_8_2_object_not_found"
+
+[[requirement]]
+req_id = "REQ-TXC-3.9.1"
+section = "3.9.1"
+test_case = "Get Versions Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_9_1_get_versions"
+
+[[requirement]]
+req_id = "REQ-TXC-3.10.1"
+section = "3.10.1"
+test_case = "Add Envelope Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_10_1_add_objects"
+
+[[requirement]]
+req_id = "REQ-TXC-3.11.1"
+section = "3.11.1"
+test_case = "Get Status Resource"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_11_1_get_status"
+
+[[requirement]]
+req_id = "REQ-TXC-3.11.2"
+section = "3.11.2"
+test_case = "Get All Status Properties"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_11_2_get_all_status_properties"
+
+[[requirement]]
+req_id = "REQ-TXC-3.12.1"
+section = "3.12.1"
+test_case = "Delete"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_12_1_delete_object"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.1"
+section = "3.13.1.1"
+test_case = "added_after"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_1_added_after"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.2"
+section = "3.13.1.2"
+test_case = "limit"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_2_limit"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.3"
+section = "3.13.1.3"
+test_case = "match[id]"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_3_match_id"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.4"
+section = "3.13.1.4"
+test_case = "match[type]"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_4_match_type"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.5"
+section = "3.13.1.5"
+test_case = "match[version]"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_5_match_version"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.6"
+section = "3.13.1.6"
+test_case = "match[spec_version]"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_6_match_spec_version"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.7"
+section = "3.13.1.7"
+test_case = "Logical OR Operator"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_7_logical_or"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.8"
+section = "3.13.1.8"
+test_case = "Logical AND Operator"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_8_logical_and"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.9"
+section = "3.13.1.9"
+test_case = "Logical OR and AND Operators"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_9_logical_or_and"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.1.10"
+section = "3.13.1.10"
+test_case = "Duplicate Filter Parameter"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_13_1_10_duplicate_filter"
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.2.1"
+section = "3.13.2.1"
+test_case = "Tier 1"
+verification = "Optional"
+disposition = "REPORT_ONLY"
+checklist_row = true
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.2.2"
+section = "3.13.2.2"
+test_case = "Tier 2"
+verification = "Optional"
+disposition = "REPORT_ONLY"
+checklist_row = true
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.2.3"
+section = "3.13.2.3"
+test_case = "Tier 3"
+verification = "Optional"
+disposition = "REPORT_ONLY"
+checklist_row = true
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.2.4"
+section = "3.13.2.4"
+test_case = "Relationships"
+verification = "Optional"
+disposition = "REPORT_ONLY"
+checklist_row = true
+
+[[requirement]]
+req_id = "REQ-TXC-3.13.2.5"
+section = "3.13.2.5"
+test_case = "Calculation"
+verification = "Optional"
+disposition = "REPORT_ONLY"
+checklist_row = true
+
+[[requirement]]
+req_id = "REQ-TXC-3.14.1"
+section = "3.14.1"
+test_case = "Pagination"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_14_1_pagination"
+
+[[requirement]]
+req_id = "REQ-TXC-3.15.1"
+section = "3.15.1"
+test_case = "Custom Properties"
+verification = "Mandatory"
+disposition = "TESTED"
+checklist_row = true
+test_id = "tc_3_15_1_custom_properties"
+
