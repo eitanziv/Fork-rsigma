@@ -44,14 +44,20 @@ fn split_challenges(value: &str) -> Vec<String> {
     while i < chars.len() {
         let ch = chars[i];
         match ch {
+            '\\' if in_quotes && i + 1 < chars.len() => {
+                // Keep escaped pairs intact so `\"` does not flip quote parity.
+                current.push('\\');
+                current.push(chars[i + 1]);
+                i += 2;
+            }
             '"' => {
                 in_quotes = !in_quotes;
                 current.push(ch);
                 i += 1;
             }
             ',' if !in_quotes => {
-                let rest: String = chars[i + 1..].iter().collect();
-                if starts_new_challenge(rest.trim_start()) {
+                let rest = &chars[i + 1..];
+                if starts_new_challenge_chars(rest) {
                     parts.push(std::mem::take(&mut current));
                 } else {
                     current.push(',');
@@ -70,15 +76,23 @@ fn split_challenges(value: &str) -> Vec<String> {
     parts
 }
 
-fn starts_new_challenge(rest: &str) -> bool {
-    let token = rest
-        .split(|c: char| c.is_whitespace() || c == ',')
-        .next()
-        .unwrap_or("");
+fn starts_new_challenge_chars(rest: &[char]) -> bool {
+    let mut start = 0;
+    while start < rest.len() && rest[start].is_whitespace() {
+        start += 1;
+    }
+    if start >= rest.len() {
+        return false;
+    }
+    let mut end = start;
+    while end < rest.len() && !rest[end].is_whitespace() && rest[end] != ',' {
+        end += 1;
+    }
+    let token = &rest[start..end];
     !token.is_empty()
-        && !token.contains('=')
+        && !token.contains(&'=')
         && token
-            .chars()
+            .iter()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '+' | '.'))
 }
 
@@ -106,5 +120,16 @@ mod tests {
         assert!(challenges[0].params.contains("type=1"));
         assert_eq!(challenges[1].scheme, "Basic");
         assert!(challenges[1].params.contains("realm=\"simple\""));
+    }
+
+    #[test]
+    fn escaped_quote_inside_param_does_not_split_challenge() {
+        // Escaped `\"` must not desync quote parity into a false challenge boundary.
+        let challenges = parse_www_authenticate(r#"Basic realm="a\",Basic b", Bearer realm="x""#);
+        assert_eq!(challenges.len(), 2);
+        assert_eq!(challenges[0].scheme, "Basic");
+        assert!(challenges[0].params.contains(r#"realm="a\",Basic b""#));
+        assert_eq!(challenges[1].scheme, "Bearer");
+        assert!(challenges[1].params.contains("realm=\"x\""));
     }
 }

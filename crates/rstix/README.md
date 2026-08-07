@@ -638,13 +638,13 @@ Authority: **TAXII 2.1 Interoperability Test Document Version 1.0** Committee Sp
 | Suite | `tests/taxii_interop/` | Custom runner (`harness = false`); 39 Mandatory scenarios |
 | Manifest | `tests/fixtures/taxii-interop/manifest.toml` | Table 51 `req_id` → `test_id` → disposition |
 | Gate expectations | `tests/fixtures/taxii-interop/gate-expectations.json` | Manifest-derived golden rows for Table 51 and traceability CSV (regenerate with `scripts/generate-taxii-interop-gate-expectations.py` when the manifest changes) |
-| Mock TXS | wiremock + local rustls mTLS acceptor (§3.1.3) | OASIS-shaped responses; no network; rustls `ring` provider pinned (avoids dual `ring`/`aws-lc-rs` panic) |
+| Mock TXS | wiremock + local rustls mTLS acceptor (§3.1.3) | OASIS-shaped responses; no network; §3.1.3 mints ephemeral PEMs with `rcgen` (no `taxii-live` fixtures); rustls `ring` provider pinned (avoids dual `ring`/`aws-lc-rs` panic) |
 | Report | `target/taxii-interop-report/` | `txc-table-51.md`, `traceability.csv`, `summary.json`, `risks.md` |
 | CI gate | `scripts/taxii-interop-report-gate.py` | Content + freshness (`TAXII_INTEROP_RUN_START`) |
 
-**Claim boundaries:** every Mandatory Table 51 cell is filled from automated results (`Pass`). The five Optional §3.13.2 additional-filter rows are `REPORT_ONLY`. This is **self-certification evidence**, not an OASIS-issued certificate.
+**Claim boundaries:** every Mandatory Table 51 cell is filled from automated results (`Pass`). The five Optional §3.13.2 additional-filter rows are `REPORT_ONLY`. This is **self-certification evidence**, not an OASIS-issued certificate. The counterparty is an in-repo mock TXS authored from the CSD01 tables, so results bound client behavior against that reading of the spec rather than against an independent TAXII Server (unlike the STIX suite, where fixtures are published bytes with provenance sidecars).
 
-**Assertion depth:** scenarios follow CSD01 Tables 2–50 (from `plan/taxii-2.1-interop-v1.0.docx`), not only checklist titles — including `User-Agent` (§2.1.4), `WWW-Authenticate` challenges (Table 2), absolute+relative `api_roots`, collections ordered by `id`, `X-TAXII-Date-Added-*` headers, versions pagination via `added_after` from `X-TAXII-Date-Added-Last` (Tables 48–49), Status Table 28 fields, and envelope/Status `x_*` custom properties (Table 50 / `TaxiiEnvelope::with_custom`).
+**Assertion depth:** scenarios follow CSD01 Tables 2–50, not only checklist titles — including `User-Agent` (§2.1.4), `WWW-Authenticate` challenges (Table 2), absolute+relative `api_roots`, collections ordered by `id`, `X-TAXII-Date-Added-*` headers, versions pagination via `added_after` from `X-TAXII-Date-Added-Last` (Tables 48–49), Status Table 28 fields, and envelope/Status `x_*` custom properties (Table 50 / `TaxiiEnvelope::with_custom`).
 
 **Runner order:** scenarios execute in registry/section order (Table 51), not lexicographic `test_id` sort (`tc_3_10` must not run before `tc_3_1_3`).
 

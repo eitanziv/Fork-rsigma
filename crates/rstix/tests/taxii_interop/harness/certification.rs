@@ -316,14 +316,17 @@ fn render_risks(manifest: &Manifest) -> String {
     }
     out.push_str("\n## Mock TXS note\n\n");
     out.push_str(
-        "- Mandatory HTTP scenarios use a local wiremock TAXII Server stand-in with OASIS-shaped responses.\n",
+        "- Mandatory HTTP scenarios use a local wiremock TAXII Server stand-in with OASIS-shaped responses authored in this repo from the CSD01 tables.\n",
+    );
+    out.push_str(
+        "- Evidence therefore bounds TXC behavior against that reading of the spec, not against an independent TXS (unlike STIX interop fixtures, which are published bytes with provenance sidecars).\n",
     );
     out.push_str(
         "- Mock collection IDs follow OASIS examples where unique; no-read/no-write uses a distinct id so wiremock routes do not collide with the reused CSD01 example id in Tables 12–13.\n\n",
     );
-    out.push_str("## Assertion depth (docx-aligned)\n\n");
+    out.push_str("## Assertion depth\n\n");
     out.push_str(
-        "- Authority text is `plan/taxii-2.1-interop-v1.0.docx` (CSD01 2022-03-30). Scenario depth matches Tables 2–50 request/response shapes, not only Table 51 row titles.\n",
+        "- Authority: TAXII 2.1 Interoperability Test Document Version 1.0 CSD01 (2022-03-30). Scenario depth matches Tables 2–50 request/response shapes, not only Table 51 row titles.\n",
     );
     out.push_str(
         "- §2.1.4: mocks require `User-Agent: rstix/…`. §3.1.1: `WWW-Authenticate` parsed as two Basic challenges (Table 2).\n",

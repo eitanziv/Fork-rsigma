@@ -1,12 +1,17 @@
 //! Local rustls mTLS acceptor for TXC §3.1.3 (certificate-based authentication).
+//!
+//! Certificates are minted in-process with `rcgen` so the suite does not depend
+//! on gitignored `taxii-live` PEMs (those remain for the optional live harness).
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use rcgen::{
+    CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, KeyUsagePurpose,
+};
 use rstix::taxii::{
     ClientCertificate, ServerTrustPolicy, SpkiPin, TaxiiClient, TaxiiClientConfig, TlsaCache,
 };
@@ -16,13 +21,63 @@ use rustls::{RootCertStore, ServerConfig};
 use rustls_webpki::EndEntityCert;
 use sha2::{Digest, Sha256};
 
-fn live_cert_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/taxii-live/fixtures/certs")
+struct MtlsMaterial {
+    ca_pem: String,
+    server_pem: String,
+    server_key_pem: String,
+    client_pem: String,
+    client_key_pem: String,
 }
 
-fn read_pem(name: &str) -> Vec<u8> {
-    let path = live_cert_dir().join(name);
-    std::fs::read(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
+fn mint_mtls_material() -> MtlsMaterial {
+    let mut ca_params = CertificateParams::new(Vec::<String>::new()).expect("ca params");
+    ca_params
+        .distinguished_name
+        .push(DnType::CommonName, "rstix-taxii-interop-ca");
+    ca_params.is_ca = IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    ca_params.key_usages = vec![
+        KeyUsagePurpose::DigitalSignature,
+        KeyUsagePurpose::KeyCertSign,
+        KeyUsagePurpose::CrlSign,
+    ];
+    let ca_key = KeyPair::generate().expect("ca key");
+    let ca_cert = ca_params.self_signed(&ca_key).expect("ca cert");
+    let ca_pem = ca_cert.pem();
+    let ca_issuer = Issuer::new(ca_params, ca_key);
+
+    let mut server_params =
+        CertificateParams::new(vec!["localhost".to_string()]).expect("server params");
+    server_params
+        .subject_alt_names
+        .push(rcgen::SanType::IpAddress(std::net::IpAddr::from([
+            127, 0, 0, 1,
+        ])));
+    server_params
+        .distinguished_name
+        .push(DnType::CommonName, "rstix-taxii-interop-server");
+    server_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    let server_key = KeyPair::generate().expect("server key");
+    let server_cert = server_params
+        .signed_by(&server_key, &ca_issuer)
+        .expect("server cert");
+
+    let mut client_params = CertificateParams::new(Vec::<String>::new()).expect("client params");
+    client_params
+        .distinguished_name
+        .push(DnType::CommonName, "rstix-taxii-interop-client");
+    client_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+    let client_key = KeyPair::generate().expect("client key");
+    let client_cert = client_params
+        .signed_by(&client_key, &ca_issuer)
+        .expect("client cert");
+
+    MtlsMaterial {
+        ca_pem,
+        server_pem: server_cert.pem(),
+        server_key_pem: server_key.serialize_pem(),
+        client_pem: client_cert.pem(),
+        client_key_pem: client_key.serialize_pem(),
+    }
 }
 
 fn spki_pin(cert: &CertificateDer<'_>) -> SpkiPin {
@@ -47,11 +102,12 @@ fn install_ring_provider() {
 pub async fn certificate_auth() {
     install_ring_provider();
 
-    let ca_pem = read_pem("ca.pem");
-    let server_pem = read_pem("server.pem");
-    let server_key = read_pem("server-key.pem");
-    let client_pem = read_pem("client.pem");
-    let client_key = read_pem("client-key.pem");
+    let material = mint_mtls_material();
+    let ca_pem = material.ca_pem.into_bytes();
+    let server_pem = material.server_pem.into_bytes();
+    let server_key = material.server_key_pem.into_bytes();
+    let client_pem = material.client_pem.into_bytes();
+    let client_key = material.client_key_pem.into_bytes();
 
     let provider = Arc::new(rustls::crypto::ring::default_provider());
 

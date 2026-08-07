@@ -967,17 +967,25 @@ mod tests {
     use super::*;
     use crate::core::TaxiiTimestamp;
 
+    fn assert_added_after_query(pairs: &[(String, String)], expected: &str) {
+        assert!(
+            pairs
+                .iter()
+                .any(|(k, v)| k == "added_after" && v == expected),
+            "missing added_after={expected} in {pairs:?}"
+        );
+    }
+
     #[test]
     fn clock_skew_helper_preserves_added_after_when_skew_absent() {
         let ts = TaxiiTimestamp::parse("2018-01-01T00:00:00.000000Z").expect("ts");
         let filter = TaxiiFilter::new().added_after(ts.clone());
         let adjusted = with_clock_skew_filter(&filter, None);
         assert_eq!(adjusted.added_after, Some(ts));
-        let pairs = adjusted.to_query_pairs().expect("encode");
-        assert!(pairs.contains(&(
-            "added_after".to_owned(),
-            "2018-01-01T00:00:00.000000Z".to_owned()
-        )));
+        assert_added_after_query(
+            &adjusted.to_query_pairs().expect("encode"),
+            "2018-01-01T00:00:00.000000Z",
+        );
     }
 
     #[test]
@@ -985,10 +993,55 @@ mod tests {
         let ts = TaxiiTimestamp::parse("2018-01-01T00:00:00.000000Z").expect("ts");
         let filter = TaxiiFilter::new().added_after(ts);
         let adjusted = with_clock_skew_filter(&filter, Some(2));
-        let pairs = adjusted.to_query_pairs().expect("encode");
-        assert!(pairs.contains(&(
-            "added_after".to_owned(),
-            "2018-01-01T00:00:02.000000Z".to_owned()
-        )));
+        assert_added_after_query(
+            &adjusted.to_query_pairs().expect("encode"),
+            "2018-01-01T00:00:02.000000Z",
+        );
+    }
+
+    #[test]
+    fn clock_skew_object_filter_preserves_added_after_when_skew_absent() {
+        let ts = TaxiiTimestamp::parse("2018-01-01T00:00:00.000000Z").expect("ts");
+        let filter = ObjectByIdFilter::new().added_after(ts.clone());
+        let adjusted = with_clock_skew_object_filter(&filter, None);
+        assert_eq!(adjusted.added_after, Some(ts));
+        assert_added_after_query(
+            &adjusted.to_query_pairs().expect("encode"),
+            "2018-01-01T00:00:00.000000Z",
+        );
+    }
+
+    #[test]
+    fn clock_skew_object_filter_shifts_added_after_when_skew_present() {
+        let ts = TaxiiTimestamp::parse("2018-01-01T00:00:00.000000Z").expect("ts");
+        let filter = ObjectByIdFilter::new().added_after(ts);
+        let adjusted = with_clock_skew_object_filter(&filter, Some(2));
+        assert_added_after_query(
+            &adjusted.to_query_pairs().expect("encode"),
+            "2018-01-01T00:00:02.000000Z",
+        );
+    }
+
+    #[test]
+    fn clock_skew_versions_filter_preserves_added_after_when_skew_absent() {
+        let ts = TaxiiTimestamp::parse("2018-01-01T00:00:00.000000Z").expect("ts");
+        let filter = VersionsQueryFilter::new().added_after(ts.clone());
+        let adjusted = with_clock_skew_versions_filter(&filter, None);
+        assert_eq!(adjusted.added_after, Some(ts));
+        assert_added_after_query(
+            &adjusted.to_query_pairs().expect("encode"),
+            "2018-01-01T00:00:00.000000Z",
+        );
+    }
+
+    #[test]
+    fn clock_skew_versions_filter_shifts_added_after_when_skew_present() {
+        let ts = TaxiiTimestamp::parse("2018-01-01T00:00:00.000000Z").expect("ts");
+        let filter = VersionsQueryFilter::new().added_after(ts);
+        let adjusted = with_clock_skew_versions_filter(&filter, Some(2));
+        assert_added_after_query(
+            &adjusted.to_query_pairs().expect("encode"),
+            "2018-01-01T00:00:02.000000Z",
+        );
     }
 }
