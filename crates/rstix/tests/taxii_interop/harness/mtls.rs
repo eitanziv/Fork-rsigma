@@ -35,13 +35,25 @@ fn spki_pin(cert: &CertificateDer<'_>) -> SpkiPin {
     SpkiPin::from_hex(&hex).expect("spki pin")
 }
 
+fn install_ring_provider() {
+    // reqwest's rustls feature may also enable aws-lc-rs; with both linked,
+    // rustls refuses to auto-select a process default. Pin ring (same as
+    // `build_rustls_config` in the TAXII client).
+    let provider = rustls::crypto::ring::default_provider();
+    let _ = provider.install_default();
+}
+
 /// Serve one HTTPS discovery response that requires a client certificate (CSD01 §3.1.3).
 pub async fn certificate_auth() {
+    install_ring_provider();
+
     let ca_pem = read_pem("ca.pem");
     let server_pem = read_pem("server.pem");
     let server_key = read_pem("server-key.pem");
     let client_pem = read_pem("client.pem");
     let client_key = read_pem("client-key.pem");
+
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
 
     let mut roots = RootCertStore::empty();
     for cert in CertificateDer::pem_slice_iter(&ca_pem) {
@@ -49,9 +61,10 @@ pub async fn certificate_auth() {
             .add(cert.expect("ca cert"))
             .expect("add ca to root store");
     }
-    let client_verifier = WebPkiClientVerifier::builder(Arc::new(roots))
-        .build()
-        .expect("client verifier");
+    let client_verifier =
+        WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider.clone())
+            .build()
+            .expect("client verifier");
 
     let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(&server_pem)
         .map(|c| c.expect("server cert"))
@@ -59,7 +72,9 @@ pub async fn certificate_auth() {
     let key = PrivateKeyDer::from_pem_slice(&server_key).expect("server key");
     let pin = spki_pin(&certs[0]);
 
-    let server_config = ServerConfig::builder()
+    let server_config = ServerConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .expect("tls versions")
         .with_client_cert_verifier(client_verifier)
         .with_single_cert(certs, key)
         .expect("server config");

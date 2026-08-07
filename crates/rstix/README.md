@@ -638,13 +638,15 @@ Authority: **TAXII 2.1 Interoperability Test Document Version 1.0** Committee Sp
 | Suite | `tests/taxii_interop/` | Custom runner (`harness = false`); 39 Mandatory scenarios |
 | Manifest | `tests/fixtures/taxii-interop/manifest.toml` | Table 51 `req_id` → `test_id` → disposition |
 | Gate expectations | `tests/fixtures/taxii-interop/gate-expectations.json` | Manifest-derived golden rows for Table 51 and traceability CSV (regenerate with `scripts/generate-taxii-interop-gate-expectations.py` when the manifest changes) |
-| Mock TXS | wiremock + local rustls mTLS acceptor (§3.1.3) | OASIS-shaped responses; no network |
+| Mock TXS | wiremock + local rustls mTLS acceptor (§3.1.3) | OASIS-shaped responses; no network; rustls `ring` provider pinned (avoids dual `ring`/`aws-lc-rs` panic) |
 | Report | `target/taxii-interop-report/` | `txc-table-51.md`, `traceability.csv`, `summary.json`, `risks.md` |
 | CI gate | `scripts/taxii-interop-report-gate.py` | Content + freshness (`TAXII_INTEROP_RUN_START`) |
 
 **Claim boundaries:** every Mandatory Table 51 cell is filled from automated results (`Pass`). The five Optional §3.13.2 additional-filter rows are `REPORT_ONLY`. This is **self-certification evidence**, not an OASIS-issued certificate.
 
 **Assertion depth:** scenarios follow CSD01 Tables 2–50 (from `plan/taxii-2.1-interop-v1.0.docx`), not only checklist titles — including `User-Agent` (§2.1.4), `WWW-Authenticate` challenges (Table 2), absolute+relative `api_roots`, collections ordered by `id`, `X-TAXII-Date-Added-*` headers, versions pagination via `added_after` from `X-TAXII-Date-Added-Last` (Tables 48–49), Status Table 28 fields, and envelope/Status `x_*` custom properties (Table 50 / `TaxiiEnvelope::with_custom`).
+
+**Runner order:** scenarios execute in registry/section order (Table 51), not lexicographic `test_id` sort (`tc_3_10` must not run before `tc_3_1_3`).
 
 **Three-layer gate** (run order):
 
@@ -683,8 +685,8 @@ Request invariants (all calls): `Accept: application/taxii+json;version=2.1`, `U
 | POST status | Poll until complete by default (`PostSubmitPolicy`) | `ReturnInitial` for one-shot 202 |
 | Pagination continuation | `more=true` requires `next` or `X-TAXII-Date-Added-Last` | `MissingPaginationHeaders` |
 | HTTP 416 recovery | Streams reset cursor and restore baseline `added_after` | Pagination streams |
-| Clock skew | `Date` header adjusts `added_after` encoding | Per-response skew cache |
-| HTTP 401 | `WWW-Authenticate` challenges parsed on `Unauthorized` | `AuthChallenge` |
+| Clock skew | When a prior response cached skew seconds, adjust `added_after` by that delta; **when skew is unset, leave `added_after` unchanged** (do not drop the filter) | `with_clock_skew_*`; unit-tested |
+| HTTP 401 | `WWW-Authenticate` challenges parsed on `Unauthorized`; auth-params must not become fake schemes (CSD01 Table 2 multi-challenge) | `AuthChallenge`, `parse_www_authenticate` |
 | SRV selection | RFC 2782 weighted random; `"."` targets skipped | `resolve_taxii_srv` |
 | Discovery default | `TaxiiDiscovery::default_api_root()` helper | Optional `default` field |
 | Status detail version | Optional on wire (spec example omits it) | `StatusDetail.version: Option<String>` |
@@ -697,7 +699,7 @@ Request invariants (all calls): `Accept: application/taxii+json;version=2.1`, `U
 | Manifest Accept | TAXII + STIX media types | Spec section 5.3 |
 | DNS SRV discovery | `resolve_taxii_srv` + `TaxiiClient::discover_via_srv` | `_taxii2._tcp` records |
 | Collection ingest | `ingest_collection` streams objects → synthetic `Bundle` → `StixStore::import_bundle` | `taxii-store` feature |
-| mTLS | PEM or PKCS#12 via [`ClientCertificate`](taxii::ClientCertificate), embedded in `build_rustls_config` | Pure-Rust PKCS#12 parse (`p12-keystore`); no OpenSSL TLS backend |
+| mTLS / rustls crypto | PEM or PKCS#12 via [`ClientCertificate`](taxii::ClientCertificate); `build_rustls_config` and interop mTLS mock use **`ring` explicitly** | Avoids process-default panic when `ring` and `aws-lc-rs` are both linked (e.g. via reqwest) |
 | Channels | **Not implemented** | Spec §6 RESERVED |
 | Filter validation | `limit > 0`; `all` version rules enforced | Invalid filters rejected before HTTP |
 

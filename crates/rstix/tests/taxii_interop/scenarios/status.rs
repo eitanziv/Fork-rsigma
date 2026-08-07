@@ -5,8 +5,8 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer};
 
 use crate::harness::support::{
-    API_ROOT, RstixUserAgent, STATUS_ID, api_root_url, interop_client, status_complete, status_full,
-    taxii_json,
+    API_ROOT, RstixUserAgent, STATUS_ID, api_root_url, interop_client, status_complete,
+    status_full, taxii_json,
 };
 
 pub async fn get_status() {

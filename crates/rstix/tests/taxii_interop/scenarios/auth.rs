@@ -5,8 +5,8 @@ use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer};
 
 use crate::harness::support::{
-    RstixUserAgent, discovery_body, interop_client, interop_client_bad_auth, interop_client_no_auth,
-    taxii_unauthorized,
+    RstixUserAgent, discovery_body, interop_client, interop_client_bad_auth,
+    interop_client_no_auth, taxii_unauthorized,
 };
 
 pub async fn missing_authorization() {
@@ -29,7 +29,10 @@ pub async fn missing_authorization() {
                     .iter()
                     .all(|c| c.scheme.eq_ignore_ascii_case("Basic"))
             );
-            assert_eq!(body.as_ref().map(|b| b.title.as_str()), Some("Unauthorized"));
+            assert_eq!(
+                body.as_ref().map(|b| b.title.as_str()),
+                Some("Unauthorized")
+            );
         }
         other => panic!("expected Unauthorized, got {other:?}"),
     }

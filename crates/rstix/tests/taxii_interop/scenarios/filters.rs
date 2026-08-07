@@ -2,35 +2,34 @@
 
 use rstix::core::{StixId, TaxiiTimestamp};
 use rstix::taxii::{TaxiiError, TaxiiFilter, VersionFilter};
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer};
 
 use crate::harness::support::{
     API_ROOT, COL_READ_WRITE, INDICATOR_ID, RstixUserAgent, api_root_url, indicator_object,
-    interop_client, mount_readable_collection, taxii_error, taxii_json,
+    interop_client, taxii_error, taxii_json,
 };
 
 async fn objects_with_filter(filter: TaxiiFilter, expected_query: &[(&str, &str)]) {
     let server = MockServer::start().await;
-    mount_readable_collection(&server).await;
-
-    let mut mock = Mock::given(method("GET"))
+    // Match path + User-Agent only; assert filter query pairs from the recorded
+    // request. Exact `query_param` matchers are brittle with percent-encoding and
+    // obscure mismatches as wiremock's bare HTTP 404.
+    Mock::given(method("GET"))
         .and(path(format!(
             "{API_ROOT}collections/{COL_READ_WRITE}/objects/"
         )))
-        .and(RstixUserAgent);
-    for (k, v) in expected_query {
-        mock = mock.and(query_param(*k, *v));
-    }
-    mock.respond_with(taxii_json(
-        200,
-        serde_json::json!({
-            "objects": [indicator_object()],
-            "more": false
-        }),
-    ))
-    .mount(&server)
-    .await;
+        .and(RstixUserAgent)
+        .respond_with(taxii_json(
+            200,
+            serde_json::json!({
+                "objects": [indicator_object()],
+                "more": false
+            }),
+        ))
+        .expect(1)
+        .mount(&server)
+        .await;
 
     let client = interop_client(&server);
     let page = client
@@ -38,6 +37,23 @@ async fn objects_with_filter(filter: TaxiiFilter, expected_query: &[(&str, &str)
         .await
         .expect("filtered objects");
     assert_eq!(page.value.objects.len(), 1);
+
+    let requests = server.received_requests().await.expect("received requests");
+    let objects_req = requests
+        .iter()
+        .find(|r| r.url.path().ends_with("/objects/"))
+        .expect("objects request");
+    let pairs: Vec<(String, String)> = objects_req
+        .url
+        .query_pairs()
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    for (key, value) in expected_query {
+        assert!(
+            pairs.iter().any(|(k, v)| k == key && v == value),
+            "missing query {key}={value} in {pairs:?}"
+        );
+    }
 }
 
 pub async fn added_after() {
@@ -98,9 +114,7 @@ pub async fn logical_or() {
 pub async fn logical_and() {
     let id: StixId = INDICATOR_ID.parse().expect("id");
     objects_with_filter(
-        TaxiiFilter::new()
-            .object_type("indicator")
-            .object_id(id),
+        TaxiiFilter::new().object_type("indicator").object_id(id),
         &[("match[type]", "indicator"), ("match[id]", INDICATOR_ID)],
     )
     .await;
@@ -138,14 +152,13 @@ pub async fn duplicate_filter() {
 
     // TXC must still process a 400 Bad Request if the server rejects a filter request.
     let server = MockServer::start().await;
-    mount_readable_collection(&server).await;
     Mock::given(method("GET"))
         .and(path(format!(
             "{API_ROOT}collections/{COL_READ_WRITE}/objects/"
         )))
         .and(RstixUserAgent)
-        .and(query_param("match[type]", "campaign,malware"))
         .respond_with(taxii_error(400, "Bad Request"))
+        .expect(1)
         .mount(&server)
         .await;
 
@@ -155,4 +168,18 @@ pub async fn duplicate_filter() {
         .await
         .expect_err("server may reject filter");
     assert!(matches!(err, TaxiiError::BadRequest { .. }));
+
+    let requests = server.received_requests().await.expect("received requests");
+    let objects_req = requests
+        .iter()
+        .find(|r| r.url.path().ends_with("/objects/"))
+        .expect("objects request");
+    let pairs: Vec<(String, String)> = objects_req
+        .url
+        .query_pairs()
+        .map(|(k, v)| (k.into_owned(), v.into_owned()))
+        .collect();
+    let type_keys: Vec<_> = pairs.iter().filter(|(k, _)| k == "match[type]").collect();
+    assert_eq!(type_keys.len(), 1);
+    assert_eq!(type_keys[0].1, "campaign,malware");
 }

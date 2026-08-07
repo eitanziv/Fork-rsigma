@@ -335,7 +335,17 @@ fn render_risks(manifest: &Manifest) -> String {
         "- §3.13.1.10: Table 42 shows a deliberately duplicate `match[type]` query; rstix encodes OR as one comma-joined parameter (TAXII OS) and still proves HTTP 400 handling.\n",
     );
     out.push_str(
-        "- §3.15.1: `TaxiiEnvelope::with_custom` posts `x_*` and preserves custom Status properties (Table 50).\n",
+        "- §3.15.1: `TaxiiEnvelope::with_custom` posts `x_*` and preserves custom Status properties (Table 50).\n\n",
+    );
+    out.push_str("## Library fixes surfaced by this suite\n\n");
+    out.push_str(
+        "- `added_after` is preserved when HTTP `Date` clock skew has not been observed yet (`with_clock_skew_*`).\n",
+    );
+    out.push_str(
+        "- §3.1.3 mTLS mock TXS and client rustls configs pin the `ring` crypto provider so dual `ring`/`aws-lc-rs` linkage does not panic.\n",
+    );
+    out.push_str(
+        "- Suite execution follows registry/section order (not lexicographic `test_id`).\n",
     );
     out
 }

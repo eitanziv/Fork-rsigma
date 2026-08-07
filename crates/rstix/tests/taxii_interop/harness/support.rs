@@ -130,7 +130,12 @@ pub fn api_root_body() -> serde_json::Value {
     })
 }
 
-pub fn collection_body(id: &str, title: &str, can_read: bool, can_write: bool) -> serde_json::Value {
+pub fn collection_body(
+    id: &str,
+    title: &str,
+    can_read: bool,
+    can_write: bool,
+) -> serde_json::Value {
     serde_json::json!({
         "id": id,
         "title": title,
@@ -188,6 +193,21 @@ pub async fn mount_write_collection(server: &MockServer) {
         .await;
 }
 
+pub const IDENTITY_ID: &str = "identity--f431f809-377b-45e0-aa1c-6a4751cae5ff";
+
+/// Minimal identity for CSD01 `created_by_ref` (Table 50 / indicator examples).
+pub fn identity_object() -> serde_json::Value {
+    serde_json::json!({
+        "type": "identity",
+        "spec_version": "2.1",
+        "id": IDENTITY_ID,
+        "created": "2018-01-17T11:11:13.000Z",
+        "modified": "2018-01-17T11:11:13.000Z",
+        "name": "ACME Corp, Inc.",
+        "identity_class": "organization"
+    })
+}
+
 pub fn indicator_object() -> serde_json::Value {
     serde_json::json!({
         "type": "indicator",
@@ -195,7 +215,7 @@ pub fn indicator_object() -> serde_json::Value {
         "id": INDICATOR_ID,
         "created": "2018-01-17T11:11:13.000Z",
         "modified": "2018-01-17T11:11:13.000Z",
-        "created_by_ref": "identity--f431f809-377b-45e0-aa1c-6a4751cae5ff",
+        "created_by_ref": IDENTITY_ID,
         "indicator_types": ["malicious-activity"],
         "name": "Bad IP1",
         "pattern": "[ipv4-addr:value = '198.51.100.1']",
@@ -205,14 +225,18 @@ pub fn indicator_object() -> serde_json::Value {
 }
 
 pub fn indicator_stix_object() -> StixObject {
+    // Bundle parse enforces `created_by_ref` resolution — include the identity.
     let bundle = serde_json::json!({
         "type": "bundle",
         "id": "bundle--00000000-0000-0000-0000-000000000001",
-        "objects": [indicator_object()]
+        "objects": [identity_object(), indicator_object()]
     });
     rstix::parse_bundle(&bundle.to_string())
         .expect("indicator")
-        .objects()[0]
+        .objects()
+        .iter()
+        .find(|obj| obj.id().as_str() == INDICATOR_ID)
+        .expect("indicator in bundle")
         .clone()
 }
 

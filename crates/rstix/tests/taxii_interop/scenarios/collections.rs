@@ -5,9 +5,9 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer};
 
 use crate::harness::support::{
-    API_ROOT, COL_MISSING, COL_NO_RW, COL_READ_ONLY, COL_READ_WRITE, COL_WRITE_ONLY, RstixUserAgent,
-    api_root_url, collection_body, collections_body, indicator_stix_object, interop_client,
-    taxii_error, taxii_json,
+    API_ROOT, COL_MISSING, COL_NO_RW, COL_READ_ONLY, COL_READ_WRITE, COL_WRITE_ONLY,
+    RstixUserAgent, api_root_url, collection_body, collections_body, indicator_stix_object,
+    interop_client, taxii_error, taxii_json,
 };
 
 pub async fn get_collections() {

@@ -7,8 +7,9 @@ use wiremock::{Mock, MockServer};
 
 use crate::harness::support::{
     API_ROOT, COL_READ_WRITE, COL_WRITE_ONLY, INDICATOR_ID, RstixUserAgent, TAXII_MEDIA,
-    api_root_url, indicator_object, indicator_stix_object, interop_client, mount_readable_collection,
-    mount_write_collection, status_complete, taxii_error, taxii_json, taxii_json_with_date_headers,
+    api_root_url, indicator_object, indicator_stix_object, interop_client,
+    mount_readable_collection, mount_write_collection, status_complete, taxii_error, taxii_json,
+    taxii_json_with_date_headers,
 };
 
 pub async fn get_manifest() {
@@ -84,7 +85,11 @@ pub async fn get_objects() {
         )
         .await
         .expect("objects");
-    assert_eq!(page.value.objects.len(), 2, "Table 20: access to all objects");
+    assert_eq!(
+        page.value.objects.len(),
+        2,
+        "Table 20: access to all objects"
+    );
     assert!(page.headers.date_added_first.is_some());
     assert!(page.headers.date_added_last.is_some());
 }
