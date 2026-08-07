@@ -24,6 +24,9 @@ pub struct TaxiiEnvelope {
     /// STIX objects in this page.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub objects: Vec<StixObject>,
+    /// Custom envelope properties (`x_*`) preserved for TXC/TXS interoperability (CSD01 §3.15).
+    #[serde(flatten)]
+    pub custom: BTreeMap<String, serde_json::Value>,
 }
 
 impl TaxiiEnvelope {
@@ -33,7 +36,14 @@ impl TaxiiEnvelope {
             more: false,
             next: None,
             objects,
+            custom: BTreeMap::new(),
         }
+    }
+
+    /// Attach a custom `x_*` property (CSD01 §3.15.1).
+    pub fn with_custom(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.custom.insert(key.into(), value);
+        self
     }
 }
 
@@ -46,6 +56,9 @@ struct RawEnvelope {
     next: Option<String>,
     #[serde(default)]
     objects: Vec<serde_json::Value>,
+    /// Unmodeled envelope properties (including `x_*` custom properties).
+    #[serde(flatten)]
+    custom: BTreeMap<String, serde_json::Value>,
 }
 
 impl RawEnvelope {
@@ -59,6 +72,7 @@ impl RawEnvelope {
             more: self.more,
             next: self.next,
             objects,
+            custom: self.custom,
         })
     }
 }

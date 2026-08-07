@@ -157,6 +157,12 @@ name = "taxii_store"
 required-features = ["taxii-store"]
 
 [[test]]
+name = "taxii_interop"
+path = "tests/taxii_interop/main.rs"
+harness = false
+required-features = ["taxii"]
+
+[[test]]
 name = "interop"
 path = "tests/interop/main.rs"
 harness = false

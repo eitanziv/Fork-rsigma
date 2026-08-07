@@ -629,6 +629,43 @@ Notes:
 
 **Offline test:** `cargo test -p rstix --features taxii-store --test taxii_store`
 
+### TAXII TXC interop self-certification (CSD01 Table 51)
+
+Authority: **TAXII 2.1 Interoperability Test Document Version 1.0** Committee Specification Draft 01 (2022-03-30). Persona: **TXC** (TAXII Client). **TXS** and TAXII Channels (§6 RESERVED) are out of scope.
+
+| Component | Path | Role |
+| --------- | ---- | ---- |
+| Suite | `tests/taxii_interop/` | Custom runner (`harness = false`); 39 Mandatory scenarios |
+| Manifest | `tests/fixtures/taxii-interop/manifest.toml` | Table 51 `req_id` → `test_id` → disposition |
+| Gate expectations | `tests/fixtures/taxii-interop/gate-expectations.json` | Manifest-derived golden rows for Table 51 and traceability CSV (regenerate with `scripts/generate-taxii-interop-gate-expectations.py` when the manifest changes) |
+| Mock TXS | wiremock + local rustls mTLS acceptor (§3.1.3) | OASIS-shaped responses; no network |
+| Report | `target/taxii-interop-report/` | `txc-table-51.md`, `traceability.csv`, `summary.json`, `risks.md` |
+| CI gate | `scripts/taxii-interop-report-gate.py` | Content + freshness (`TAXII_INTEROP_RUN_START`) |
+
+**Claim boundaries:** every Mandatory Table 51 cell is filled from automated results (`Pass`). The five Optional §3.13.2 additional-filter rows are `REPORT_ONLY`. This is **self-certification evidence**, not an OASIS-issued certificate.
+
+**Assertion depth:** scenarios follow CSD01 Tables 2–50 (from `plan/taxii-2.1-interop-v1.0.docx`), not only checklist titles — including `User-Agent` (§2.1.4), `WWW-Authenticate` challenges (Table 2), absolute+relative `api_roots`, collections ordered by `id`, `X-TAXII-Date-Added-*` headers, versions pagination via `added_after` from `X-TAXII-Date-Added-Last` (Tables 48–49), Status Table 28 fields, and envelope/Status `x_*` custom properties (Table 50 / `TaxiiEnvelope::with_custom`).
+
+**Three-layer gate** (run order):
+
+| Layer | Where | What it catches |
+| ----- | ----- | ---------------- |
+| 1 — export invariants | `tests/taxii_interop/harness/certification.rs` | Empty/wrong checklist `Result`, incomplete CSV, export before coverage passes |
+| 2 — manifest sync | `tests/taxii_interop/harness/gate_expectations.rs` + committed `gate-expectations.json` | Stale golden expectations after `manifest.toml` changes |
+| 3 — CI artifact gate | `scripts/taxii-interop-report-gate.py` | Stale/missing report, wrong Table 51 cells, CSV row/order/outcome drift, summary count mismatch |
+
+Regenerate expectations after manifest edits:
+
+```bash
+python3 scripts/generate-taxii-interop-gate-expectations.py
+```
+
+```bash
+export TAXII_INTEROP_RUN_START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+cargo test -p rstix --test taxii_interop --features taxii --locked
+python3 scripts/taxii-interop-report-gate.py
+```
+
 Request invariants (all calls): `Accept: application/taxii+json;version=2.1`, `User-Agent: rstix/{VERSION}` (override via config), trailing slash on endpoint URLs, discovery at fixed `{base}/taxii2/`.
 
 ### TAXII Client invariant decisions
@@ -636,6 +673,7 @@ Request invariants (all calls): `Accept: application/taxii+json;version=2.1`, `U
 | Area | Enforced behavior | Notes |
 | ---- | ----------------- | ----- |
 | Envelope vs Bundle | POST/GET object pages deserialize `TaxiiEnvelope` | Bundle rejected at API boundary |
+| Envelope custom props | Flattened `x_*` on `TaxiiEnvelope` / `TaxiiStatus` | `with_custom`; CSD01 §3.15.1 |
 | Response media type | Success responses must include TAXII JSON `Content-Type` | `MissingContentType` / `InvalidContentType` |
 | TLS | rustls with **TLS 1.2 and TLS 1.3** (no 1.0/1.1); optional SPKI pinning and DANE | `ServerTrustPolicy`, `build_rustls_config`, `SpkiPin`, `TlsaCache`, `resolve_tlsa` |
 | DANE (`ServerTrustPolicy::Dane`) | Fail-closed TLSA association (RFC 7671 usages 0–3); default `dane_require_dnssec(true)` DNSSEC-validates TLSA prefetch and SRV | `evaluate_dane`, `dane_require_dnssec`, TLSA prefetch in `TaxiiHttp` |

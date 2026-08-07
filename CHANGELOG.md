@@ -4,6 +4,10 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### rstix: TAXII 2.1 TXC interop self-certification (C-1)
+
+Adds an OASIS TAXII 2.1 Interoperability CSD01 (2022-03-30) **TXC** self-certification suite: all **39 Mandatory** §4.1 Table 51 rows as automated scenarios (wiremock mock TXS + local rustls mTLS for §3.1.3), with the **5 Optional** §3.13.2 additional-filter rows recorded as `REPORT_ONLY`. Scenarios assert CSD01 Tables 2–50 depth (User-Agent, `WWW-Authenticate` challenges, absolute/relative `api_roots`, collection id ordering, date-added headers, versions pagination via `added_after`, Status Table 28, envelope/Status `x_*` via `TaxiiEnvelope::with_custom`). Three-layer report gate matches STIX interop: export invariants in the harness, committed `gate-expectations.json` manifest sync, and `scripts/taxii-interop-report-gate.py` row-level CI validation. Each run writes `target/taxii-interop-report/` (Table 51 markdown, traceability CSV, risks, `summary.json` with `generated_at`). CI job `rstix TAXII TXC interop self-certification` gates the package. Channels (TAXII §6 RESERVED) and TXS persona are explicitly out of scope.
+
 ## [0.21.0] - 2026-08-05
 
 **TL;DR**

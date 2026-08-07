@@ -201,6 +201,39 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  rstix-taxii-interop:
+    # Dedicated TXC self-certification path: runs every Mandatory Table 51 row
+    # against a mock TAXII Server, regenerates the checklist package, then fails
+    # if the report is missing, stale, or incomplete.
+    name: rstix TAXII TXC interop self-certification
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # read repo for checkout
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup override set stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Record TAXII interop run start
+        run: echo "TAXII_INTEROP_RUN_START=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - name: TAXII 2.1 TXC interop self-certification suite
+        run: cargo test -p rstix --test taxii_interop --features taxii --locked
+      - name: Gate on TXC self-certification report
+        run: python3 scripts/taxii-interop-report-gate.py
+      - name: Upload TXC self-certification report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: taxii-interop-report
+          path: target/taxii-interop-report/
+          if-no-files-found: error
+          retention-days: 14
+
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
