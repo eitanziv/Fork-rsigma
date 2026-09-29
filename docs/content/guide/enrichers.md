@@ -116,7 +116,7 @@ The decision matrix:
 
 ### `stix`: local STIX store lookup
 
-Query a local [`FsStore`](../library/rstix.md#rstix-graph-marking-store) opened by the daemon via `--stix-store <dir>` (same on-disk layout as [`taxii sync`](../cli/taxii/sync.md)). Requires the **`stix-enrich`** feature (included in prebuilt `--all-features` binaries). Zero-network-cost for anything already synced into the store.
+Query a local [`FsStore`](../library/rstix.md#rstix-graph-marking-store) opened by the daemon via `--stix-store <dir>` (same on-disk layout as [`taxii sync`](../cli/taxii/sync.md) and [`taxii store`](../cli/taxii/store.md)). Requires the **`stix-enrich`** feature (included in prebuilt `--all-features` binaries). Zero-network-cost for anything already imported into the store.
 
 ```yaml
 - id: hash_intel

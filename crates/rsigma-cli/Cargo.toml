@@ -46,7 +46,7 @@ hunt-postgres = [
     "dep:rustls-native-certs",
     "dep:rust_decimal",
 ]
-# `rsigma taxii sync` → local FsStore via rstix TAXII ingest (`taxii-sync` feature).
+# `rsigma taxii sync` / `rsigma taxii store` → local FsStore (`taxii-sync` feature).
 taxii-sync = [
     "tokio",
     "dep:rstix",

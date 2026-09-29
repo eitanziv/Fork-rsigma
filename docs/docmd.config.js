@@ -214,7 +214,10 @@ export default {
         {
           title: "taxii",
           collapsible: true,
-          children: [{ title: "sync", path: "/cli/taxii/sync" }],
+          children: [
+            { title: "sync", path: "/cli/taxii/sync" },
+            { title: "store", path: "/cli/taxii/store" },
+          ],
         },
         {
           title: "mcp",

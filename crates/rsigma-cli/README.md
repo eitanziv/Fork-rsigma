@@ -93,9 +93,11 @@ rsigma hunt run -r rule.yml -t postgres --dsn postgres://hunter@archive/siem \
 
 The session enforces `default_transaction_read_only` and a statement timeout; the DSN may come from `RSIGMA_HUNT_DSN` and its password is never rendered in logs or errors. Detection rules only (correlation queries return aggregates, not events); `--target postgres` is the only executable target. See the [CLI reference](https://rsigma.io/cli/hunt/run/) and the [hunting guide](https://rsigma.io/guide/hunting/).
 
-### `taxii sync`: Import a TAXII collection into a local STIX store
+### `taxii sync` / `taxii store`: Populate a local STIX store
 
-Fetch objects from a TAXII 2.1 collection and persist them under a local [`FsStore`](https://rsigma.io/library/rstix/#rstix-graph-marking-store) directory. Requires the **`taxii-sync`** feature (included in prebuilt `--all-features` binaries). Uses [`IngestOptions::producer_strict()`](https://rsigma.io/library/rstix/#rstix-taxii-client) validate-on-ingest; default **`--strict`** exits **1** when validation rejects objects. The TAXII client fetches one page at a time (`--limit`, default **64**).
+Persist objects under a local [`FsStore`](https://rsigma.io/library/rstix/#rstix-graph-marking-store) directory. Requires the **`taxii-sync`** feature (included in prebuilt `--all-features` binaries). Both commands use **`Validator::producer_strict()`** validate-on-ingest; default **`--strict`** exits **1** when validation rejects objects. Re-import is idempotent (`objects_deduplicated`).
+
+**Network ingest** — paginated TAXII collection fetch (`--limit`, default **64**):
 
 ```bash
 rsigma taxii sync \
@@ -106,9 +108,18 @@ rsigma taxii sync \
   --allow-custom
 ```
 
-For feeds that require auth, pass `--bearer-token`, `--basic-user` with `--basic-password` (or `RSIGMA_TAXII_BASIC_PASSWORD`), or `--api-key` — at most one method. Re-sync is idempotent (`objects_deduplicated`). List collection ids with `GET …/collections/` on the API root. See the [CLI reference](https://rsigma.io/cli/taxii/sync/).
+**Local bundle file** — air-gap, MITRE ATT&CK JSON releases, fixtures (`--allow-custom` for `x-mitre-*` types):
 
-Point the daemon at the same directory with **`--stix-store`** and a `type: stix` enricher (`stix-enrich` feature) to attach synced intel to firings — see [Enrichers](https://rsigma.io/guide/enrichers/#stix-local-stix-store-lookup).
+```bash
+rsigma taxii store \
+  --bundle ./enterprise-attack-19.2.json \
+  --store ./attck-store \
+  --allow-custom
+```
+
+For TAXII feeds that require auth, pass `--bearer-token`, `--basic-user` with `--basic-password` (or `RSIGMA_TAXII_BASIC_PASSWORD`), or `--api-key` — at most one method. See [taxii sync](https://rsigma.io/cli/taxii/sync/) and [taxii store](https://rsigma.io/cli/taxii/store/).
+
+Point the daemon at the same directory with **`--stix-store`** and a `type: stix` enricher (`stix-enrich` feature) to attach store intel to firings — see [Enrichers](https://rsigma.io/guide/enrichers/#stix-local-stix-store-lookup).
 
 ### `config`: YAML configuration
 

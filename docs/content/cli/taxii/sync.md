@@ -117,5 +117,6 @@ Pin a specific ATT&CK release by changing the API root (collection ids stay the 
 
 ## See also
 
+- [`taxii store`](store.md) — import a local STIX bundle JSON file (air-gap, ATT&CK releases, fixtures)
 - [rstix TAXII client](../../library/rstix.md#rstix-taxii-client)
 - [Feature flags: `taxii-sync`](../../reference/feature-flags.md#rsigma-cli)
