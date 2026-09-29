@@ -140,6 +140,8 @@ pub(crate) fn defaults_partial() -> RsigmaConfigPartial {
             enrichers: None,
             #[cfg(feature = "stix-enrich")]
             stix_store: None,
+            #[cfg(feature = "stix-enrich")]
+            stix_store_allow_custom: false,
             alert_pipeline: None,
             risk: None,
             api: Some(ApiPartial {

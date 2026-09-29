@@ -283,6 +283,9 @@ pub struct DaemonConfig {
     /// Local STIX store root for `type: stix` enrichers (`stix-enrich` feature).
     #[cfg(feature = "stix-enrich")]
     pub stix_store_path: Option<PathBuf>,
+    /// Parse custom STIX types when opening [`stix_store_path`](Self::stix_store_path).
+    #[cfg(feature = "stix-enrich")]
+    pub stix_store_allow_custom: bool,
     /// Optional path to the alert-pipeline config (from `--alert-pipeline`).
     /// Read at daemon startup and again on hot-reload; failures during
     /// reload are logged and the previous pipeline stays active.
@@ -627,7 +630,10 @@ pub async fn run_daemon(config: DaemonConfig) {
     let stix_fs_store: Option<std::sync::Arc<rstix::store::FsStore>> = config
         .stix_store_path
         .as_ref()
-        .map(|path| match rstix::store::FsStore::open(path) {
+        .map(|path| {
+            let parse_options = rstix::model::ParseOptions::default()
+                .allow_custom(config.stix_store_allow_custom);
+            match rstix::store::FsStore::open_with_parse_options(path, parse_options) {
             Ok(store) => {
                 tracing::info!(path = %path.display(), "STIX store opened for enrichment");
                 std::sync::Arc::new(store)
@@ -635,6 +641,7 @@ pub async fn run_daemon(config: DaemonConfig) {
             Err(e) => {
                 tracing::error!(error = %e, path = %path.display(), "Failed to open STIX store");
                 std::process::exit(crate::exit_code::CONFIG_ERROR);
+            }
             }
         });
     if let Some(path) = config.enrichers_path.as_ref() {

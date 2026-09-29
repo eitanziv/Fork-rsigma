@@ -129,6 +129,10 @@ pub(crate) struct DaemonPartial {
     #[cfg(feature = "stix-enrich")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stix_store: Option<PathBuf>,
+    /// Parse custom STIX types when loading `stix_store` (MITRE ATT&CK).
+    #[cfg(feature = "stix-enrich")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stix_store_allow_custom: bool,
     /// Alert-pipeline config file (dedup, grouping, silencing, inhibition).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub alert_pipeline: Option<PathBuf>,
@@ -179,6 +183,8 @@ impl Merge for DaemonPartial {
             enrichers: over.enrichers.or(self.enrichers),
             #[cfg(feature = "stix-enrich")]
             stix_store: over.stix_store.or(self.stix_store),
+            #[cfg(feature = "stix-enrich")]
+            stix_store_allow_custom: over.stix_store_allow_custom || self.stix_store_allow_custom,
             alert_pipeline: over.alert_pipeline.or(self.alert_pipeline),
             risk: over.risk.or(self.risk),
             api: merge_opt(self.api, over.api),

@@ -28,15 +28,28 @@ struct StoredEnvelope {
 pub struct FsStore {
     root: PathBuf,
     memory: MemoryStore,
+    parse_options: ParseOptions,
 }
 
 impl FsStore {
     /// Open or create a store at `root`.
     pub fn open(root: impl AsRef<Path>) -> Result<Self, StoreError> {
+        Self::open_with_parse_options(root, ParseOptions::default())
+    }
+
+    /// Open or create a store at `root` with explicit [`ParseOptions`] for disk reload.
+    pub fn open_with_parse_options(
+        root: impl AsRef<Path>,
+        parse_options: ParseOptions,
+    ) -> Result<Self, StoreError> {
         let root = root.as_ref().to_path_buf();
         fs::create_dir_all(root.join(OBJECTS_DIR)).map_err(|err| StoreError::io(&root, err))?;
         let memory = MemoryStore::new();
-        let mut store = Self { root, memory };
+        let mut store = Self {
+            root,
+            memory,
+            parse_options,
+        };
         store.load_from_disk()?;
         Ok(store)
     }
@@ -62,7 +75,7 @@ impl FsStore {
         if !objects_dir.exists() {
             return Ok(());
         }
-        let opts = ParseOptions::default();
+        let opts = &self.parse_options;
         for entry in fs::read_dir(&objects_dir).map_err(|err| StoreError::io(&objects_dir, err))? {
             let entry = entry.map_err(|err| StoreError::io(&objects_dir, err))?;
             if !entry
@@ -100,9 +113,8 @@ impl FsStore {
                 .map_err(|err| StoreError::io(entry.path(), err))?;
             let envelope: StoredEnvelope =
                 serde_json::from_str(&contents).map_err(|err| StoreError::Json(err.to_string()))?;
-            let opts = ParseOptions::default();
             for value in envelope.versions {
-                let (object, _extra) = deserialize_stix_object_from_value(value, &opts)
+                let (object, _extra) = deserialize_stix_object_from_value(value, &self.parse_options)
                     .map_err(|err| StoreError::Json(err.to_string()))?;
                 self.memory.upsert(&object)?;
             }

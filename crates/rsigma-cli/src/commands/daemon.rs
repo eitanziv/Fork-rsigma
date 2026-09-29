@@ -463,6 +463,13 @@ pub(crate) struct DaemonArgs {
     #[arg(long = "stix-store", value_name = "DIR")]
     pub stix_store: Option<PathBuf>,
 
+    /// Parse MITRE ATT&CK and other custom SDOs when loading `--stix-store`
+    /// (`stix-enrich` feature). Required when the store was populated with
+    /// `taxii sync --allow-custom` or `taxii store --allow-custom`.
+    #[cfg(feature = "stix-enrich")]
+    #[arg(long = "stix-store-allow-custom")]
+    pub stix_store_allow_custom: bool,
+
     /// Path to a YAML file declaring the alert pipeline (dedup, grouping,
     /// silencing, inhibition).
     ///
@@ -762,6 +769,8 @@ pub(crate) fn cmd_daemon(
         enrichers,
         #[cfg(feature = "stix-enrich")]
         stix_store,
+        #[cfg(feature = "stix-enrich")]
+        stix_store_allow_custom,
         alert_pipeline,
         risk,
         webhooks,
@@ -906,6 +915,8 @@ pub(crate) fn cmd_daemon(
         enrichers,
         #[cfg(feature = "stix-enrich")]
         stix_store,
+        #[cfg(feature = "stix-enrich")]
+        stix_store_allow_custom,
         alert_pipeline,
         risk,
         webhooks,
@@ -1275,6 +1286,10 @@ fn apply_daemon_config(
         && let Some(v) = daemon.stix_store
     {
         args.stix_store = Some(v);
+    }
+    #[cfg(feature = "stix-enrich")]
+    if !explicit("stix_store_allow_custom") && daemon.stix_store_allow_custom {
+        args.stix_store_allow_custom = true;
     }
     if !explicit("alert_pipeline")
         && let Some(v) = daemon.alert_pipeline
@@ -1664,6 +1679,7 @@ fn run_daemon(
     #[cfg(feature = "daachorse-index")] cross_rule_ac: bool,
     enrichers_path: Option<PathBuf>,
     #[cfg(feature = "stix-enrich")] stix_store_path: Option<PathBuf>,
+    #[cfg(feature = "stix-enrich")] stix_store_allow_custom: bool,
     alert_pipeline_path: Option<PathBuf>,
     risk_path: Option<PathBuf>,
     webhook_paths: Vec<PathBuf>,
@@ -1821,6 +1837,8 @@ fn run_daemon(
         enrichers_path,
         #[cfg(feature = "stix-enrich")]
         stix_store_path,
+        #[cfg(feature = "stix-enrich")]
+        stix_store_allow_custom,
         alert_pipeline_path,
         risk_path,
         webhook_paths,
