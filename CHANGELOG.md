@@ -4,13 +4,13 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### rsigma: `taxii store` command
+### rsigma: `taxii store` command (#509)
 
 - New **`taxii store`** subcommand (`taxii-sync` feature): import a local STIX 2.1 bundle JSON file (or stdin via `--bundle -`) into a local [`FsStore`](crates/rstix/README.md#rstix-graph-marking-store) with the same **`Validator::producer_strict()`** validate-on-ingest profile as [`taxii sync`](docs/content/cli/taxii/sync.md).
 - Supports **`--allow-custom`** for MITRE ATT&CK bundles, default **`--strict`**, and structured import/validation summary output.
 - **`engine daemon --stix-store-allow-custom`**: load MITRE/custom types from disk (required when the store was populated with `--allow-custom`).
 
-### rsigma: STIX store enrichment (`stix-enrich` feature)
+rsigma: STIX store enrichment (`stix-enrich` feature)
 
 - Fifth enricher primitive **`type: stix`**: query a local [`FsStore`](crates/rstix/README.md#rstix-graph-marking-store) by `stix_id`, `text_search`, or `attack_technique` (first `attack.t*` tag) and inject matching objects under `enrichments.<field>`.
 - **`engine daemon --stix-store <DIR>`** (and `daemon.stix_store` in config): same on-disk layout as [`taxii sync`](docs/content/cli/taxii/sync.md). Store index reloads from disk on enricher hot-reload after external `taxii sync` writes.
