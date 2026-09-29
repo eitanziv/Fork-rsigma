@@ -170,10 +170,7 @@ pub fn cmd_taxii_store(args: TaxiiStoreArgs, ctx: OutputCtx) {
             "objects_validated",
             validation.objects_validated.to_string(),
         ),
-        StoreMetricRow::new(
-            "objects_rejected",
-            validation.objects_rejected.to_string(),
-        ),
+        StoreMetricRow::new("objects_rejected", validation.objects_rejected.to_string()),
         StoreMetricRow::new(
             "unresolved_references",
             import_report.unresolved_references.len().to_string(),
