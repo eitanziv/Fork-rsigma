@@ -49,11 +49,11 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "io-ut
 | `SourceResolver` trait + `DefaultSourceResolver` | Dynamic-pipeline source resolution: HTTP, command, file, NATS. |
 | `SourceCache` | TTL-aware cache for resolved source values. Optional SQLite backing for cross-restart persistence. |
 | `TemplateExpander`, `RefreshScheduler`, `RefreshTrigger` | Substitutes `${source.X}` references in pipeline `vars:` and runs the refresh policies. |
-| `Enricher` trait + `EnrichmentPipeline` | Post-evaluation enrichment surface. Drives the four primitives (`TemplateEnricher`, `LookupEnricher`, `HttpEnricher`, `CommandEnricher`) and any bespoke types registered via `register_builtin`. |
+| `Enricher` trait + `EnrichmentPipeline` | Post-evaluation enrichment surface. Drives the five primitives (`TemplateEnricher`, `LookupEnricher`, `HttpEnricher`, `CommandEnricher`, `StixEnricher` with `stix-enrich`) and any bespoke types registered via `register_builtin`. |
 | `EnricherKind`, `OnError`, `Scope`, `EnrichError`, `EnrichErrorKind` | Configuration types: declared kind, error policy, scope filter, and the typed error returned by `Enricher::enrich`. |
 | `HttpResponseCache` (re-exported from `enrichment::http_cache`) | `(method, url, body_hash)`-keyed in-memory response cache with TTL and lazy eviction. Each `HttpEnricher` instance owns its own. |
 | `register_builtin(name, factory) -> Result<(), String>` | Process-global, append-only registry hook. External crates use it to ship a bespoke Rust-coded enricher type addressable via `type: <name>` in the daemon's enrichers config. Reserved names (`template` / `lookup` / `http` / `command`) and duplicate registrations are rejected. |
-| `enrichment::config::{load_enrichers_file, build_enrichers, build_enrichers_full, EnrichersFile}` | YAML loader for an enrichers config, shared by the daemon and the MCP server. Validates template namespaces, scopes, and bespoke `type:` values. |
+| `enrichment::config::{load_enrichers_file, build_enrichers, build_enrichers_full, EnricherResources, EnrichersFile}` | YAML loader for an enrichers config, shared by the daemon and the MCP server. Validates template namespaces, scopes, and bespoke `type:` values. |
 | `alert_pipeline::{AlertPipeline, DedupStore, Selector, AlertPipelineFile, load_alert_pipeline_file, parse_alert_pipeline_config, build_alert_pipeline}` | Post-engine alert-processing layer. Deduplicates results by a configurable fingerprint with an `active -> resolved` lifecycle. `AlertPipeline` is the validated, swappable config; `DedupStore` is the sink-task-owned active-alert state. |
 | `dispositions::{Disposition, DispositionStore, DispositionConfig, DispositionSnapshot, Verdict, Numerator, parse_dispositions, triage_feed}` | Triage feedback loop. `parse_dispositions` parses a POST body or source payload (object, array, or NDJSON); `Disposition::from_raw` validates one record; `DispositionStore` keeps rolling per-rule verdict counts and computes the false-positive ratio; `triage_feed` renders the `rule scorecard --triage` JSON shape. |
 | `capture::{CaptureRing, CaptureConfig, CaptureRingSink, AdmittedEvent, CapturedEvent, event_digest}` | Byte-bounded in-memory ring of admitted `group_by` detection events. Used by the daemon capture hook after inhibition/silencing and before dedup. |
@@ -157,9 +157,9 @@ let pipeline = EnrichmentPipeline::new(
 
 Wire a `MetricsHook` via `EnrichmentPipeline::with_metrics` to surface `rsigma_enrichment_total` / `rsigma_enrichment_duration_seconds` / `rsigma_enrichment_queue_depth` (and the HTTP cache counters) into your own metrics backend. The daemon's Prometheus-backed `Metrics` struct implements the hook.
 
-For YAML-driven configuration, use the `enrichment::config` loader: `load_enrichers_file(path)` parses an enrichers config file into an `EnrichersFile`, and `build_enrichers(file)` / `build_enrichers_full(file, source_cache, metrics)` turn it into an `EnrichmentPipeline` (validating template namespaces and bespoke types). The daemon and the MCP server's `evaluate_events` tool share this loader.
+For YAML-driven configuration, use the `enrichment::config` loader: `load_enrichers_file(path)` parses an enrichers config file into an `EnrichersFile`, and `build_enrichers(file)` / `build_enrichers_full(file, EnricherResources, metrics)` turn it into an `EnrichmentPipeline` (validating template namespaces and bespoke types). Pass `EnricherResources { source_cache, stix_store }` when building `lookup` or `stix` enrichers. The daemon and the MCP server's `evaluate_events` tool share this loader.
 
-For the operator-facing schema, the four primitives, and the recipe catalog, see [Enrichers](../guide/enrichers.md).
+For the operator-facing schema, the five primitives, and the recipe catalog, see [Enrichers](../guide/enrichers.md).
 
 ## Custom metrics
 

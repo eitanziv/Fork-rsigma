@@ -18,14 +18,14 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-#[cfg(feature = "stix-enrich")]
-use crate::{StixEnricher, StixEnricherQuery};
 use crate::{
     CommandEnricher, EnricherKind, EnrichmentPipeline, HttpEnricher, HttpEnricherClient,
     HttpResponseCache, LookupEnricher, MetricsHook, NoopMetrics, OnError, OutputFormat, Scope,
     SourceCache, TemplateEnricher, build_default_http_client, lookup_builtin,
     validate_template_namespace,
 };
+#[cfg(feature = "stix-enrich")]
+use crate::{StixEnricher, StixEnricherQuery};
 #[cfg(feature = "stix-enrich")]
 use rstix::core::StixObjectKind;
 #[cfg(feature = "stix-enrich")]
@@ -80,7 +80,7 @@ pub struct EnricherConfig {
     pub id: String,
     /// Required kind (`detection` or `correlation`).
     pub kind: KindLabel,
-    /// Primitive type name (`template`, `lookup`, `http`, `command`) or
+    /// Primitive type name (`template`, `lookup`, `http`, `command`, `stix`) or
     /// the `type:` of a bespoke enricher registered via
     /// [`register_builtin`](crate::register_builtin).
     #[serde(rename = "type")]

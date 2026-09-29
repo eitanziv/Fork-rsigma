@@ -108,6 +108,8 @@ rsigma taxii sync \
 
 For feeds that require auth, pass `--bearer-token`, `--basic-user` with `--basic-password` (or `RSIGMA_TAXII_BASIC_PASSWORD`), or `--api-key` — at most one method. Re-sync is idempotent (`objects_deduplicated`). List collection ids with `GET …/collections/` on the API root. See the [CLI reference](https://rsigma.io/cli/taxii/sync/).
 
+Point the daemon at the same directory with **`--stix-store`** and a `type: stix` enricher (`stix-enrich` feature) to attach synced intel to firings — see [Enrichers](https://rsigma.io/guide/enrichers/#stix-local-stix-store-lookup).
+
 ### `config`: YAML configuration
 
 Both `engine daemon` and `engine eval` accept their settings via a YAML config file in addition to CLI flags and environment variables. Precedence is **CLI flag > env > project file > user file > system file > compiled default**, applied per leaf (a project `.rsigmarc` that only sets `eval.rules` does not erase the rest of the user config).
@@ -1361,7 +1363,7 @@ max_concurrent_enrichments: 16
 enrichers:
   - id: <unique-string>            # required, used as a Prometheus label
     kind: detection | correlation  # required, see "Kind and template namespaces"
-    type: template | lookup | http | command  # required, the primitive
+    type: template | lookup | http | command | stix  # required; stix needs stix-enrich + --stix-store
     inject_field: <field-name>     # required, key under enrichments.<...>
     timeout: 5s                    # optional, humantime; default 5s
     on_error: skip | null | drop   # optional; default skip

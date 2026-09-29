@@ -11,7 +11,8 @@
 //! # Architecture
 //!
 //! A single [`Enricher`] trait covers every primitive (`template`, `lookup`,
-//! `http`, `command`) and any bespoke Rust-coded enrichers. Each enricher
+//! `http`, `command`, and `stix` when `stix-enrich` is enabled) and any
+//! bespoke Rust-coded enrichers. Each enricher
 //! declares an [`EnricherKind`] at config time; the [`EnrichmentPipeline`]
 //! filters results by that declared kind against the
 //! [`EvaluationResult::body`] variant before invoking `enrich()`. There are no

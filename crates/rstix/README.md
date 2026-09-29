@@ -401,7 +401,7 @@ The optional **`store`** feature provides an object-safe [`StixStore`](store::St
 - **Typed queries** — [`StixQuery`](store::StixQuery) builder with type-indexed scans, id filter, `modified_after`, labels, **`text_search`**, pagination (`QueryCursor` / `next_cursor`), and `StoreError::InvalidQuery` for out-of-range cursors.
 - **SCO updates** — changed SCO content under the same asserted id updates the stored payload (`ImportReport::objects_updated`).
 - **Export / delete** — [`StixStore::export_bundle`](store::StixStore::export_bundle) and [`StixStore::delete`](store::StixStore::delete) on all store backends.
-- **`FsStore`** (`store-fs` feature) — durable JSON-on-disk store with hot in-memory index; reopens persistently across process restarts.
+- **`FsStore`** (`store-fs` feature) — durable JSON-on-disk store with hot in-memory index; reopens persistently across process restarts. [`FsStore::reload_from_disk`](store::FsStore::reload_from_disk) re-reads object envelopes so long-lived handles (for example daemon `--stix-store` enrichment) observe writes from `taxii sync` without reopening the root directory.
 
 ```rust
 use rstix::store::{FsStore, MemoryStore, StixQuery, StixStore};
