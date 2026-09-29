@@ -50,6 +50,8 @@ pub mod config;
 mod http;
 pub mod http_cache;
 mod lookup;
+#[cfg(feature = "stix-enrich")]
+mod stix;
 mod template;
 #[cfg(test)]
 mod tests;
@@ -62,6 +64,8 @@ pub use http::{
 };
 pub use http_cache::{CacheKey, CacheOutcome, HttpResponseCache};
 pub use lookup::LookupEnricher;
+#[cfg(feature = "stix-enrich")]
+pub use stix::{StixEnricher, StixEnricherQuery};
 pub use template::{
     TemplateEnricher, TemplateError, render_template, render_template_json,
     validate_template_namespace,
@@ -573,7 +577,7 @@ fn registry() -> &'static std::sync::RwLock<std::collections::HashMap<String, En
 /// External crates call this once at startup before the daemon loads its
 /// config. After config load, the registry is read-only in practice.
 pub fn register_builtin(name: &str, factory: EnricherFactory) -> Result<(), String> {
-    if matches!(name, "template" | "lookup" | "http" | "command") {
+    if matches!(name, "template" | "lookup" | "http" | "command" | "stix") {
         return Err(format!(
             "cannot register '{name}': name is reserved for a built-in primitive"
         ));

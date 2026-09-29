@@ -90,8 +90,8 @@ pub use egress::{
 };
 pub use engine::{EngineStats, RoutingSpec, RuntimeEngine};
 pub use enrichment::config::{
-    EnricherConfig, EnrichersConfigError, EnrichersFile, build_enrichers, build_enrichers_full,
-    load_enrichers_file,
+    EnricherConfig, EnricherResources, EnrichersConfigError, EnrichersFile, build_enrichers,
+    build_enrichers_full, load_enrichers_file,
 };
 pub use enrichment::{
     CacheKey, CacheOutcome, CommandEnricher, EnrichError, EnrichErrorKind, Enricher,
@@ -100,6 +100,8 @@ pub use enrichment::{
     TemplateError, build_default_http_client, lookup_builtin, register_builtin,
     validate_template_namespace,
 };
+#[cfg(feature = "stix-enrich")]
+pub use enrichment::{StixEnricher, StixEnricherQuery};
 pub use error::RuntimeError;
 pub use input::{EventInputDecoded, InputFormat, parse_line};
 pub use io::webhook::{

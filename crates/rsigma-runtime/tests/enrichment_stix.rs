@@ -1,0 +1,204 @@
+//! STIX store enricher integration tests (`stix-enrich` feature).
+
+#![cfg(feature = "stix-enrich")]
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
+use rsigma_eval::pipeline::sources::ExtractExpr;
+use rsigma_eval::{
+    CorrelationBody, DetectionBody, EvaluationResult, FieldMatch, ResultBody, RuleHeader,
+};
+use rsigma_parser::{CorrelationType, Level};
+use rsigma_runtime::{
+    Enricher, EnricherKind, EnricherResources, EnrichmentPipeline, NoopMetrics, OnError, Scope,
+    StixEnricher, StixEnricherQuery, build_enrichers_full,
+};
+use rstix::core::StixObjectKind;
+use rstix::store::{MemoryStore, StixStore};
+use serde_json::json;
+
+fn detection_with_hash(hash: &str) -> EvaluationResult {
+    EvaluationResult {
+        header: RuleHeader {
+            rule_title: "hash rule".into(),
+            rule_id: Some("rule-hash".into()),
+            level: Some(Level::High),
+            tags: vec!["attack.t1059.001".into()],
+            custom_attributes: Arc::new(HashMap::new()),
+            enrichments: None,
+        },
+        body: ResultBody::Detection(DetectionBody {
+            matched_selections: vec!["sel".into()],
+            matched_fields: vec![FieldMatch::new("Hash", json!(hash))],
+            event: None,
+        }),
+    }
+}
+
+fn populated_store() -> Arc<MemoryStore> {
+    let bundle = rstix::parse_bundle(include_str!(
+        "../../rstix/tests/fixtures/store/multi-indicators.json"
+    ))
+    .expect("parse bundle");
+    let store = Arc::new(MemoryStore::new());
+    store.import_bundle(&bundle).expect("import");
+    store
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stix_text_search_injects_indicator_objects() {
+    let store = populated_store();
+    let enricher = StixEnricher::new(
+        "hash_lookup".into(),
+        EnricherKind::Detection,
+        "stix_indicators".into(),
+        StixEnricherQuery {
+            stix_id: None,
+            text_search: Some("${detection.fields.Hash}".into()),
+            attack_technique: false,
+            type_filter: vec![StixObjectKind::from_type_str("indicator").unwrap()],
+            max_results: 2,
+        },
+        None,
+        None,
+        Duration::from_secs(5),
+        OnError::Skip,
+        Scope::default(),
+        store,
+    );
+    let pipeline = EnrichmentPipeline::new(vec![Box::new(enricher)], 4);
+    let mut results = vec![detection_with_hash("644bf17e482f443f763b0b7355b14372")];
+    pipeline.run(&mut results).await;
+    let result = &results[0];
+    let matches = result
+        .header
+        .enrichments
+        .as_ref()
+        .and_then(|m| m.get("stix_indicators"))
+        .and_then(|v| v.as_array())
+        .expect("stix_indicators array");
+    assert_eq!(matches.len(), 1);
+    assert_eq!(
+        matches[0]["id"],
+        "indicator--aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stix_attack_technique_uses_rule_tags() {
+    let store = populated_store();
+    let enricher = StixEnricher::new(
+        "technique_lookup".into(),
+        EnricherKind::Detection,
+        "stix_technique".into(),
+        StixEnricherQuery {
+            stix_id: None,
+            text_search: None,
+            attack_technique: true,
+            type_filter: vec![],
+            max_results: 1,
+        },
+        Some(ExtractExpr::Jq(".[0].labels[0]".into())),
+        Some(json!("miss")),
+        Duration::from_secs(5),
+        OnError::Skip,
+        Scope::default(),
+        store,
+    );
+    let mut result = detection_with_hash("no-match-hash");
+    enricher.enrich(&mut result).await.expect("enrich");
+    let value = result
+        .header
+        .enrichments
+        .as_ref()
+        .and_then(|m| m.get("stix_technique"))
+        .expect("stix_technique");
+    assert_eq!(value, "miss");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn yaml_loader_builds_stix_enricher_pipeline() {
+    let store = populated_store();
+    let yaml = r#"
+enrichers:
+  - id: hash_lookup
+    kind: detection
+    type: stix
+    inject_field: stix_indicators
+    text_search: "${detection.fields.Hash}"
+    type_filter: [indicator]
+    max_results: 1
+"#;
+    let file: rsigma_runtime::EnrichersFile = yaml_serde::from_str(yaml).unwrap();
+    let pipeline = build_enrichers_full(
+        file,
+        EnricherResources {
+            stix_store: Some(store as Arc<dyn StixStore>),
+            ..EnricherResources::default()
+        },
+        Arc::new(NoopMetrics),
+    )
+    .expect("build pipeline");
+    assert_eq!(pipeline.len(), 1);
+    let mut results = vec![detection_with_hash("844bf17e482f443f763b0b7355b14374")];
+    pipeline.run(&mut results).await;
+    let result = &results[0];
+    let matches = result
+        .header
+        .enrichments
+        .as_ref()
+        .and_then(|m| m.get("stix_indicators"))
+        .and_then(|v| v.as_array())
+        .expect("matches");
+    assert_eq!(matches.len(), 1);
+    assert_eq!(
+        matches[0]["id"],
+        "indicator--cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stix_enricher_skips_correlation_results_for_detection_kind() {
+    let store = populated_store();
+    let enricher = StixEnricher::new(
+        "hash_lookup".into(),
+        EnricherKind::Detection,
+        "stix_indicators".into(),
+        StixEnricherQuery {
+            stix_id: None,
+            text_search: Some("644bf17e482f443f763b0b7355b14372".into()),
+            attack_technique: false,
+            type_filter: vec![],
+            max_results: 1,
+        },
+        None,
+        None,
+        Duration::from_secs(5),
+        OnError::Skip,
+        Scope::default(),
+        store,
+    );
+    let pipeline = EnrichmentPipeline::new(vec![Box::new(enricher)], 4);
+    let mut results = vec![EvaluationResult {
+        header: RuleHeader {
+            rule_title: "corr".into(),
+            rule_id: Some("corr-1".into()),
+            level: Some(Level::High),
+            tags: vec![],
+            custom_attributes: Arc::new(HashMap::new()),
+            enrichments: None,
+        },
+        body: ResultBody::Correlation(CorrelationBody {
+            correlation_type: CorrelationType::EventCount,
+            group_key: vec![("Host".into(), "srv1".into())],
+            aggregated_value: 3.0,
+            timespan_secs: 60,
+            events: None,
+            event_refs: None,
+        }),
+    }];
+    pipeline.run(&mut results).await;
+    assert!(results[0].header.enrichments.is_none());
+}
