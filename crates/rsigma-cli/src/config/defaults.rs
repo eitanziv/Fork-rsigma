@@ -138,6 +138,8 @@ pub(crate) fn defaults_partial() -> RsigmaConfigPartial {
             pipelines: Some(Vec::new()),
             sources: Some(Vec::new()),
             enrichers: None,
+            #[cfg(feature = "stix-enrich")]
+            stix_store: None,
             alert_pipeline: None,
             risk: None,
             api: Some(ApiPartial {

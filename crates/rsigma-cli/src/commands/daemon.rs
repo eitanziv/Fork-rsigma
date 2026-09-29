@@ -453,6 +453,16 @@ pub(crate) struct DaemonArgs {
     #[arg(long = "enrichers", value_name = "PATH")]
     pub enrichers: Option<PathBuf>,
 
+    /// Local STIX store root for `type: stix` enrichers (`stix-enrich` feature).
+    ///
+    /// Same on-disk layout as [`taxii sync`](crate::commands::taxii::sync::TaxiiSyncArgs::store).
+    /// Reloaded from disk on enricher hot-reload (SIGHUP / file watcher /
+    /// `POST /api/v1/reload`) so `taxii sync` updates are visible without
+    /// restarting the daemon.
+    #[cfg(feature = "stix-enrich")]
+    #[arg(long = "stix-store", value_name = "DIR")]
+    pub stix_store: Option<PathBuf>,
+
     /// Path to a YAML file declaring the alert pipeline (dedup, grouping,
     /// silencing, inhibition).
     ///
@@ -750,6 +760,8 @@ pub(crate) fn cmd_daemon(
         #[cfg(feature = "daachorse-index")]
         cross_rule_ac,
         enrichers,
+        #[cfg(feature = "stix-enrich")]
+        stix_store,
         alert_pipeline,
         risk,
         webhooks,
@@ -892,6 +904,8 @@ pub(crate) fn cmd_daemon(
         #[cfg(feature = "daachorse-index")]
         cross_rule_ac,
         enrichers,
+        #[cfg(feature = "stix-enrich")]
+        stix_store,
         alert_pipeline,
         risk,
         webhooks,
@@ -1255,6 +1269,12 @@ fn apply_daemon_config(
         && let Some(v) = daemon.enrichers
     {
         args.enrichers = Some(v);
+    }
+    #[cfg(feature = "stix-enrich")]
+    if !explicit("stix_store")
+        && let Some(v) = daemon.stix_store
+    {
+        args.stix_store = Some(v);
     }
     if !explicit("alert_pipeline")
         && let Some(v) = daemon.alert_pipeline
@@ -1643,6 +1663,7 @@ fn run_daemon(
     event_logsource: Option<String>,
     #[cfg(feature = "daachorse-index")] cross_rule_ac: bool,
     enrichers_path: Option<PathBuf>,
+    #[cfg(feature = "stix-enrich")] stix_store_path: Option<PathBuf>,
     alert_pipeline_path: Option<PathBuf>,
     risk_path: Option<PathBuf>,
     webhook_paths: Vec<PathBuf>,
@@ -1798,6 +1819,8 @@ fn run_daemon(
         #[cfg(feature = "daachorse-index")]
         cross_rule_ac,
         enrichers_path,
+        #[cfg(feature = "stix-enrich")]
+        stix_store_path,
         alert_pipeline_path,
         risk_path,
         webhook_paths,

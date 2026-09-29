@@ -54,6 +54,14 @@ taxii-sync = [
     "rstix/store-fs",
     "rstix/validate",
 ]
+# `engine daemon --stix-store` + enrichers `type: stix` (`stix-enrich` feature).
+stix-enrich = [
+    "daemon",
+    "dep:rstix",
+    "rstix/store",
+    "rstix/store-fs",
+    "rsigma-runtime/stix-enrich",
+]
 
 [dependencies]
 rsigma-parser = { path = "../rsigma-parser", version = "0.22.0" }
