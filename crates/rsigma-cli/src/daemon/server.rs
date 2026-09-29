@@ -1280,14 +1280,14 @@ pub async fn run_daemon(config: DaemonConfig) {
             // detection enrichment in production.
             if let Some(path) = reload_enrichers_path.as_deref() {
                 #[cfg(feature = "stix-enrich")]
-                if let Some(store) = reload_stix_fs_store.as_ref() {
-                    if let Err(e) = store.reload_from_disk() {
-                        tracing::error!(
-                            error = %e,
-                            "Failed to reload STIX store from disk; keeping previous enrichment index"
-                        );
-                        reload_metrics.reloads_failed.inc();
-                    }
+                if let Some(store) = reload_stix_fs_store.as_ref()
+                    && let Err(e) = store.reload_from_disk()
+                {
+                    tracing::error!(
+                        error = %e,
+                        "Failed to reload STIX store from disk; keeping previous enrichment index"
+                    );
+                    reload_metrics.reloads_failed.inc();
                 }
                 match super::enrichment::load_enrichers_file(path).and_then(|file| {
                     super::enrichment::build_enrichers_full(

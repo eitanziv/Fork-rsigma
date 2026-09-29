@@ -15,7 +15,7 @@ use tempfile::tempdir;
 
 fn fixture_bundle(name: &str) -> String {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../../rstix/tests/fixtures/store/{name}"))
+        .join(format!("../rstix/tests/fixtures/store/{name}"))
         .to_string_lossy()
         .into_owned()
 }

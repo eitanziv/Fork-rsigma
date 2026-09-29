@@ -75,7 +75,6 @@ impl FsStore {
         if !objects_dir.exists() {
             return Ok(());
         }
-        let opts = &self.parse_options;
         for entry in fs::read_dir(&objects_dir).map_err(|err| StoreError::io(&objects_dir, err))? {
             let entry = entry.map_err(|err| StoreError::io(&objects_dir, err))?;
             if !entry
@@ -90,8 +89,9 @@ impl FsStore {
             let envelope: StoredEnvelope =
                 serde_json::from_str(&contents).map_err(|err| StoreError::Json(err.to_string()))?;
             for value in envelope.versions {
-                let (object, _extra) = deserialize_stix_object_from_value(value, &opts)
-                    .map_err(|err| StoreError::Json(err.to_string()))?;
+                let (object, _extra) =
+                    deserialize_stix_object_from_value(value, &self.parse_options)
+                        .map_err(|err| StoreError::Json(err.to_string()))?;
                 self.memory.upsert(&object)?;
             }
         }
