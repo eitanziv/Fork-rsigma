@@ -56,6 +56,43 @@ impl MemoryStore {
         }
     }
 
+    /// Drop every indexed object and search metadata.
+    ///
+    /// Used by [`FsStore::reload_from_disk`](super::FsStore::reload_from_disk) to
+    /// rebuild the in-memory index from on-disk envelopes without reopening the
+    /// store handle held by long-lived consumers (for example daemon enrichment).
+    pub fn clear(&self) -> Result<(), StoreError> {
+        self.sdo
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.sro
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.meta
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.scos
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.fingerprint_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.kind_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.text_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        Ok(())
+    }
+
     /// Lookup a stored SCO by asserted id (cloned payload).
     ///
     /// Returns an owned [`StoredSco`] because the store trait surface is object-safe;

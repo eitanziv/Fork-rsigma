@@ -51,6 +51,40 @@ impl FsStore {
         &self.memory
     }
 
+    /// Re-read every object envelope from disk into the in-memory index.
+    ///
+    /// Call after an external writer (for example `rsigma taxii sync`) updates
+    /// files under [`FsStore::root`] so existing [`FsStore`] handles observe
+    /// the new corpus without reopening the store.
+    pub fn reload_from_disk(&self) -> Result<(), StoreError> {
+        self.memory.clear()?;
+        let objects_dir = self.root.join(OBJECTS_DIR);
+        if !objects_dir.exists() {
+            return Ok(());
+        }
+        let opts = ParseOptions::default();
+        for entry in fs::read_dir(&objects_dir).map_err(|err| StoreError::io(&objects_dir, err))? {
+            let entry = entry.map_err(|err| StoreError::io(&objects_dir, err))?;
+            if !entry
+                .file_type()
+                .map_err(|err| StoreError::io(entry.path(), err))?
+                .is_file()
+            {
+                continue;
+            }
+            let contents = fs::read_to_string(entry.path())
+                .map_err(|err| StoreError::io(entry.path(), err))?;
+            let envelope: StoredEnvelope =
+                serde_json::from_str(&contents).map_err(|err| StoreError::Json(err.to_string()))?;
+            for value in envelope.versions {
+                let (object, _extra) = deserialize_stix_object_from_value(value, &opts)
+                    .map_err(|err| StoreError::Json(err.to_string()))?;
+                self.memory.upsert(&object)?;
+            }
+        }
+        Ok(())
+    }
+
     fn load_from_disk(&mut self) -> Result<(), StoreError> {
         let objects_dir = self.root.join(OBJECTS_DIR);
         for entry in fs::read_dir(&objects_dir).map_err(|err| StoreError::io(&objects_dir, err))? {
@@ -184,6 +218,39 @@ mod open {
         let store = FsStore::open(&root).expect("reopen");
         let sco_id = bundle.objects()[0].id().clone();
         assert!(store.get(&sco_id).expect("get").is_some());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reload_from_disk_picks_up_external_writes() {
+        let root = std::env::temp_dir().join(format!("rstix-fs-store-{}", uuid::Uuid::new_v4()));
+        let _ = fs::remove_dir_all(&root);
+        let bundle_a = parse_bundle(include_str!(
+            "../../tests/fixtures/store/sco-ipv4-minimal.json"
+        ))
+        .expect("parse");
+        let bundle_b = parse_bundle(include_str!(
+            "../../tests/fixtures/store/multi-indicators.json"
+        ))
+        .expect("parse");
+        let store = FsStore::open(&root).expect("open");
+        store.import_bundle(&bundle_a).expect("import a");
+        let sco_id = bundle_a.objects()[0].id().clone();
+        assert!(store.get(&sco_id).expect("get").is_some());
+
+        {
+            let external = FsStore::open(&root).expect("external open");
+            external.import_bundle(&bundle_b).expect("import b");
+        }
+
+        store.reload_from_disk().expect("reload");
+        assert!(
+            store
+                .get(&bundle_b.objects()[0].id().clone())
+                .expect("get indicator")
+                .is_some(),
+            "reload must index objects written by another handle"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }
