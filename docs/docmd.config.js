@@ -290,7 +290,11 @@ export default {
       title: "Deployment",
       icon: "container",
       collapsible: true,
-      children: [{ title: "Docker", path: "/deployment/docker" }],
+      children: [
+        { title: "Docker", path: "/deployment/docker" },
+        { title: "Kubernetes", path: "/deployment/kubernetes" },
+        { title: "systemd", path: "/deployment/systemd" },
+      ],
     },
     {
       title: "Integrations",
