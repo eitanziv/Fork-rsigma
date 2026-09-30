@@ -138,7 +138,16 @@ export default {
           title: "Integrate",
           collapsible: true,
           children: [
-            { title: "Cloud Collection Recipes", path: "/guide/cloud-collection-recipes" },
+            {
+              title: "Cloud Collection Recipes",
+              path: "/guide/cloud-collection-recipes",
+              collapsible: true,
+              children: [
+                { title: "Cloud Platforms", path: "/guide/cloud-collection-platforms" },
+                { title: "Identity and SaaS", path: "/guide/cloud-collection-identity-saas" },
+                { title: "Containers and Hosts", path: "/guide/cloud-collection-containers-hosts" },
+              ],
+            },
             { title: "MCP Server", path: "/guide/mcp-server" },
           ],
         },
