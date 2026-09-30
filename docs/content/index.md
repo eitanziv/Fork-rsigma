@@ -33,14 +33,14 @@ Author, test, deploy, detect, alert, measure, and hunt: one map of the full life
 :::
 ::: grid
 ::: card "CLI Reference" icon:terminal
-Per-subcommand reference for `engine`, `rule`, `backend`, `pipeline`, `config`, and `mcp`.
+Per-subcommand reference for `engine`, `rule`, `backend`, `pipeline`, `hunt`, `taxii`, `mcp`, and `config`.
 
 [CLI Reference](./cli/index.md)
 :::
 :::
 ::: grid
 ::: card "Rule conversion" icon:database
-Generate PostgreSQL, LynxDB, or Fibratus queries from Sigma rules for historical hunting.
+Generate PostgreSQL, LynxDB, or Fibratus queries natively, or Splunk, Elasticsearch, Kusto, and other pySigma targets through sigma-cli.
 
 [Rule conversion](./guide/rule-conversion.md)
 :::
@@ -62,7 +62,7 @@ Run the daemon with NATS, HTTP, or OTLP input. Hot-reload, metrics, state.
 | **Runtime evaluation** | Yes (streaming + stateful) | No (converter only) | Yes (stateless) | Yes (stateless) |
 | **Correlation rules** | All 8 types | Partial | No | No |
 | **Filter rules** | Yes | Yes | No | No |
-| **Conversion backends** | PostgreSQL, LynxDB, Fibratus | 20+ | No | No |
+| **Conversion backends** | PostgreSQL, LynxDB, Fibratus natively; pySigma backends through sigma-cli | 30+ | No | No |
 | **Streaming daemon** | Yes (NATS, HTTP, OTLP) | No | No | No |
 | **Dynamic pipelines** | Yes (HTTP, file, command, NATS) | Yes (HTTP, file, command) | No | No |
 | **Built-in linter** | {{ rsigma.lint.rules }} rules, auto-fix | Limited | No | No |
@@ -113,7 +113,7 @@ An article series on building RSigma and using it in production:
 
 ## At a glance
 
-- **Latest release:** `v{{ rsigma.version }}` (MIT licensed; seven crates in the workspace).
+- **Latest release:** `v{{ rsigma.version }}` (MIT licensed; {{ rsigma.crate_count }} crates in the workspace).
 - **MSRV:** Rust `{{ rsigma.msrv }}`, edition `{{ rsigma.edition }}`.
 - **Cross-platform binaries:** Linux, macOS, Windows on amd64 and arm64.
 - **Container image:** `{{ rsigma.docker_image }}:latest` (multi-arch, cosign-signed, SBOM, SLSA Build L3 provenance).
