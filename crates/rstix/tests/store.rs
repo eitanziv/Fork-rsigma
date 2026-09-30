@@ -206,3 +206,22 @@ fn store_text_search_finds_indicator_label() {
     assert_eq!(results.objects.len(), 1);
     assert_eq!(results.objects[0].type_name(), "indicator");
 }
+
+#[test]
+fn store_text_search_finds_attack_pattern_external_id() {
+    let bundle = parse_bundle(include_str!(
+        "fixtures/store/attack-pattern-powershell-t1059.json"
+    ))
+    .expect("parse");
+    let store = MemoryStore::new();
+    store.import_bundle(&bundle).expect("import");
+    let results = store
+        .query(&StixQuery::new().text_search("1059.001"))
+        .expect("query");
+    assert_eq!(results.objects.len(), 1);
+    assert_eq!(results.objects[0].type_name(), "attack-pattern");
+    assert_eq!(
+        results.objects[0].id().as_str(),
+        "attack-pattern--22222222-2222-4222-8222-222222222222"
+    );
+}

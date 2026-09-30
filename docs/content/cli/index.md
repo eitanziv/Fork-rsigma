@@ -15,7 +15,7 @@ This reference documents every subcommand with its flag table, verified examples
 | [`backend`](backend/convert.md) | `convert`, `targets`, `formats` | Convert Sigma rules into backend-native queries (PostgreSQL, LynxDB, Fibratus, and delegated sigma-cli targets) |
 | [`pipeline`](pipeline/diff.md) | `diff`, `resolve` | Diff pipeline rewrites and test dynamic sources |
 | [`mcp`](mcp/serve.md) | `serve` | Run the Model Context Protocol server for agent tooling (`mcp` feature) |
-| [`taxii`](taxii/sync.md) | `sync` | Sync a TAXII collection into a local STIX store (`taxii-sync` feature) |
+| [`taxii`](taxii/sync.md) | `sync`, `store` | TAXII collection sync and local bundle import into a STIX store (`taxii-sync` feature) |
 | [`config`](config/init.md) | `init`, `validate`, `show`, `schema`, `path`, `reload` | Scaffold, validate, introspect, and reload the YAML config file |
 
 ## Global flags

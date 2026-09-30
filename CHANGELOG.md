@@ -4,6 +4,19 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### rsigma: `taxii store` command (#509)
+
+- New **`taxii store`** subcommand (`taxii-sync` feature): import a local STIX 2.1 bundle JSON file (or stdin via `--bundle -`) into a local [`FsStore`](crates/rstix/README.md#rstix-graph-marking-store) with the same **`Validator::producer_strict()`** validate-on-ingest profile as [`taxii sync`](docs/content/cli/taxii/sync.md).
+- Supports **`--allow-custom`** for MITRE ATT&CK bundles, default **`--strict`**, and structured import/validation summary output.
+
+### rsigma: STIX store enrichment (`stix-enrich` feature) (#509)
+
+- Fifth enricher primitive **`type: stix`**: query a local [`FsStore`](crates/rstix/README.md#rstix-graph-marking-store) by `stix_id`, `text_search`, or `attack_technique` (first `attack.t*` tag) and inject matching objects under `enrichments.<field>`.
+- **`engine daemon --stix-store <DIR>`** (and `daemon.stix_store` in config): same on-disk layout as [`taxii sync`](docs/content/cli/taxii/sync.md). Store index reloads from disk on enricher hot-reload after external `taxii sync` writes.
+- **`engine daemon --stix-store-allow-custom`**: load MITRE/custom types from disk (required when the store was populated with `--allow-custom`).
+- **`rstix`:** [`FsStore::reload_from_disk`](crates/rstix/README.md#rstix-graph-marking-store) + [`MemoryStore::clear`](crates/rstix/README.md#rstix-graph-marking-store) for live refresh without reopening the store handle.
+- Public API: [`EnricherResources`](crates/rsigma-runtime/README.md) + extended [`build_enrichers_full`](crates/rsigma-runtime/README.md) (breaking vs 0.22.0: third argument is now `EnricherResources`, not `Option<SourceCache>`).
+
 ### rsigma: `taxii sync` command (#508)
 
 - New **`taxii sync`** subcommand (opt-in **`taxii-sync`** feature) imports a TAXII 2.1 collection into a local [`FsStore`](crates/rstix/README.md#rstix-graph-marking-store) with **`IngestOptions::producer_strict()`** validate-on-ingest.

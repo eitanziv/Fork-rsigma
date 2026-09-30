@@ -56,6 +56,85 @@ impl MemoryStore {
         }
     }
 
+    /// Replace every indexed object and search metadata with `other`.
+    ///
+    /// Used by [`FsStore::reload_from_disk`](super::FsStore::reload_from_disk) after
+    /// building a fresh index from disk so a failed reload leaves the previous
+    /// corpus intact and queries never observe an empty intermediate state.
+    pub(crate) fn replace_with(&self, other: Self) -> Result<(), StoreError> {
+        *self.sdo.write().map_err(|_| StoreError::LockPoisoned)? = other
+            .sdo
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self.sro.write().map_err(|_| StoreError::LockPoisoned)? = other
+            .sro
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self.meta.write().map_err(|_| StoreError::LockPoisoned)? = other
+            .meta
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self.scos.write().map_err(|_| StoreError::LockPoisoned)? = other
+            .scos
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self
+            .fingerprint_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)? = other
+            .fingerprint_index
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self
+            .kind_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)? = other
+            .kind_index
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self
+            .text_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)? = other
+            .text_index
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        Ok(())
+    }
+
+    /// Drop every indexed object and search metadata.
+    pub fn clear(&self) -> Result<(), StoreError> {
+        self.sdo
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.sro
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.meta
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.scos
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.fingerprint_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.kind_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        self.text_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)?
+            .clear();
+        Ok(())
+    }
+
     /// Lookup a stored SCO by asserted id (cloned payload).
     ///
     /// Returns an owned [`StoredSco`] because the store trait surface is object-safe;

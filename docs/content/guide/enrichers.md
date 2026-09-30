@@ -2,7 +2,7 @@
 
 Post-evaluation enrichers run after `engine.evaluate()` produces each `EvaluationResult` and before that result is serialized to a sink. They inject contextual data (asset info, IP reputation, identity, GeoIP, runbook URLs) into the `enrichments.<field>` map on each detection or correlation, so every downstream consumer (RSoar, Grafana, Loki, custom scripts) sees the same structured context without re-fetching it.
 
-This page covers what to put in `--enrichers <path>`, how the four primitives compose into the `enrich_<keyfield>_<target>` recipe catalog, and how to promote a recipe to a Rust-coded named enricher when one of the four primitives is not enough. The CLI flag itself is documented under [`engine daemon`](../cli/engine/daemon.md#post-evaluation-enrichment); per-call Prometheus metrics live in [Prometheus metrics](../reference/metrics.md#enrichment-6-metrics).
+This page covers what to put in `--enrichers <path>`, how the five primitives compose into the `enrich_<keyfield>_<target>` recipe catalog, and how to promote a recipe to a Rust-coded named enricher when one of the five primitives is not enough. The CLI flag itself is documented under [`engine daemon`](../cli/engine/daemon.md#post-evaluation-enrichment); per-call Prometheus metrics live in [Prometheus metrics](../reference/metrics.md#enrichment-6-metrics).
 
 ## Why post-evaluation, not in-pipeline
 
@@ -75,7 +75,7 @@ For enrichers that conceptually apply to both kinds (identity lookups, runbook U
 
 There is no `scope.kinds` axis: the top-level `kind` already gates which result variant the enricher sees. Axes are AND-ed; an empty axis is not a filter.
 
-## The four primitives
+## The five primitives
 
 ### `template`: pure string interpolation
 
@@ -113,6 +113,40 @@ The decision matrix:
 - **Extract evaluation error** (invalid jq, type mismatch) → always applies `on_error`, even with `default` set
 
 `lookup` requires at least one dynamic source to be configured on the daemon via `--source <file>`. The loader surfaces a clear error at startup if a `lookup` enricher is configured without a source cache. (Source declarations live only in `--source` files; pipeline-embedded `sources:` is removed. See the [Dynamic Sources reference](../reference/dynamic-sources.md#source-declaration).)
+
+### `stix`: local STIX store lookup
+
+Query a local [`FsStore`](../library/rstix.md#rstix-graph-marking-store) opened by the daemon via `--stix-store <dir>` (same on-disk layout as [`taxii sync`](../cli/taxii/sync.md) and [`taxii store`](../cli/taxii/store.md)). Requires the **`stix-enrich`** feature (included in prebuilt `--all-features` binaries). Zero-network-cost for anything already imported into the store.
+
+```yaml
+- id: hash_intel
+  kind: detection
+  type: stix
+  inject_field: stix_indicators
+  text_search: "${detection.fields.SHA256}"
+  type_filter: [indicator]
+  max_results: 3
+  extract: ".[0]"
+  extract_type: jq
+  default: []
+  on_error: skip
+```
+
+Query modes (at least one required):
+
+| Field | Behavior |
+|-------|----------|
+| `stix_id` | Template-expanded STIX id → direct store `get`. |
+| `text_search` | Template-expanded substring → [`StixQuery::text_search`](../library/rstix.md#rstix-graph-marking-store). |
+| `attack_technique: true` | Uses the first `attack.t*` technique tag on the firing rule (for example `attack.t1059.001` → search `1059.001`). |
+
+Optional `type_filter` restricts to known STIX 2.1 type names (`indicator`, `attack-pattern`, …). Custom `x_*` MITRE types are matched via `text_search` without a filter. `max_results` defaults to **1**. On miss, `default` overrides `on_error` (same contract as `lookup`).
+
+Operational loop:
+
+1. `rsigma taxii sync --store ./attck-store …` (batch or cron).
+2. `rsigma engine daemon --stix-store ./attck-store --enrichers enrichers.yml …`.
+3. Enricher hot-reload re-reads the store from disk so a re-sync is visible without restarting the daemon.
 
 ### `http`: per-result HTTP fetch with optional response cache
 

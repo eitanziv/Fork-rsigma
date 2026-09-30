@@ -20,7 +20,8 @@ The crate that produces the `rsigma` binary.
 | `evtx` | no | `rsigma-runtime/evtx` (dep on the `evtx` crate) | Native `.evtx` file input via `engine eval -e @file.evtx`. See [Input Formats](../guide/input-formats.md#evtx-windows-event-log-feature-gated). |
 | `daachorse-index` | no | `rsigma-eval/daachorse-index`, optionally `rsigma-runtime/daachorse-index` | The `--cross-rule-ac` flag for very large rule sets dominated by shared positive substrings. See [Performance Tuning](../guide/performance-tuning.md#cross-rule-aho-corasick-pre-filter). |
 | `hunt-postgres` | no | `tokio-postgres`, `tokio-postgres-rustls`, `rustls-native-certs`, `tokio`, `tokio-stream` | `hunt run --emit events`: read-only hunt execution against PostgreSQL/TimescaleDB with TLS and DSN redaction. `hunt run --emit sql` works without it. See [Hunting in the archive](../guide/hunting.md). |
-| `taxii-sync` | no | `rstix` (`taxii-store`, `store-fs`, `validate`), `tokio` | `taxii sync`: paginated TAXII collection ingest into a local [`FsStore`](../library/rstix.md#rstix-graph-marking-store) with validate-on-ingest (`producer_strict`). See [`taxii sync`](../cli/taxii/sync.md). |
+| `taxii-sync` | no | `rstix` (`taxii-store`, `store-fs`, `validate`), `tokio` | `taxii sync` (paginated TAXII ingest) and `taxii store` (local bundle JSON → [`FsStore`](../library/rstix.md#rstix-graph-marking-store)) with validate-on-ingest (`producer_strict`). See [`taxii sync`](../cli/taxii/sync.md) and [`taxii store`](../cli/taxii/store.md). |
+| `stix-enrich` | no | `daemon`, `rstix` (`store`, `store-fs`), `rsigma-runtime/stix-enrich` | `engine daemon --stix-store` and enrichers `type: stix` for post-evaluation lookup against a local STIX store (same layout as `taxii sync --store`). See [Enrichers](../guide/enrichers.md#stix-local-stix-store-lookup). |
 
 ## `rsigma-eval`
 
@@ -44,6 +45,7 @@ The streaming runtime (event sources, sinks, daemon plumbing, dynamic pipelines)
 | `evtx` | no | `evtx` | `.evtx` file reader. |
 | `uds` | no | (Unix only) | Unix-domain socket event source and sink. Pulled in by the CLI `daemon` feature on Unix. |
 | `daachorse-index` | no | `rsigma-eval/daachorse-index` | Cross-rule AC support when used from `rsigma-runtime` consumers. |
+| `stix-enrich` | no | `rstix` (`store`, `store-fs`) | `type: stix` enricher primitive and [`EnricherResources::stix_store`](../library/runtime.md#post-evaluation-enrichment). Pulled in by the CLI `stix-enrich` feature. |
 
 ## `rsigma-convert`
 

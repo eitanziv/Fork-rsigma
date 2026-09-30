@@ -24,6 +24,22 @@ use crate::{
     SourceCache, TemplateEnricher, build_default_http_client, lookup_builtin,
     validate_template_namespace,
 };
+#[cfg(feature = "stix-enrich")]
+use crate::{StixEnricher, StixEnricherQuery};
+#[cfg(feature = "stix-enrich")]
+use rstix::core::StixObjectKind;
+#[cfg(feature = "stix-enrich")]
+use rstix::store::StixStore;
+
+/// Shared resources some enricher primitives require at construction time.
+#[derive(Clone, Default)]
+pub struct EnricherResources {
+    /// Dynamic-pipelines source cache for `lookup` enrichers.
+    pub source_cache: Option<std::sync::Arc<SourceCache>>,
+    /// Local STIX store for `stix` enrichers (`stix-enrich` feature).
+    #[cfg(feature = "stix-enrich")]
+    pub stix_store: Option<std::sync::Arc<dyn StixStore>>,
+}
 
 /// Default per-enricher timeout when YAML omits `timeout:`.
 const DEFAULT_ENRICHER_TIMEOUT: Duration = Duration::from_secs(5);
@@ -64,7 +80,7 @@ pub struct EnricherConfig {
     pub id: String,
     /// Required kind (`detection` or `correlation`).
     pub kind: KindLabel,
-    /// Primitive type name (`template`, `lookup`, `http`, `command`) or
+    /// Primitive type name (`template`, `lookup`, `http`, `command`, `stix`) or
     /// the `type:` of a bespoke enricher registered via
     /// [`register_builtin`](crate::register_builtin).
     #[serde(rename = "type")]
@@ -133,6 +149,22 @@ pub struct EnricherConfig {
     /// Overrides `on_error` when configured.
     #[serde(default)]
     pub default: Option<serde_json::Value>,
+
+    /// `stix`: template-expanded STIX id for a direct store lookup.
+    #[serde(default)]
+    pub stix_id: Option<String>,
+    /// `stix`: template-expanded substring for [`rstix::store::StixQuery::text_search`].
+    #[serde(default)]
+    pub text_search: Option<String>,
+    /// `stix`: derive `text_search` from the first `attack.t*` technique tag.
+    #[serde(default)]
+    pub attack_technique: bool,
+    /// `stix`: optional STIX type names (for example `indicator`).
+    #[serde(default)]
+    pub type_filter: Vec<String>,
+    /// `stix`: maximum objects to inject (default **1**).
+    #[serde(default)]
+    pub max_results: Option<usize>,
 }
 
 /// `kind:` discriminator. Lower-case in YAML, parses to
@@ -249,7 +281,12 @@ impl std::fmt::Display for EnrichersConfigError {
                 type_name,
             } => write!(
                 f,
-                "enricher '{enricher_id}': unknown type '{type_name}' (built-ins: template, lookup, http, command; bespoke types must register_builtin() before daemon start)"
+                "enricher '{enricher_id}': unknown type '{type_name}' (built-ins: template, lookup, http, command{STIX_BUILTIN}; bespoke types must register_builtin() before daemon start)",
+                STIX_BUILTIN = if cfg!(feature = "stix-enrich") {
+                    ", stix"
+                } else {
+                    ""
+                }
             ),
             EnrichersConfigError::MissingField {
                 enricher_id,
@@ -294,7 +331,11 @@ pub fn load_enrichers_file(path: &Path) -> Result<EnrichersFile, EnrichersConfig
 /// a source cache and will error here; use [`build_enrichers_full`] to provide
 /// one.
 pub fn build_enrichers(file: EnrichersFile) -> Result<EnrichmentPipeline, EnrichersConfigError> {
-    build_enrichers_full(file, None, std::sync::Arc::new(NoopMetrics))
+    build_enrichers_full(
+        file,
+        EnricherResources::default(),
+        std::sync::Arc::new(NoopMetrics),
+    )
 }
 
 /// Like [`build_enrichers`] but accepts an optional shared [`SourceCache`] for
@@ -307,7 +348,7 @@ pub fn build_enrichers(file: EnrichersFile) -> Result<EnrichmentPipeline, Enrich
 /// pooling works at the process level.
 pub fn build_enrichers_full(
     file: EnrichersFile,
-    source_cache: Option<std::sync::Arc<SourceCache>>,
+    resources: EnricherResources,
     metrics: std::sync::Arc<dyn MetricsHook>,
 ) -> Result<EnrichmentPipeline, EnrichersConfigError> {
     let http_client =
@@ -320,7 +361,7 @@ pub fn build_enrichers_full(
         enrichers.push(build_one(
             cfg,
             http_client.clone(),
-            source_cache.clone(),
+            &resources,
             metrics.clone(),
         )?);
     }
@@ -338,7 +379,7 @@ pub fn build_enrichers_full(
 fn build_one(
     cfg: EnricherConfig,
     http_client: HttpEnricherClient,
-    source_cache: Option<std::sync::Arc<SourceCache>>,
+    resources: &EnricherResources,
     metrics: std::sync::Arc<dyn MetricsHook>,
 ) -> Result<Box<dyn crate::Enricher>, EnrichersConfigError> {
     let kind: EnricherKind = cfg.kind.into();
@@ -445,12 +486,16 @@ fn build_one(
                     type_name: cfg.type_name.clone(),
                     field: "source",
                 })?;
-            let cache = source_cache.ok_or(EnrichersConfigError::MissingField {
-                enricher_id: cfg.id.clone(),
-                type_name: cfg.type_name.clone(),
-                field: "<source_cache: no dynamic sources configured; \
-                        pass --source <file> to the daemon to declare sources>",
-            })?;
+            let cache =
+                resources
+                    .source_cache
+                    .clone()
+                    .ok_or(EnrichersConfigError::MissingField {
+                        enricher_id: cfg.id.clone(),
+                        type_name: cfg.type_name.clone(),
+                        field: "<source_cache: no dynamic sources configured; \
+                            pass --source <file> to the daemon to declare sources>",
+                    })?;
             let extract = build_extract_expr(&cfg)?;
             Ok(Box::new(LookupEnricher::new(
                 cfg.id,
@@ -465,6 +510,51 @@ fn build_one(
                 cache,
             )))
         }
+        #[cfg(feature = "stix-enrich")]
+        "stix" => {
+            let store = resources
+                .stix_store
+                .clone()
+                .ok_or(EnrichersConfigError::MissingField {
+                    enricher_id: cfg.id.clone(),
+                    type_name: cfg.type_name.clone(),
+                    field: "<stix_store: no STIX store configured; \
+                        pass --stix-store <dir> to the daemon (same layout as taxii sync --store)>",
+                })?;
+            if cfg.stix_id.is_none() && cfg.text_search.is_none() && !cfg.attack_technique {
+                return Err(EnrichersConfigError::MissingField {
+                    enricher_id: cfg.id.clone(),
+                    type_name: cfg.type_name.clone(),
+                    field: "stix_id | text_search | attack_technique",
+                });
+            }
+            let type_filter = parse_stix_type_filter(&cfg)?;
+            let extract = build_extract_expr(&cfg)?;
+            let query = StixEnricherQuery {
+                stix_id: cfg.stix_id.clone(),
+                text_search: cfg.text_search.clone(),
+                attack_technique: cfg.attack_technique,
+                type_filter,
+                max_results: cfg.max_results.unwrap_or(1).max(1),
+            };
+            Ok(Box::new(StixEnricher::new(
+                cfg.id,
+                kind,
+                cfg.inject_field,
+                query,
+                extract,
+                cfg.default,
+                timeout,
+                on_error,
+                scope,
+                store,
+            )))
+        }
+        #[cfg(not(feature = "stix-enrich"))]
+        "stix" => Err(EnrichersConfigError::BespokeFactory {
+            enricher_id: cfg.id.clone(),
+            message: "stix enricher requires the stix-enrich feature".into(),
+        }),
         other => {
             // Bespoke type: look up factory and pass the raw config block.
             let factory = lookup_builtin(other).ok_or(EnrichersConfigError::UnknownType {
@@ -490,6 +580,23 @@ fn build_one(
 /// from `cfg.extract` + `cfg.extract_type`. `None` when no extract is
 /// configured. Defaults to `jq` when an extract expression is set
 /// without an explicit type, matching the pipeline-source convention.
+#[cfg(feature = "stix-enrich")]
+fn parse_stix_type_filter(
+    cfg: &EnricherConfig,
+) -> Result<Vec<StixObjectKind>, EnrichersConfigError> {
+    cfg.type_filter
+        .iter()
+        .map(|type_name| {
+            StixObjectKind::from_type_str(type_name).ok_or_else(|| EnrichersConfigError::Scope {
+                enricher_id: cfg.id.clone(),
+                message: format!(
+                    "unknown STIX type '{type_name}' in type_filter (custom x_* types cannot be filtered; omit type_filter and rely on text_search)"
+                ),
+            })
+        })
+        .collect()
+}
+
 fn build_extract_expr(
     cfg: &EnricherConfig,
 ) -> Result<Option<rsigma_eval::pipeline::sources::ExtractExpr>, EnrichersConfigError> {
@@ -547,6 +654,12 @@ fn validate_templated_fields(
     }
     if let Some(e) = &cfg.extract {
         check(e, "extract")?;
+    }
+    if let Some(id) = &cfg.stix_id {
+        check(id, "stix_id")?;
+    }
+    if let Some(search) = &cfg.text_search {
+        check(search, "text_search")?;
     }
     Ok(())
 }
@@ -622,6 +735,21 @@ impl serde::Serialize for EnricherConfig {
         }
         if let Some(d) = &self.default {
             m.serialize_entry("default", d)?;
+        }
+        if let Some(id) = &self.stix_id {
+            m.serialize_entry("stix_id", id)?;
+        }
+        if let Some(search) = &self.text_search {
+            m.serialize_entry("text_search", search)?;
+        }
+        if self.attack_technique {
+            m.serialize_entry("attack_technique", &self.attack_technique)?;
+        }
+        if !self.type_filter.is_empty() {
+            m.serialize_entry("type_filter", &self.type_filter)?;
+        }
+        if let Some(max) = &self.max_results {
+            m.serialize_entry("max_results", max)?;
         }
         m.end()
     }
@@ -795,5 +923,52 @@ enrichers:
         // We don't have a direct getter for the internal timeout; the
         // round-trip building succeeds when humantime parses it.
         build_enrichers(parsed).unwrap();
+    }
+
+    #[cfg(feature = "stix-enrich")]
+    #[test]
+    fn stix_enricher_requires_store() {
+        let yaml = r#"
+enrichers:
+  - id: intel
+    kind: detection
+    type: stix
+    inject_field: stix
+    text_search: "${detection.fields.Hash}"
+"#;
+        let parsed: EnrichersFile = yaml_serde::from_str(yaml).unwrap();
+        let err = build_enrichers(parsed).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("stix_store"), "got: {msg}");
+    }
+
+    #[cfg(feature = "stix-enrich")]
+    #[test]
+    fn stix_enricher_requires_query_mode() {
+        use rstix::store::MemoryStore;
+
+        let yaml = r#"
+enrichers:
+  - id: intel
+    kind: detection
+    type: stix
+    inject_field: stix
+"#;
+        let parsed: EnrichersFile = yaml_serde::from_str(yaml).unwrap();
+        let store = std::sync::Arc::new(MemoryStore::new());
+        let err = build_enrichers_full(
+            parsed,
+            EnricherResources {
+                stix_store: Some(store),
+                ..EnricherResources::default()
+            },
+            std::sync::Arc::new(NoopMetrics),
+        )
+        .unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("stix_id | text_search | attack_technique"),
+            "got: {msg}"
+        );
     }
 }

@@ -6,4 +6,6 @@
 //! module re-exports the pieces the daemon uses so the call sites in
 //! `daemon/server.rs` stay unchanged.
 
-pub use rsigma_runtime::enrichment::config::{build_enrichers_full, load_enrichers_file};
+pub use rsigma_runtime::enrichment::config::{
+    EnricherResources, build_enrichers_full, load_enrichers_file,
+};

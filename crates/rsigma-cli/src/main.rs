@@ -165,7 +165,7 @@ enum Commands {
         cmd: config::commands::ConfigCommands,
     },
 
-    /// Sync threat intelligence from TAXII servers (`taxii-sync` feature)
+    /// TAXII sync and local STIX bundle import (`taxii-sync` feature)
     #[cfg(feature = "taxii-sync")]
     Taxii {
         #[command(subcommand)]

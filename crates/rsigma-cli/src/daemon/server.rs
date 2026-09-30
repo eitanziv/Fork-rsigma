@@ -280,6 +280,12 @@ pub struct DaemonConfig {
     /// / `POST /api/v1/reload`); failures during reload are logged and
     /// the previous pipeline stays active.
     pub enrichers_path: Option<PathBuf>,
+    /// Local STIX store root for `type: stix` enrichers (`stix-enrich` feature).
+    #[cfg(feature = "stix-enrich")]
+    pub stix_store_path: Option<PathBuf>,
+    /// Parse custom STIX types when opening [`stix_store_path`](Self::stix_store_path).
+    #[cfg(feature = "stix-enrich")]
+    pub stix_store_allow_custom: bool,
     /// Optional path to the alert-pipeline config (from `--alert-pipeline`).
     /// Read at daemon startup and again on hot-reload; failures during
     /// reload are logged and the previous pipeline stays active.
@@ -620,11 +626,35 @@ pub async fn run_daemon(config: DaemonConfig) {
     // from the same cache the resolver writes into. Failures here exit
     // cleanly because no I/O has started yet.
     let initial_source_cache = source_resolver_val.as_ref().map(|r| r.arc_cache());
+    #[cfg(feature = "stix-enrich")]
+    let stix_fs_store: Option<std::sync::Arc<rstix::store::FsStore>> = config
+        .stix_store_path
+        .as_ref()
+        .map(|path| {
+            let parse_options = rstix::model::ParseOptions::default()
+                .allow_custom(config.stix_store_allow_custom);
+            match rstix::store::FsStore::open_with_parse_options(path, parse_options) {
+            Ok(store) => {
+                tracing::info!(path = %path.display(), "STIX store opened for enrichment");
+                std::sync::Arc::new(store)
+            }
+            Err(e) => {
+                tracing::error!(error = %e, path = %path.display(), "Failed to open STIX store");
+                std::process::exit(crate::exit_code::CONFIG_ERROR);
+            }
+            }
+        });
     if let Some(path) = config.enrichers_path.as_ref() {
         match super::enrichment::load_enrichers_file(path).and_then(|file| {
             super::enrichment::build_enrichers_full(
                 file,
-                initial_source_cache.clone(),
+                super::enrichment::EnricherResources {
+                    source_cache: initial_source_cache.clone(),
+                    #[cfg(feature = "stix-enrich")]
+                    stix_store: stix_fs_store
+                        .clone()
+                        .map(|store| store as std::sync::Arc<dyn rstix::store::StixStore>),
+                },
                 enrichment_metrics.clone(),
             )
         }) {
@@ -1201,6 +1231,8 @@ pub async fn run_daemon(config: DaemonConfig) {
     let reload_enrichers_path = config.enrichers_path.clone();
     let reload_enrichment_metrics = enrichment_metrics.clone();
     let reload_source_cache = initial_source_cache.clone();
+    #[cfg(feature = "stix-enrich")]
+    let reload_stix_fs_store = stix_fs_store.clone();
     let reload_alert_pipeline_swap = alert_pipeline_swap.clone();
     let reload_alert_pipeline_path = config.alert_pipeline_path.clone();
     let reload_alert_state = alert_state.clone();
@@ -1247,10 +1279,26 @@ pub async fn run_daemon(config: DaemonConfig) {
             // so a typo in the enrichers config doesn't take down
             // detection enrichment in production.
             if let Some(path) = reload_enrichers_path.as_deref() {
+                #[cfg(feature = "stix-enrich")]
+                if let Some(store) = reload_stix_fs_store.as_ref()
+                    && let Err(e) = store.reload_from_disk()
+                {
+                    tracing::error!(
+                        error = %e,
+                        "Failed to reload STIX store from disk; keeping previous enrichment index"
+                    );
+                    reload_metrics.reloads_failed.inc();
+                }
                 match super::enrichment::load_enrichers_file(path).and_then(|file| {
                     super::enrichment::build_enrichers_full(
                         file,
-                        reload_source_cache.clone(),
+                        super::enrichment::EnricherResources {
+                            source_cache: reload_source_cache.clone(),
+                            #[cfg(feature = "stix-enrich")]
+                            stix_store: reload_stix_fs_store
+                                .clone()
+                                .map(|store| store as std::sync::Arc<dyn rstix::store::StixStore>),
+                        },
                         reload_enrichment_metrics.clone(),
                     )
                 }) {

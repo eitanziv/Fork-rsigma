@@ -4756,6 +4756,7 @@ dependencies = [
  "reqwest 0.12.28",
  "rsigma-eval",
  "rsigma-parser",
+ "rstix",
  "rusqlite",
  "rustls",
  "serde",

@@ -87,6 +87,8 @@ rsigma taxii sync \
   --allow-custom
 ```
 
+Feed daemon enrichment: point `engine daemon --stix-store` at the same directory and declare a `type: stix` enricher. See [Enrichers](../../guide/enrichers.md#stix-local-stix-store-lookup).
+
 MITRE ATT&CK Enterprise (STIX 2.1 TAXII collection; requires `--allow-custom` for `x-mitre-*` types):
 
 ```bash
@@ -115,5 +117,6 @@ Pin a specific ATT&CK release by changing the API root (collection ids stay the 
 
 ## See also
 
+- [`taxii store`](store.md) — import a local STIX bundle JSON file (air-gap, ATT&CK releases, fixtures)
 - [rstix TAXII client](../../library/rstix.md#rstix-taxii-client)
 - [Feature flags: `taxii-sync`](../../reference/feature-flags.md#rsigma-cli)
