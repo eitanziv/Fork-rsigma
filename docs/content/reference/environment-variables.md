@@ -11,7 +11,7 @@ Every variable here has a corresponding `--flag` that takes precedence.
 
 | Variable | Type | Default | Subcommand(s) | Effect |
 |----------|------|---------|---------------|--------|
-| `RUST_LOG` | `tracing-subscriber` filter directive | `info` | All (always for `engine daemon`; otherwise only when `--log-format` is set) | Controls verbosity of structured diagnostic logs on stderr. See [Observability](../guide/observability.md#rust_log-filter-targets) for the target catalog. |
+| `RUST_LOG` | `tracing-subscriber` filter directive | `info` | All (always for `engine daemon`; otherwise only when `--log-format` is set) | Controls verbosity of structured diagnostic logs on stderr. See [Observability](../guide/observability.md#rustlog-filter-targets) for the target catalog. |
 | `NO_COLOR` | `0`/`1` (presence-only) | unset | All subcommands that emit colored stdout/stderr | Disables ANSI colors when `--color auto`. Follows the [NO_COLOR convention](https://no-color.org/). |
 | `RSIGMA_GLOBAL__OUTPUT_FORMAT` | `json`/`ndjson`/`table`/`csv`/`tsv` | unset | All | Default value for `--output-format`. See [Output Formats](output.md). |
 | `RSIGMA_GLOBAL__COLOR` | `auto`/`always`/`never` | unset | All | Default value for `--color`. |
