@@ -28,6 +28,8 @@ export default {
       },
     },
   },
+  // docmd 0.8.17 renders the consent banner from this key, but `docs:validate`
+  // still reports it as an unknown top-level property. The warning is spurious.
   cookie: {
     enabled: true,
     message: "We use optional analytics cookies to understand how this documentation is used.",
