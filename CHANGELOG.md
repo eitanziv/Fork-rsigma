@@ -4,11 +4,11 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Plain-text code blocks render without highlighting
+### Plain-text code blocks render without highlighting (#520)
 
 Docs code blocks fenced as `text` (command trees, sample output, directory layouts) no longer pick up code coloring. The site's highlighter tokenizes every block the same way regardless of language, so an apostrophe such as the one in "daemon's" opened a colored "string" that ran to the next apostrophe; those blocks now render as escaped plain text.
 
-### Redraw the architecture diagrams
+### Redraw the architecture diagrams (#520)
 
 The ecosystem diagram now shows the daemon as it runs today: rules, pipelines, log events, dynamic sources, and TAXII-synced threat intel feeding the detection engine, enrichment (including `stix` lookups), the opt-in risk, alert pipeline, and disposition layers, and the state store, with the HTTP API, operator tooling, sinks (including webhook and OCSF output), and the paths outside the daemon (`engine eval`, `backend convert`, `hunt run`, rule authoring, MCP, LSP). The crate map is now a dependency graph of all nine crates, including `rstix`, drawn from the actual `Cargo.toml` edges. Both diagrams follow the reader's light or dark preference, and on the [Architecture](https://rsigma.io/reference/architecture/) page every label links to the guide, reference, or CLI section it names. The page drops its Mermaid copy along with `assets/architecture.mmd`, and its dependency notes are corrected: `rsigma-convert` depends on `rsigma-eval`, `rsigma-runtime` depends on `rstix`, and the CLI does not depend on `rsigma-lsp`.
 
