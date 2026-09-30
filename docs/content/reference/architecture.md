@@ -6,108 +6,15 @@ For operator-facing material see the [User Guide](../guide/evaluating-rules.md).
 
 ## Ecosystem
 
-The streaming-detection ecosystem at a glance: rules, pipelines, dynamic sources, and log events flow into the engine, which fans out to enrichment, sinks, and downstream systems.
+The streaming-detection ecosystem at a glance: rules, pipelines, dynamic sources, threat intel, and log events flow into the daemon, which evaluates, enriches, and scores them before fanning results out to sinks and downstream systems. The same engine also runs outside the daemon for one-shot evaluation, conversion, hunting, and rule authoring.
 
-![rsigma streaming detection architecture](https://raw.githubusercontent.com/timescale/rsigma/main/assets/architecture.svg)
+![RSigma streaming detection architecture](../../assets/images/architecture.svg)
 
 ## Crate map
 
-The crate-level view below is also available as a [rendered SVG](https://raw.githubusercontent.com/timescale/rsigma/main/assets/internal_architecture.svg).
+Each arrow points from a crate to a crate it depends on; edges already implied by a longer path are left out.
 
-```mermaid
-flowchart TD
-    YAML["YAML input"]
-    SERDE["yaml_serde"]
-    EVENTS["Log events"]
-    OUTPUT["EvaluationResult<br/>RuleHeader: title · id · level · tags · enrichments<br/>ResultBody: Detection (matched fields/selections) ·<br/>Correlation (correlation_type · group_key · aggregated_value)"]
-    QUERIES["SQL · SPL · KQL · Lucene · EDR rules<br/>30+ targets via sigma-cli"]
-    EDITOR["Editor diagnostics + code actions"]
-    AGENTS["MCP clients<br/>Cursor · Claude Code · remote agents"]
-    MCPJSON["Structured JSON<br/>AST · lint findings · matches · queries · fields<br/>verified tuning reports + filter YAML"]
-
-    subgraph rsigma-parser
-        direction TB
-        PARSE["parser.rs (YAML → AST)"] -->|"SigmaRule · CorrelationRule<br/>FilterRule · SigmaCollection"| PEST["sigma.pest (PEG grammar)<br/>condition.rs (Pratt parser)"]
-        PARSE --> VALUE["value.rs<br/>SigmaStr · wildcards · timespan"]
-        PARSE --> AST["ast.rs<br/>AST types · modifiers · enums"]
-    end
-
-    subgraph rsigma-ir
-        direction TB
-        LOWER["lower_rule<br/>AST → HIR · modifier resolution<br/>quantified selectors preserved"]
-        LOWER --> IRHIR["hir: IrRule · IrDetection · IrCondition<br/>IrMatcher (faithful: IrPattern + IrEncoding)"]
-        IRHIR --> IROPT["optimize (opt-in)<br/>flatten · dead-detection · CSE"]
-        IRHIR --> IRCACHE["cache (CBOR)<br/>HirCacheHeader · encode_rules / decode_rules<br/>backs Engine save_hir / load_hir"]
-    end
-
-    subgraph rsigma-eval
-        direction TB
-        ETRAIT["Event trait<br/>JsonEvent · KvEvent · PlainEvent<br/>schema classify (content signatures)"]
-        ETRAIT --> EPIPE["pipeline/<br/>Pipeline · conditions · transformations<br/>state · finalizers<br/>builtin: ecs_windows · fibratus_windows · sysmon<br/>dynamic: ${source.*} template expansion"]
-        ECOMP["compiler/<br/>compile_to_compiled → CompiledRule<br/>materialize matchers from HIR<br/>matcher optimizer (AnyOf):<br/>Aho-Corasick batching (|contains)<br/>RegexSet batching (|re)<br/>CaseInsensitiveGroup"]
-        ECOMP --> EENG["engine/<br/>Engine (stateless)<br/>prefilters:<br/>CandidateIndex (witness pruning)<br/>bloom trigram filter* (substring)<br/>cross-rule AC index** (daachorse)<br/>logsource pruning (conflict-based, product-partitioned)"]
-        ETRAIT --> EAUTHOR["rule authoring<br/>rule_draft · rule_tune<br/>shared profiling · verified YAML"]
-        EAUTHOR -.->|"closed verification"| EENG
-        EENG --> ECORR["correlation/<br/>sliding windows · group-by<br/>chaining · suppression · introspect snapshot"]
-        ECORR --> ECUST["rsigma.* custom attributes"]
-    end
-
-    subgraph rsigma-convert
-        direction TB
-        CBACK["Backend trait<br/>IR-native query generation"]
-        CBACK --> CTQC["TextQueryConfig<br/>~90 fields for text query backends"]
-        CTQC --> CWALK["IR walker<br/>IrDetection · IrCondition<br/>deferred exprs · conversion state"]
-        CWALK --> CENDS["backends/<br/>native: PostgreSQL/TimescaleDB · LynxDB · Fibratus<br/>TextQueryTest (test)<br/>else → sigma-cli delegation (splunk · elastic · kusto · ...)"]
-    end
-
-    subgraph rsigma-lsp
-        direction TB
-        LSERV["LSP server over stdio<br/>tower-lsp-server"]
-        LSERV --> LDIAG["diagnostics<br/>lint + parse + compile"]
-        LDIAG --> LFEAT["completions · hover<br/>document symbols"]
-        LFEAT --> LEDIT["Editors<br/>VS Code · Neovim · Helix · Zed"]
-    end
-
-    subgraph rsigma-runtime
-        direction TB
-        RINPUT["input/ format adapters:<br/>JSON · syslog · logfmt* · CEF* · EVTX*<br/>plain text · auto-detect<br/>raw line → EventInputDecoded"]
-        RINPUT --> RPROC["LogProcessor<br/>batch evaluation<br/>ArcSwap hot-reload (rules + pipelines)<br/>MetricsHook · EventFilter"]
-        RPROC --> RENG["RuntimeEngine<br/>wraps Engine + CorrelationEngine<br/>with rule loading<br/>schema routing*: per-schema engines<br/>+ one shared correlation store"]
-        RENG --> RENRICH["enrichment/ post-eval pipeline<br/>primitives: template · lookup · http · command<br/>kind-aware: ${detection.*} · ${correlation.*}<br/>scope filter · HTTP response cache · on_error<br/>writes RuleHeader.enrichments"]
-        RENRICH --> RPOST["post-engine layers (opt-in)<br/>risk/ per-entity scoring + risk incidents<br/>alert pipeline/ silence · inhibit ·<br/>dedup · incident grouping<br/>dispositions/ per-rule false-positive ratio"]
-        RPOST --> RIO["io/<br/>EventSource (stdin · HTTP · NATS · unix*)<br/>OTLP* (HTTP + gRPC)<br/>TLS* termination (mTLS · cert hot-reload)<br/>on shared API listener (TCP or unix*)<br/>Sink (stdout · file · NATS · OTLP* · webhook · unix*)<br/>async delivery: per-sink workers · retry/backoff · DLQ"]
-        RSRC["sources/ (dynamic pipelines)<br/>DaemonSourceRegistry: external (--source)<br/>(pipeline-embedded sources: rejected)<br/>SourceResolver: HTTP · command · file · NATS<br/>TemplateExpander · SourceCache (SQLite TTL)<br/>RefreshScheduler: interval · watch · push<br/>SIGHUP · NATS control · includes<br/>extract: jq · JSONPath · CEL"]
-    end
-
-    subgraph rsigma-mcp
-        direction TB
-        MCPSERVE["rsigma mcp serve<br/>stdio · Streamable HTTP (bearer auth · TLS*)"]
-        MCPSERVE --> MCPH["RsigmaMcp handler<br/>15 Engineer tools: parse_rule · parse_condition · lint_rules<br/>validate_rules · evaluate_events · convert_rules<br/>list_backends · list_fields · resolve_pipeline<br/>list_builtin_pipelines · fix_rules · author_ads<br/>reverse_convert · tune_rules · test_exemplars<br/>+ optional Operate tools (--daemon-url)<br/>4 resources: lint catalogue · ADS schema · modifiers · MITRE tactics"]
-    end
-
-    YAML -->|"Raw YAML Value"| SERDE
-    SERDE --> PARSE
-    PEST -->|"AST"| LOWER
-    EPIPE -.->|"transforms applied before lowering"| LOWER
-    LOWER -->|"IrRule (HIR)"| ECOMP
-    LOWER -->|"IrRule (HIR)"| CBACK
-    PEST --> LSERV
-    ECUST --> RENG
-    EVENTS --> RINPUT
-    RIO --> OUTPUT
-    CENDS --> QUERIES
-    LEDIT --> EDITOR
-    RSRC -.->|"${source.*} values"| EPIPE
-
-    AGENTS -->|"JSON-RPC"| MCPSERVE
-    MCPH -.->|"parse · lint · fix · reference"| PARSE
-    MCPH -.->|"compile · evaluate · tune · fields"| ETRAIT
-    MCPH -.->|"convert"| CBACK
-    MCPH -.->|"sources · enrichment"| RSRC
-    MCPH --> MCPJSON
-```
-
-`*` feature-gated. `**` requires the `daachorse-index` feature.
+![RSigma crate dependency graph](../../assets/images/internal_architecture.svg)
 
 ## rstix
 
@@ -115,7 +22,7 @@ STIX 2.1 bundle parsing, T1 advisory validation, optional T2 Validation Pipeline
 
 ## Crate responsibilities
 
-The dependency direction goes left to right in the diagram above. Higher crates depend on lower crates; the reverse is never true.
+Dependencies point down the [crate map](#crate-map): higher crates depend on lower crates, and the reverse is never true.
 
 | Crate | Role | Key types | Feature gates |
 |-------|------|-----------|---------------|
@@ -129,7 +36,7 @@ The dependency direction goes left to right in the diagram above. Higher crates 
 | `rstix` | STIX 2.1 library crate. **Data Model + Serialization** complete (`serde`, default; wire MUST at parse [**DD-DM-001**](../library/rstix.md#rstix-wire-format-validation-dd-dm-001); [wire conformance (STIX 2.1)](../library/rstix.md#rstix-wire-conformance-stix-21)). **Pattern Engine** complete (`pattern`). **Validation Pipeline** complete (`validate`, all twelve checks, conformance corpus + per-code diagnostic coverage). **Graph + Marking + Store** complete (`graph`, `marking`, `store`, `store-fs`). **TAXII Client** (`taxii`; [TAXII Client](../library/rstix.md#rstix-taxii-client)). | `Bundle::parse` / `parse_reader`, `Bundle::validate`, `ParseOptions` + typed `TypeRegistry`, 42 typed object families (`serde`); `Pattern::parse` / `evaluate` / … (`pattern`); `Validator` / structured `STIX-E/W/I/H` diagnostics (`validate`); `StixGraph`, `MarkingResolver`, `MemoryStore` / `StixStore` / `FsStore` (`graph` / `marking` / `store` / `store-fs`); `TaxiiClient`, `TaxiiEnvelope`, auth + pagination (`taxii`); deterministic SCO IDs, vocabulary tables | `serde` (default), `pattern`, `validate`, `graph`, `marking`, `store`, `store-fs`, `taxii`, `taxii-store`, `taxii-native-tls` |
 | `rsigma-cli` | The `rsigma` binary. Wires the other crates into a CLI and the streaming daemon. | `engine eval`, `engine daemon`, `rule *`, `backend *`, `pipeline resolve`, `mcp serve` | `daemon`, `mcp`, `daemon-nats`, `daemon-otlp`, `daemon-tls`, plus all eval/runtime feature flags. |
 
-`rsigma-parser` has no Rust dependencies on the others. `rsigma-ir` depends only on `rsigma-parser`. `rsigma-eval` and `rsigma-convert` depend on `rsigma-parser` and `rsigma-ir` (both consume the HIR); `rsigma-lsp` depends on `rsigma-parser` and `rsigma-eval`. `rsigma-runtime` depends on `rsigma-parser` and `rsigma-eval`. `rsigma-mcp` depends on `rsigma-parser`, `rsigma-eval`, `rsigma-convert`, and `rsigma-runtime`. `rsigma-cli` depends on everything.
+`rsigma-parser` and `rstix` have no dependencies on the other crates. `rsigma-ir` depends on `rsigma-parser`. `rsigma-eval` depends on `rsigma-parser` and `rsigma-ir`, and `rsigma-convert` adds `rsigma-eval` to those two. `rsigma-lsp` depends on `rsigma-parser` and `rsigma-eval`. `rsigma-runtime` depends on `rsigma-parser`, `rsigma-eval`, and `rstix`. `rsigma-mcp` depends on `rsigma-parser`, `rsigma-eval`, `rsigma-convert`, and `rsigma-runtime`. `rsigma-cli` depends directly on `rsigma-parser`, `rsigma-eval`, `rsigma-convert`, `rsigma-runtime`, `rsigma-mcp`, and `rstix`, and reaches `rsigma-ir` through them. `rsigma-lsp` ships as its own binary and is not a dependency of the CLI.
 
 ## The four execution shapes
 
@@ -293,7 +200,7 @@ RSigma assumes a trusted operator providing rules, pipelines, and source declara
 
 ## See also
 
-- [Source diagram](https://github.com/timescale/rsigma/blob/main/assets/architecture.mmd): the Mermaid file this page renders from.
+- [Diagram sources](https://github.com/timescale/rsigma/tree/main/assets): `architecture.svg` and `internal_architecture.svg`, the SVGs this page embeds.
 - [Per-crate READMEs](https://github.com/timescale/rsigma/tree/main/crates) for the implementation-side documentation.
 - [docs.rs/rsigma](https://docs.rs/rsigma) for the library API.
 - [Benchmarks](../benchmarks.md) for the Criterion results across parser, evaluator, correlation engine, runtime, and dynamic pipelines.
