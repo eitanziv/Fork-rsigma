@@ -601,11 +601,36 @@ function collectHtmlFiles(dir) {
   return out;
 }
 
+/** Fence languages that mean "no highlighting". */
+const PLAIN_FENCE_LANGUAGES = new Set(["text", "txt", "plaintext", "plain"]);
+
+/**
+ * docmd's highlighter (lite-hl) ignores the fence language and runs one
+ * heuristic tokenizer over every block, so plain-text blocks get colored as
+ * code: an apostrophe opens a "string" that runs to the next one. Render those
+ * blocks escaped and unhighlighted instead, keeping the same wrapper markup.
+ *
+ * @param {any} md markdown-it instance
+ */
+function plainTextFences(md) {
+  const highlight = md.options.highlight;
+  md.options.highlight = (str, lang, attrs) => {
+    if (PLAIN_FENCE_LANGUAGES.has(lang)) {
+      return `<pre class="hljs"><code class="language-${lang}">${md.utils.escapeHtml(str)}</code></pre>`;
+    }
+    return highlight ? highlight(str, lang, attrs) : "";
+  };
+}
+
 export default {
   plugin: {
     name: "docmd-plugin-rsigma",
     version: "1.0.0",
-    capabilities: ["init", "build", "post-build"],
+    capabilities: ["init", "markdown", "build", "post-build"],
+  },
+
+  markdownSetup(md) {
+    plainTextFences(md);
   },
 
   async onConfigResolved(config) {
