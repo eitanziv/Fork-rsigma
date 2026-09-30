@@ -4,6 +4,10 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Redrawn logo and a favicon set
+
+The RSigma mark is redrawn from geometric curves in place of the traced bitmap: the same "rσ" silhouette and tiger stripes, with an even outline and a single orange gradient replacing 17 flat facets, in a file about an eighth of the size. A companion small mark (heavier outline, no stripes, flat orange) stays legible at 16 px. The `assets/` directory now holds stacked and horizontal logotypes in light and dark variants as SVG, the README header uses the stacked SVGs, and the three logotype PNGs are removed. The docs sidebar shows the horizontal logotype instead of the mark beside CSS text, and the site serves an SVG favicon with a multi-size `favicon.ico` fallback and an Apple touch icon. The diagram headers use the new mark, with an outline that turns light in dark mode.
+
 ### CLI command tree lists every subcommand (#520)
 
 The [CLI Reference](https://rsigma.io/cli/) command tree and quick-navigation table now match the binary: they add `rule test`, `hunt run`, and `taxii store`, follow the CLI's group order, and describe `engine incidents export` as exporting one incident's evidence bundle. The feature note adds `taxii store` to `taxii-sync` and notes that `hunt run --emit events` needs `hunt-postgres`.
