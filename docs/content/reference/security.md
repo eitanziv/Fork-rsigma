@@ -154,7 +154,7 @@ Design properties:
 - **Constant-time comparison.** Every presented token is compared against every configured secret in constant time, so timing cannot leak a matched prefix.
 - **Least privilege by role.** Built-in roles `reader`/`operator`/`ingest`/`admin` plus custom roles as permission lists with `*` wildcards. A log shipper's `ingest` token carries only `events:ingest` and cannot create silences or trigger reloads; `reload:execute` is deliberately excluded from `operator` so config-changing control stays with `admin` tokens.
 - **Fail-closed route table.** A route added without a permission mapping requires the full `*` grant rather than defaulting open.
-- **Aggregating routes get their own resource.** An [incident bundle](http-api.md#get-apiv1incidentsidbundle) joins an incident to rule documentation and risk entities, so it requires `incident-bundles:read` rather than the `incidents:read` that gates the incident list. A custom role can hand out the incident list without handing out what the detections look for or which entities are accumulating risk. The built-in `reader` role (`*:read`) covers both.
+- **Aggregating routes get their own resource.** An [incident bundle](http-api-state.md#get-apiv1incidentsidbundle) joins an incident to rule documentation and risk entities, so it requires `incident-bundles:read` rather than the `incidents:read` that gates the incident list. A custom role can hand out the incident list without handing out what the detections look for or which entities are accumulating risk. The built-in `reader` role (`*:read`) covers both.
 - **No anonymous fallback for bad tokens.** `anonymous_permissions` applies only to requests with no `Authorization` header; a presented-but-unrecognized token is always rejected with 401.
 - **Observable rejections.** `rsigma_api_auth_failures_total{reason="unauthorized"|"forbidden"}` counts rejections, and each is logged at warn level with the route and token name; the secret is never logged.
 
@@ -170,11 +170,11 @@ When the daemon runs with `--state-db`, an append-only audit log records every c
 - **Optional sink.** `daemon.api.audit.sink` mirrors each record as a JSON line; the sink is built with `on_full=drop` so slow downstreams cannot backlog the daemon.
 - **Auth denials stay separate.** Failed authentication increments `rsigma_api_auth_failures_total` and is logged at warn; it is not duplicated in the audit table.
 
-See [HTTP API: Audit trail](http-api.md#audit-trail) for the audited route list and query parameters.
+See [HTTP API: Audit trail](http-api-state.md#audit-trail) for the audited route list and query parameters.
 
 ## Live event tap
 
-The live event tap ([`GET /api/v1/tap`](http-api.md#live-event-tap), [`rsigma engine tap`](../cli/engine/tap.md)) streams a bounded window of the raw event traffic flowing through the engine. Anyone who can reach the admin API can already inject events and read loaded rules; the tap raises the stakes to **reading live production traffic**, so treat it as an exfiltration surface:
+The live event tap ([`GET /api/v1/tap`](http-api-observability.md#live-event-tap), [`rsigma engine tap`](../cli/engine/tap.md)) streams a bounded window of the raw event traffic flowing through the engine. Anyone who can reach the admin API can already inject events and read loaded rules; the tap raises the stakes to **reading live production traffic**, so treat it as an exfiltration surface:
 
 - **It is off by default.** The tap is opt-in: enable it with `daemon.tap.enabled: true` (or the `--enable-tap` flag) only when you need it, and prefer leaving it disabled.
 - **Expose the admin API only behind mTLS.** The tap inherits the API listener's protections; pair `--tls-cert`/`--tls-key` with `--tls-client-ca` so only pinned clients can open a tap. See [TLS termination](#tls-termination-for-the-api-listener).

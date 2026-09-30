@@ -1,5 +1,7 @@
 # `rsigma rule coverage`
 
+{{ added "0.17.0" }}
+
 Map a rule set onto MITRE ATT&CK: export an ATT&CK Navigator layer and report coverage gaps against the Atomic Red Team library, the SigmaHQ baseline heatmap, and a target technique list.
 
 ## Synopsis
@@ -36,8 +38,8 @@ A rule tagged with a sub-technique (`attack.t1059.001`) counts toward its parent
 | `--baseline [<PATH_OR_URL>]` | unset | Cross-reference a baseline Navigator layer. A bare `--baseline` uses the SigmaHQ coverage heatmap; pass a local path or URL. May also be supplied via `coverage.baseline`. |
 | `--targets <FILE>` | unset | Cross-reference a target technique list (one technique ID per line; `#` comments allowed). May also be supplied via `coverage.targets`. |
 | `--fail-on-gaps` | off | Exit `1` when any requested cross-reference reports uncovered techniques. May also be supplied via `coverage.fail_on_gaps`. Same meaning under `--emit atomics-plan`. |
-| `--emit <report\|atomics-plan>` | `report` | What to print. `report` is the coverage document (default, unchanged). `atomics-plan` emits, for each uncovered-but-testable technique, the Atomic Red Team test names, GUIDs, platforms, and ready-to-paste `Invoke-AtomicTest` invocations. Requires `--atomics` (a config-file `coverage.atomics` counts). CLI-only; not a config key. |
-| `--platforms <LIST>` | unset | Comma-separated platform filter (`windows,linux,macos,...`) applied to `--emit atomics-plan`. Keeps tests whose `supported_platforms` intersect the list and drops techniques that then have no tests. Unfiltered output is the default. Ignored with a warning under `--emit report`. CLI-only. |
+| `--emit <report\|atomics-plan>` | `report` | What to print. `report` is the coverage document (default, unchanged). `atomics-plan` emits, for each uncovered-but-testable technique, the Atomic Red Team test names, GUIDs, platforms, and ready-to-paste `Invoke-AtomicTest` invocations. Requires `--atomics` (a config-file `coverage.atomics` counts). CLI-only; not a config key. {{ added "0.22.0" }} |
+| `--platforms <LIST>` | unset | Comma-separated platform filter (`windows,linux,macos,...`) applied to `--emit atomics-plan`. Keeps tests whose `supported_platforms` intersect the list and drops techniques that then have no tests. Unfiltered output is the default. Ignored with a warning under `--emit report`. CLI-only. {{ added "0.22.0" }} |
 | `--config <PATH>` | unset | Load a specific YAML config file instead of running the discovery chain. |
 | `--dry-run` | off | Print the effective `coverage` section and exit `0` without running. |
 
@@ -68,6 +70,8 @@ The JSON document (`--output-format json`) has a stable shape:
 - `targets` (when `--targets` is set): `uncovered` and `covered_via_subtechnique`.
 
 ## Atomics plan
+
+{{ added "0.22.0" }}
 
 `--emit atomics-plan` prints a different document. It includes exactly the techniques the report would list as `atomics.atomics_without_rule` (the same sub-technique roll-up: a parent is covered by a sub-technique rule, a sub-technique is not covered by a parent rule). rsigma emits the plan and does not run the tests.
 

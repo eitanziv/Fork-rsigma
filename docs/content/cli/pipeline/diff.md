@@ -1,5 +1,7 @@
 # `rsigma pipeline diff`
 
+{{ added "0.18.0" }}
+
 Show how processing pipelines rewrite a rule before evaluation.
 
 ## Synopsis

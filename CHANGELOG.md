@@ -4,6 +4,16 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Docs: version tags, deployment guides, a loop tutorial, and troubleshooting (#519)
+
+Every CLI command page, and every guide, reference, and library page for a feature added after v0.12.0, now carries an "Added in vX" tag linking to that release's notes; sections and table rows added since v0.22.0 are tagged too, and unreleased work shows an "Unreleased" tag until the release that ships it. The build fails when a tag names an unknown release or its link does not resolve.
+
+New pages: [Kubernetes](https://rsigma.io/deployment/kubernetes/) and [systemd](https://rsigma.io/deployment/systemd/) deployment guides, [Tutorial: The Detection Loop](https://rsigma.io/getting-started/detection-loop/), which takes one rule through draft, test, deploy, triage, tune, measure, and hunt on sample data, and a symptom-first [Troubleshooting](https://rsigma.io/getting-started/troubleshooting/) page. The cloud collection recipes and the HTTP API reference are split into shorter pages by topic. In the detection loop diagram, each item in a list such as "lint · doc · LSP · MCP for AI agents" now links to its own page or section.
+
+Fixes: the Docker, README, and combined cloud-recipe daemon examples now start (a non-loopback plaintext bind needs `--allow-plaintext` or TLS), the home page counts the workspace crates from `Cargo.toml` and lists every command group, and two cross-page anchors that did not resolve now do.
+
+The site now builds with docmd 0.9.7. Its new AI chat plugin, which is on by default and sends reader questions to a third-party service, is turned off. Page titles in the new focus mode render inline code instead of raw backticks.
+
 ### Interactive detection engineering loop diagram in the docs (#518)
 
 On the [Detection Engineering Loop](https://rsigma.io/guide/detection-engineering-loop/) guide, the diagram is now interactive: hovering a stage highlights its card, leader line, and ribbon node while the other stages fade, stage headers and nodes jump to the matching section, and each command or feature links to its CLI reference or guide page. The docs plugin copies `assets/detection-loop.svg` into the site at build time, embeds it with `<object>` (keeping the image as fallback), and rewrites its `https://rsigma.io/` links to the configured base path so they follow the host serving the build. The README keeps rendering the same file as a static image.

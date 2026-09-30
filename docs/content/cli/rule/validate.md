@@ -1,5 +1,7 @@
 # `rsigma rule validate`
 
+{{ added "0.12.0" }}
+
 Parse all Sigma rules in a directory (recursive) and report results.
 
 ## Synopsis

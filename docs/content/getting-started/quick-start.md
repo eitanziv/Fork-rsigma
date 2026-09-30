@@ -150,11 +150,11 @@ You have used RSigma in three modes:
 - Continuous streaming detection with `engine daemon`.
 - Query generation with `backend convert`.
 
-From here, pick the path that matches your work:
+To take one rule through drafting, testing, deployment, triage, tuning, measurement, and hunting, follow [Tutorial: The Detection Loop](detection-loop.md). Otherwise, pick the path that matches your work:
 
 - **Detection engineers**: [linting rules](../guide/linting-rules.md), [CI/CD](../guide/ci-cd.md), [processing pipelines](../guide/processing-pipelines.md).
 - **Platform engineers**: [streaming detection](../guide/streaming-detection.md), [NATS](../guide/nats-streaming.md), [OTLP integration](../guide/otlp-integration.md).
 - **Threat hunters**: [evaluating rules](../guide/evaluating-rules.md), [input formats](../guide/input-formats.md), [EVTX files](../guide/input-formats.md#evtx-windows-event-log-feature-gated).
 - **Library users**: [embedding the crates](../library/index.md).
 
-If anything in this quick start did not work, run the [quick-verification checklist](../guide/observability.md#quick-verification) or [open an issue](https://{{ rsigma.repo_url | replace("https://", "") }}/issues).
+If anything in this quick start did not work, see [Troubleshooting](troubleshooting.md), run the [quick-verification checklist](../guide/observability.md#quick-verification), or [open an issue](https://{{ rsigma.repo_url | replace("https://", "") }}/issues).

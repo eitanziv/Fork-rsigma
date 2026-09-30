@@ -52,6 +52,12 @@ export default {
       commitHistory: true,
     },
     mermaid: {},
+    // The AI chat plugin is on by default and sends reader questions to
+    // api.docmd.io, a processor the privacy page does not cover.
+    ai: { enabled: false },
+    // docmd prefixes plugin keys with `@docmd/plugin-` for its registry check,
+    // so this local plugin always logs "not found in official registry". It
+    // still loads.
     "docmd-plugin-rsigma": {},
   },
   navigation: [
@@ -63,7 +69,9 @@ export default {
       children: [
         { title: "Installation", path: "/getting-started/installation" },
         { title: "Quick Start", path: "/getting-started/quick-start" },
+        { title: "Tutorial: The Detection Loop", path: "/getting-started/detection-loop" },
         { title: "Core Concepts", path: "/getting-started/concepts" },
+        { title: "Troubleshooting", path: "/getting-started/troubleshooting" },
       ],
     },
     {
@@ -136,7 +144,16 @@ export default {
           title: "Integrate",
           collapsible: true,
           children: [
-            { title: "Cloud Collection Recipes", path: "/guide/cloud-collection-recipes" },
+            {
+              title: "Cloud Collection Recipes",
+              path: "/guide/cloud-collection-recipes",
+              collapsible: true,
+              children: [
+                { title: "Cloud Platforms", path: "/guide/cloud-collection-platforms" },
+                { title: "Identity and SaaS", path: "/guide/cloud-collection-identity-saas" },
+                { title: "Containers and Hosts", path: "/guide/cloud-collection-containers-hosts" },
+              ],
+            },
             { title: "MCP Server", path: "/guide/mcp-server" },
           ],
         },
@@ -273,7 +290,15 @@ export default {
           ],
         },
         { title: "Prometheus Metrics", path: "/reference/metrics" },
-        { title: "HTTP API", path: "/reference/http-api" },
+        {
+          title: "HTTP API",
+          path: "/reference/http-api",
+          collapsible: true,
+          children: [
+            { title: "Detection State", path: "/reference/http-api-state" },
+            { title: "Live Observability", path: "/reference/http-api-observability" },
+          ],
+        },
         { title: "Exit Codes", path: "/reference/exit-codes" },
         { title: "Environment Variables", path: "/reference/environment-variables" },
         { title: "Feature Flags", path: "/reference/feature-flags" },
@@ -290,7 +315,11 @@ export default {
       title: "Deployment",
       icon: "container",
       collapsible: true,
-      children: [{ title: "Docker", path: "/deployment/docker" }],
+      children: [
+        { title: "Docker", path: "/deployment/docker" },
+        { title: "Kubernetes", path: "/deployment/kubernetes" },
+        { title: "systemd", path: "/deployment/systemd" },
+      ],
     },
     {
       title: "Integrations",

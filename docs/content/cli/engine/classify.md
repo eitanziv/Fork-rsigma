@@ -1,5 +1,7 @@
 # `rsigma engine classify`
 
+{{ added "0.18.0" }}
+
 Report which schema each event matches, recognized from the event's content.
 
 ## Synopsis

@@ -1,5 +1,7 @@
 # `rsigma rule hygiene`
 
+{{ added "0.18.0" }}
+
 Flag rule hygiene and retirement candidates in one report, the lifecycle phase a mature detection program reviews on a retirement cadence.
 
 ## Synopsis

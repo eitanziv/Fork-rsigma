@@ -1,5 +1,7 @@
 # Detection Strategy (ADS)
 
+{{ added "0.18.0" }}
+
 A production detection is more than its logic. The [Palantir Alerting and Detection Strategy (ADS) framework](https://github.com/palantir/alerting-detection-strategy-framework) captures the durable, peer-reviewed context every alert should carry: a goal, an ATT&CK categorization, a strategy abstract, technical context, stated blind spots and assumptions, false-positive notes, a true-positive validation recipe, a priority, and a response plan.
 
 RSigma stores that context on the rule itself (standard fields plus `rsigma.ads.*`) so authoring, lint, and CI stay on one artifact instead of a separate wiki that can drift.

@@ -131,9 +131,11 @@ rsigma --features
 rsigma --help
 ```
 
-You should see `rsigma {{ rsigma.version }}`, the Cargo features compiled into that binary, and a list of the top-level command groups (`engine`, `rule`, `backend`, `pipeline`, `config`, and `mcp` when built with the `mcp` feature).
+You should see `rsigma {{ rsigma.version }}`, the Cargo features compiled into that binary, and a list of the top-level command groups (`engine`, `rule`, `backend`, `pipeline`, `hunt`, and `config`, plus `mcp` with the `mcp` feature and `taxii` with the `taxii-sync` feature).
 
 ## Agent skill
+
+{{ added "0.23.0" }}
 
 Coding agents that run rsigma (eval, lint, draft, tune, convert, daemon) can load a skill that teaches the current command groups and the MCP loop. YAML authoring stays in the separate [sigma-rules](https://github.com/timescale/sigma-rules) skill.
 

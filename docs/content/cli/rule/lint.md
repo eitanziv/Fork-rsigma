@@ -1,5 +1,7 @@
 # `rsigma rule lint`
 
+{{ added "0.12.0" }}
+
 Lint Sigma rules against the v2.1.0 specification with {{ rsigma.lint.rules }} built-in checks.
 
 ## Synopsis
@@ -139,4 +141,4 @@ Checked 1 file(s): 1 passed, 0 failed (0 error(s), 0 warning(s), 2 info(s))
 - [Linting Rules](../../guide/linting-rules.md) for the full rule catalog, suppression tiers, and CI patterns.
 - [`rule validate`](validate.md) for the cheaper parse-and-compile gate.
 - [Lint Rules reference](../../reference/lint-rules.md) for the complete {{ rsigma.lint.rules }}-rule catalog.
-- [CI/CD](../../guide/ci-cd.md#-fail-level-for-rule-lint) for pre-commit hooks and pipeline patterns.
+- [CI/CD](../../guide/ci-cd.md#fail-level-for-rule-lint) for pre-commit hooks and pipeline patterns.

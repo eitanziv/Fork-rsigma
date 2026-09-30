@@ -208,7 +208,7 @@ cat events.ndjson | rsigma engine classify --output-format table
 rsigma engine eval -r rules/ -e @events.ndjson --output-format csv > matches.csv
 
 # Run as a daemon with hot-reload and Prometheus metrics
-rsigma engine daemon -r rules/ -p ecs.yml --api-addr 0.0.0.0:9090
+rsigma engine daemon -r rules/ -p ecs.yml --api-addr 127.0.0.1:9090
 
 # Accept events via HTTP POST
 rsigma engine daemon -r rules/ --input http

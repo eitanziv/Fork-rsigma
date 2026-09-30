@@ -1,5 +1,7 @@
 # `rsigma rule reverse`
 
+{{ added "0.20.0" }}
+
 Convert a SIEM query into a draft Sigma rule (reverse conversion).
 
 ## Synopsis

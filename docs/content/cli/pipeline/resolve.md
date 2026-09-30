@@ -1,5 +1,7 @@
 # `rsigma pipeline resolve`
 
+{{ added "0.12.0" }}
+
 Offline resolution of dynamic pipeline sources, with an optional dry-run mode.
 
 ## Synopsis

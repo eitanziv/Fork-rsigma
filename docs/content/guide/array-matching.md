@@ -1,5 +1,7 @@
 # Array Matching
 
+{{ added "0.15.0" }}
+
 ::: callout warning "Experimental"
 Array matching is a proposed extension to the Sigma specification, not part of Sigma v2.1.0. It was accepted as a Sigma Enhancement Proposal (see [sigma-specification Discussion #106](https://github.com/SigmaHQ/sigma-specification/discussions/106), [SEP #212](https://github.com/SigmaHQ/sigma-specification/issues/212), and [rsigma #158](https://github.com/timescale/rsigma/issues/158)), but the syntax may still change as the spec text is finalized. RSigma implements it as a reference so the design can be validated against real events and multiple backends.
 :::

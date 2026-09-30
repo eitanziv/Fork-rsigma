@@ -1,5 +1,7 @@
 # `rsigma config path`
 
+{{ added "0.14.0" }}
+
 Print the config files that would be loaded by commands that use the layered config (daemon, eval, backtest, and others), in increasing precedence order.
 
 ## Synopsis

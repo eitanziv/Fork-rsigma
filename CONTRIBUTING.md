@@ -84,6 +84,8 @@ Two surfaces must stay in sync with what each release ships:
    - A public library API surface → update the matching `docs/content/library/<crate>.md` page
    - A Prometheus metric, HTTP endpoint, environment variable, lint rule, feature flag, or backend → update the corresponding `docs/content/reference/<topic>.md` page
 
+The site publishes from `main`, so docs for a change that is not in a release yet must say so. Tag the page of a new command or feature on the line below its H1, a new section on the line below its heading, and a new flag, key, or table row at the end of its description, with `{{ added "unreleased" }}`. Docs that only describe already-released behavior need no tag. The release PR replaces every `{{ added "unreleased" }}` with `{{ added "X.Y.Z" }}` for the version being cut. The docs plugin renders the tag as a link to that version's release notes and fails the build on a version that is not in `CHANGELOG.md`. Keep section headings free of tags so their anchors stay stable.
+
 From `docs/`, run `npm install` once, then `npm run docs:build` and `npm run docs:validate` before pushing docs changes; `.github/workflows/docs.yml` enforces both on every PR.
 
 A `CHANGELOG.md` entry under `## [X.Y.Z] - YYYY-MM-DD` is part of the release commit (the same content gets copied to the GitHub Release body). For features with public-API impact, the release notes mention the affected README and `docs/` pages so reviewers can sanity-check the doc sync.

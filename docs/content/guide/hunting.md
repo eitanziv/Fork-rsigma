@@ -1,5 +1,7 @@
 # Hunting in the Archive
 
+{{ added "0.22.0" }}
+
 `rsigma hunt run` closes the bottom arrow of the [detection-engineering loop](detection-engineering-loop.md): a hunt takes a detection rule, runs it against the PostgreSQL/TimescaleDB archive your telemetry already lands in, and streams the matching rows back as exemplar-shaped NDJSON that every downstream authoring tool already reads.
 
 The boundary is deliberate: rsigma does not store or search logs. The logs stay in your store; rsigma is a read-only client of a store it already generates queries for and whose SQL dialect it owns via the [PostgreSQL backend](../reference/backends/postgres.md). No index, no retention, no query language of its own.

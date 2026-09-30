@@ -1,5 +1,7 @@
 # Enrichers
 
+{{ added "0.13.0" }}
+
 Post-evaluation enrichers run after `engine.evaluate()` produces each `EvaluationResult` and before that result is serialized to a sink. They inject contextual data (asset info, IP reputation, identity, GeoIP, runbook URLs) into the `enrichments.<field>` map on each detection or correlation, so every downstream consumer (RSoar, Grafana, Loki, custom scripts) sees the same structured context without re-fetching it.
 
 This page covers what to put in `--enrichers <path>`, how the five primitives compose into the `enrich_<keyfield>_<target>` recipe catalog, and how to promote a recipe to a Rust-coded named enricher when one of the five primitives is not enough. The CLI flag itself is documented under [`engine daemon`](../cli/engine/daemon.md#post-evaluation-enrichment); per-call Prometheus metrics live in [Prometheus metrics](../reference/metrics.md#enrichment-6-metrics).
@@ -115,6 +117,8 @@ The decision matrix:
 `lookup` requires at least one dynamic source to be configured on the daemon via `--source <file>`. The loader surfaces a clear error at startup if a `lookup` enricher is configured without a source cache. (Source declarations live only in `--source` files; pipeline-embedded `sources:` is removed. See the [Dynamic Sources reference](../reference/dynamic-sources.md#source-declaration).)
 
 ### `stix`: local STIX store lookup
+
+{{ added "0.23.0" }}
 
 Query a local [`FsStore`](../library/rstix.md#rstix-graph-marking-store) opened by the daemon via `--stix-store <dir>` (same on-disk layout as [`taxii sync`](../cli/taxii/sync.md) and [`taxii store`](../cli/taxii/store.md)). Requires the **`stix-enrich`** feature (included in prebuilt `--all-features` binaries). Zero-network-cost for anything already imported into the store.
 

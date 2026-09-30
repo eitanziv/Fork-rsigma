@@ -1,5 +1,7 @@
 # `rsigma rule backtest`
 
+{{ added "0.17.0" }}
+
 Replay an event corpus against a ruleset, diff the per-rule fire counts against declared expectations, and emit a CI-native report.
 
 ## Synopsis

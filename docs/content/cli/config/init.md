@@ -1,5 +1,7 @@
 # `rsigma config init`
 
+{{ added "0.14.0" }}
+
 Write a commented YAML config template to disk.
 
 ## Synopsis

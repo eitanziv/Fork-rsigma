@@ -1,5 +1,7 @@
 # `rsigma rule parse`
 
+{{ added "0.12.0" }}
+
 Parse a single Sigma YAML file and print the AST as JSON.
 
 ## Synopsis

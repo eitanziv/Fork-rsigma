@@ -1,5 +1,7 @@
 # `rsigma rule migrate-sources`
 
+{{ added "0.13.0" }}
+
 Extract pipeline-embedded `sources:` blocks into standalone source files.
 
 ## Synopsis

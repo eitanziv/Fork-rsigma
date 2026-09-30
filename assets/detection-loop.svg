@@ -157,7 +157,7 @@
     <circle cx="40" cy="157.3" r="2" fill="#93c5fd"/>
     <text class="ink" fill="#374151" x="48" y="161" font-size="10.5"><a class="lnk" href="https://rsigma.io/cli/rule/reverse/" target="_top"><tspan class="mono cmdL" fill="#1d4ed8">rule reverse</tspan></a> Lucene query → Sigma</text>
     <circle cx="40" cy="172.3" r="2" fill="#93c5fd"/>
-    <text class="muted" fill="#6b7280" x="48" y="176" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/linting-rules/" target="_top">lint · doc · LSP · MCP for AI agents</a></text>
+    <text class="muted" fill="#6b7280" x="48" y="176" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/linting-rules/" target="_top">lint</a> · <a class="lnk" href="https://rsigma.io/cli/rule/doc/" target="_top">doc</a> · <a class="lnk" href="https://rsigma.io/editors/vscode/" target="_top">LSP</a> · <a class="lnk" href="https://rsigma.io/guide/mcp-server/" target="_top">MCP for AI agents</a></text>
   </g>
   <g class="stage stageL" id="stage-test">
     <a class="head" href="https://rsigma.io/guide/detection-engineering-loop/#detection-engineering-loop-engineer-cycle-test" target="_top">
@@ -201,7 +201,7 @@
     <circle cx="40" cy="405.3" r="2" fill="#93c5fd"/>
     <text class="ink" fill="#374151" x="48" y="409" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/streaming-detection/" target="_top"><tspan class="strong" fill="#111827" font-weight="bold">hot reload</tspan></a> rules + pipelines</text>
     <circle cx="40" cy="420.3" r="2" fill="#93c5fd"/>
-    <text class="muted" fill="#6b7280" x="48" y="424" font-size="10.5"><a class="lnk" href="https://rsigma.io/deployment/docker/" target="_top">Docker · signed release binaries</a></text>
+    <text class="muted" fill="#6b7280" x="48" y="424" font-size="10.5"><a class="lnk" href="https://rsigma.io/deployment/docker/" target="_top">Docker</a> · <a class="lnk" href="https://rsigma.io/getting-started/installation/#installation-prebuilt-binaries" target="_top">signed release binaries</a></text>
   </g>
   <g class="stage stageR" id="stage-detect">
     <a class="head" href="https://rsigma.io/guide/detection-engineering-loop/#detection-engineering-loop-operate-cycle-detect" target="_top">
@@ -221,9 +221,9 @@
     <circle cx="750" cy="142.3" r="2" fill="#fdba74"/>
     <text class="ink" fill="#374151" x="758" y="146" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/streaming-detection/" target="_top"><tspan class="strong" fill="#111827" font-weight="bold">correlation</tspan></a> windows · chains</text>
     <circle cx="750" cy="157.3" r="2" fill="#fdba74"/>
-    <text class="ink" fill="#374151" x="758" y="161" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/input-formats/" target="_top">JSON · syslog · CEF · EVTX · OTLP</a></text>
+    <text class="ink" fill="#374151" x="758" y="161" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/input-formats/#input-formats-jsonndjson" target="_top">JSON</a> · <a class="lnk" href="https://rsigma.io/guide/input-formats/#input-formats-syslog" target="_top">syslog</a> · <a class="lnk" href="https://rsigma.io/guide/input-formats/#input-formats-cefarcsight-feature-gated" target="_top">CEF</a> · <a class="lnk" href="https://rsigma.io/guide/input-formats/#input-formats-evtx-windows-event-log-feature-gated" target="_top">EVTX</a> · <a class="lnk" href="https://rsigma.io/guide/otlp-integration/" target="_top">OTLP</a></text>
     <circle cx="750" cy="172.3" r="2" fill="#fdba74"/>
-    <text class="muted" fill="#6b7280" x="758" y="176" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/schema-routing/" target="_top">schema routing · discovery · cloud</a></text>
+    <text class="muted" fill="#6b7280" x="758" y="176" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/schema-routing/" target="_top">schema routing</a> · <a class="lnk" href="https://rsigma.io/cli/engine/discover-schemas/" target="_top">discovery</a> · <a class="lnk" href="https://rsigma.io/guide/cloud-collection-recipes/" target="_top">cloud</a></text>
   </g>
   <g class="stage stageR" id="stage-alert">
     <a class="head" href="https://rsigma.io/guide/detection-engineering-loop/#detection-engineering-loop-operate-cycle-alert-and-triage" target="_top">
@@ -243,9 +243,9 @@
     <circle cx="750" cy="266.3" r="2" fill="#fdba74"/>
     <text class="ink" fill="#374151" x="758" y="270" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/risk-based-alerting/" target="_top"><tspan class="strong" fill="#111827" font-weight="bold">risk-based alerting</tspan></a> entity score</text>
     <circle cx="750" cy="281.3" r="2" fill="#fdba74"/>
-    <text class="ink" fill="#374151" x="758" y="285" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/alert-pipeline/" target="_top">dedup · silence · inhibit · group</a></text>
+    <text class="ink" fill="#374151" x="758" y="285" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/alert-pipeline/#alert-pipeline-deduplication" target="_top">dedup</a> · <a class="lnk" href="https://rsigma.io/guide/alert-pipeline/#alert-pipeline-silencing" target="_top">silence</a> · <a class="lnk" href="https://rsigma.io/guide/alert-pipeline/#alert-pipeline-inhibition" target="_top">inhibit</a> · <a class="lnk" href="https://rsigma.io/guide/alert-pipeline/#alert-pipeline-grouping" target="_top">group</a></text>
     <circle cx="750" cy="296.3" r="2" fill="#fdba74"/>
-    <text class="muted" fill="#6b7280" x="758" y="300" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/webhooks/" target="_top">webhooks: Slack · PagerDuty · ...</a></text>
+    <text class="muted" fill="#6b7280" x="758" y="300" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/webhooks/" target="_top">webhooks</a>: <a class="lnk" href="https://rsigma.io/guide/webhooks/#webhooks-recipe-catalog-slack" target="_top">Slack</a> · <a class="lnk" href="https://rsigma.io/guide/webhooks/#webhooks-recipe-catalog-pagerduty" target="_top">PagerDuty</a> · <a class="lnk" href="https://rsigma.io/guide/webhooks/#webhooks-recipe-catalog" target="_top">...</a></text>
   </g>
   <g class="stage stageR" id="stage-measure">
     <a class="head" href="https://rsigma.io/guide/detection-engineering-loop/#detection-engineering-loop-operate-cycle-measure" target="_top">
@@ -267,7 +267,7 @@
     <circle cx="750" cy="405.3" r="2" fill="#fdba74"/>
     <text class="ink" fill="#374151" x="758" y="409" font-size="10.5"><a class="lnk" href="https://rsigma.io/guide/visibility-and-data-sources/" target="_top"><tspan class="strong" fill="#111827" font-weight="bold">field observability</tspan></a> gap signals</text>
     <circle cx="750" cy="420.3" r="2" fill="#fdba74"/>
-    <text class="muted" fill="#6b7280" x="758" y="424" font-size="10.5"><a class="lnk" href="https://rsigma.io/cli/rule/scorecard/" target="_top">scorecard · FP ratio · dispositions</a></text>
+    <text class="muted" fill="#6b7280" x="758" y="424" font-size="10.5"><a class="lnk" href="https://rsigma.io/cli/rule/scorecard/" target="_top">scorecard</a> · <a class="lnk" href="https://rsigma.io/guide/triage-feedback/" target="_top">FP ratio</a> · <a class="lnk" href="https://rsigma.io/guide/disposition-recipes/" target="_top">dispositions</a></text>
   </g>
   <g class="stage stageS" id="stage-hunt">
     <path class="flow" d="M490,308 V394" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#arrow)"/>

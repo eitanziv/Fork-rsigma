@@ -1,5 +1,7 @@
 # `rsigma engine daemon`
 
+{{ added "0.12.0" }}
+
 Run as a long-running daemon with hot-reload, health checks, and Prometheus metrics.
 
 ## Synopsis
@@ -77,7 +79,7 @@ Acknowledgment guarantees differ by transport. NATS is durable at-least-once: re
 | Flag | Description |
 |------|-------------|
 | `--enrichers <PATH>` | YAML file declaring post-evaluation enrichers. Hot-reloaded on `SIGHUP`, file-watcher changes, and `POST /api/v1/reload`; failed reloads keep the previous pipeline active. See [Enrichers](../../guide/enrichers.md) for the schema, the five primitives, and the recipes catalog. |
-| `--stix-store <DIR>` | Local [`FsStore`](../../library/rstix.md#rstix-graph-marking-store) root for enrichers with `type: stix` (`stix-enrich` feature). Same layout as [`taxii sync`](../../cli/taxii/sync.md). Reloaded from disk on enricher hot-reload. Config-file equivalent: `daemon.stix_store`. |
+| `--stix-store <DIR>` | Local [`FsStore`](../../library/rstix.md#rstix-graph-marking-store) root for enrichers with `type: stix` (`stix-enrich` feature). Same layout as [`taxii sync`](../../cli/taxii/sync.md). Reloaded from disk on enricher hot-reload. Config-file equivalent: `daemon.stix_store`. {{ added "0.23.0" }} |
 | `--alert-pipeline <PATH>` | YAML file declaring the alert pipeline. It runs after enrichment and before the sinks: it silences results matching operator-defined matchers, inhibits lower-priority results while a matching source is active, deduplicates by a configurable fingerprint (first fire passes, duplicates fold, re-emit on `repeat_interval`, resolve after `resolve_timeout`), and groups survivors into incidents (`group_by` equality or an opt-in `entity_graph` union-find), annotating each pass-through result with its `incident_id` and emitting an `IncidentResult` on the `group_wait` / `group_interval` / `repeat_interval` timers. Open incidents are readable at `GET /api/v1/incidents`; silences are managed at `/api/v1/silences`. Hot-reloaded on `SIGHUP`, file-watcher changes, and `POST /api/v1/reload`; failed reloads keep the previous pipeline active. Selector, matcher, and scope errors reject the daemon at startup. See [Alert Pipeline](../../guide/alert-pipeline.md). |
 | `--risk <PATH>` | YAML file declaring the risk-based alerting layer. It runs after enrichment and before the alert pipeline: it annotates each in-scope firing with a risk score and one or more risk objects (entities) under the reserved `risk.score` / `risk.objects` enrichment keys, accumulates risk per entity over a sliding window, and emits a high-fidelity `RiskIncidentResult` when an entity crosses the score or ATT&CK-tactic-count threshold (subject to a per-entity cooldown). Open entities are readable at `GET /api/v1/risk`. Hot-reloaded on `SIGHUP`, file-watcher changes, and `POST /api/v1/reload`; failed reloads keep the previous config active. Selector, scope, and score errors reject the daemon at startup. See [Risk-Based Alerting](../../guide/risk-based-alerting.md). |
 | `--webhook <FILE_OR_DIR>` | Webhook config file (or directory of `*.yml`/`*.yaml` files) declaring template-driven HTTP output sinks. Repeatable. Each detection or correlation matching a webhook's `kind` and `scope` renders a templated URL, headers, and JSON body and POSTs it. Webhooks are best-effort (at-most-once): undeliverable results land in the `--dlq` and never block the durable sinks. Validated at startup; not hot-reloaded. See [Webhooks](../../guide/webhooks.md). |
@@ -119,7 +121,7 @@ Companion CLIs that talk to a running daemon differ in whether they send a beare
 
 ### Audit trail (config-file-only)
 
-When `--state-db` is set, the daemon records control-plane mutations (reload, silences, dispositions, observer resets, and similar) and serves them at `GET /api/v1/audit`. Data-plane ingest is never recorded. Tune or disable with the `daemon.api.audit` block (`enabled`, `max_entries`, `max_age`, `max_body_bytes`, optional `sink`); enabling audit without a state database fails startup. The optional `sink` is a detection-style sink URL that receives audit JSON lines with `on_full=drop` appended when absent; `?format=` is rejected on it. See [HTTP API: Audit trail](../../reference/http-api.md#audit-trail).
+When `--state-db` is set, the daemon records control-plane mutations (reload, silences, dispositions, observer resets, and similar) and serves them at `GET /api/v1/audit`. Data-plane ingest is never recorded. Tune or disable with the `daemon.api.audit` block (`enabled`, `max_entries`, `max_age`, `max_body_bytes`, optional `sink`); enabling audit without a state database fails startup. The optional `sink` is a detection-style sink URL that receives audit JSON lines with `on_full=drop` appended when absent; `?format=` is rejected on it. See [HTTP API: Audit trail](../../reference/http-api-state.md#audit-trail).
 
 ### TLS (requires the `daemon-tls` build feature)
 
@@ -221,11 +223,11 @@ These schema flags may also be supplied via the `daemon.schema` block in a [conf
 
 These logsource flags may also be supplied via the `daemon.logsource_routing` block in a [config file](../../reference/configuration.md) (`enabled`, `field_map`, `event_logsource`); a flag always wins over the file.
 
-See [Observability: detection coverage](../../guide/observability.md#detection-coverage-with-observe-fields) for the operator workflow, and [HTTP API](../../reference/http-api.md#field-observability) for the endpoint payloads.
+See [Observability: detection coverage](../../guide/observability.md#detection-coverage-with-observe-fields) for the operator workflow, and [HTTP API](../../reference/http-api-observability.md#field-observability) for the endpoint payloads.
 
 ### Live event tap
 
-The daemon serves [`GET /api/v1/tap`](../../reference/http-api.md#live-event-tap) (the endpoint behind [`rsigma engine tap`](tap.md)), which records a bounded window of the live event stream as a replayable NDJSON fixture. It is **disabled by default** because it can exfiltrate raw event traffic; enable it with `daemon.tap.enabled: true` and expose it only behind mTLS.
+The daemon serves [`GET /api/v1/tap`](../../reference/http-api-observability.md#live-event-tap) (the endpoint behind [`rsigma engine tap`](tap.md)), which records a bounded window of the live event stream as a replayable NDJSON fixture. It is **disabled by default** because it can exfiltrate raw event traffic; enable it with `daemon.tap.enabled: true` and expose it only behind mTLS.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -244,7 +246,7 @@ The tap can exfiltrate raw events; expose the admin API only behind mTLS and red
 
 ### Live detection tail
 
-The daemon also serves [`GET /api/v1/detections/stream`](../../reference/http-api.md#live-detection-tail) (the endpoint behind [`rsigma engine tail`](tail.md)), which streams live detections as NDJSON. It is **disabled by default**; enable it with `daemon.tail.enabled: true`.
+The daemon also serves [`GET /api/v1/detections/stream`](../../reference/http-api-observability.md#live-detection-tail) (the endpoint behind [`rsigma engine tail`](tail.md)), which streams live detections as NDJSON. It is **disabled by default**; enable it with `daemon.tail.enabled: true`.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -260,7 +262,7 @@ The other keys are config-file-only under `daemon.tail`:
 
 ## Triage feedback loop
 
-The daemon serves [`POST`/`GET /api/v1/dispositions`](../../reference/http-api.md#dispositions), which ingest analyst verdicts and expose a per-rule false-positive ratio. It is **disabled by default**; enable it with `--enable-dispositions`, `daemon.dispositions.enabled: true`, or a configured pull source.
+The daemon serves [`POST`/`GET /api/v1/dispositions`](../../reference/http-api-state.md#dispositions), which ingest analyst verdicts and expose a per-rule false-positive ratio. It is **disabled by default**; enable it with `--enable-dispositions`, `daemon.dispositions.enabled: true`, or a configured pull source.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -280,6 +282,8 @@ The tuning keys are config-file-only under `daemon.dispositions`:
 See the [Triage Feedback Loop](../../guide/triage-feedback.md) guide.
 
 ## Verdict-driven capture
+
+{{ added "0.22.0" }}
 
 The daemon can retain admitted detection events for `group_by` incidents and write TP/FP corpus bundles after an accepted disposition. It is **disabled by default** and **startup-only**: changing any `daemon.capture.*` key requires a restart. Enabling it requires dispositions, a `group.mode: group_by` alert pipeline, and `daemon.capture.spool_dir`. See [Verdict-Driven Corpora](../../guide/verdict-to-corpus.md).
 

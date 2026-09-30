@@ -1,5 +1,7 @@
 # `rsigma engine status`
 
+{{ added "0.17.0" }}
+
 Query a running daemon's `/api/v1/status` endpoint and render the snapshot through the shared output layer.
 
 ## Synopsis
@@ -78,7 +80,7 @@ rsigma engine status --output-format json | jq '.events_processed'
 ## See also
 
 - [`engine daemon`](daemon.md) for the long-running service this command queries.
-- [HTTP API: `GET /api/v1/status`](../../reference/http-api.md#status-and-counters) for the raw endpoint and response shape.
+- [HTTP API: `GET /api/v1/status`](../../reference/http-api-state.md#status-and-counters) for the raw endpoint and response shape.
 - [HTTP API: Authentication](../../reference/http-api.md#authentication) when the daemon requires bearer tokens.
 - [`config reload`](../config/reload.md) for the sibling daemon-client command that shares the `--addr` convention.
 - [Prometheus Metrics](../../reference/metrics.md) for continuous monitoring of the same counters.

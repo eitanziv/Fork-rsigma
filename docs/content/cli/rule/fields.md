@@ -1,5 +1,7 @@
 # `rsigma rule fields`
 
+{{ added "0.12.0" }}
+
 List all fields referenced by a directory of Sigma rules.
 
 ## Synopsis

@@ -1,5 +1,7 @@
 # `rsigma backend convert`
 
+{{ added "0.12.0" }}
+
 Convert Sigma rules into backend-native queries (SQL, SPL, …).
 
 ## Synopsis

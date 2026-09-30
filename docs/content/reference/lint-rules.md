@@ -195,8 +195,8 @@ Static shape checks for [`rsigma.exemplars`](custom-attributes.md#rsigmaexemplar
 
 | Rule | Severity | Fix | Description |
 |------|----------|-----|-------------|
-| `exemplar_shape` | `warning` | none | The attribute is not a sequence, an entry is not a mapping, a key is unknown, a name is blank or duplicated, `expect` is missing or invalid, `event`/`events` is missing or both are set, an event is not a mapping, an offset is invalid or decreasing, or the list is empty. |
-| `exemplar_wrong_rule_kind` | `warning` | none | A detection rule uses `events`, a correlation rule uses `event`, or a filter rule carries any exemplars. |
+| `exemplar_shape` | `warning` | none | The attribute is not a sequence, an entry is not a mapping, a key is unknown, a name is blank or duplicated, `expect` is missing or invalid, `event`/`events` is missing or both are set, an event is not a mapping, an offset is invalid or decreasing, or the list is empty. {{ added "0.22.0" }} |
+| `exemplar_wrong_rule_kind` | `warning` | none | A detection rule uses `events`, a correlation rule uses `event`, or a filter rule carries any exemplars. {{ added "0.22.0" }} |
 
 Configure the bar with an `ads:` block in `.rsigma-lint.yml`:
 

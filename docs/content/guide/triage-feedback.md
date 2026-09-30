@@ -1,5 +1,7 @@
 # Triage Feedback Loop
 
+{{ added "0.18.0" }}
+
 The triage feedback loop captures an analyst's verdict on the alerts a ruleset produces and turns the stream of verdicts into a live per-rule **false-positive ratio**, the canonical SOC detection-quality metric. Mature programs target it below 10 to 15 percent and treat it as the primary tuning signal, but computing it requires capturing a disposition on every alert and tracing it back to the rule that fired.
 
 It is a measurement loop, not a case manager: it ingests a verdict and emits a ratio. It deliberately does not add an alert queue, ownership, an investigation timeline, ticketing, or any UI. The durable record of every alert stays in NATS, files, or your downstream SIEM.
@@ -97,7 +99,7 @@ See [Triage feedback loop](../reference/metrics.md#triage-feedback-loop-4-metric
 - [Verdict-Driven Corpora](verdict-to-corpus.md)
 - [Rule Tuning](rule-tuning.md)
 - [Disposition Source Recipes](disposition-recipes.md)
-- [HTTP API: Dispositions](../reference/http-api.md#dispositions)
+- [HTTP API: Dispositions](../reference/http-api-state.md#dispositions)
 - [Detection Scorecard](detection-scorecard.md)
 - [Alert Pipeline](alert-pipeline.md)
 - [Webhooks](webhooks.md)

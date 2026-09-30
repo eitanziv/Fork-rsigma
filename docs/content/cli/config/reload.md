@@ -1,5 +1,7 @@
 # `rsigma config reload`
 
+{{ added "0.14.0" }}
+
 Ask a running daemon to hot-reload its rules, pipelines, enrichers, and TLS material.
 
 ## Synopsis

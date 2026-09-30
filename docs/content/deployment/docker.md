@@ -80,8 +80,11 @@ docker run --rm \
     -v "$PWD/pipelines:/pipelines:ro" \
     -p 9090:9090 \
     ghcr.io/timescale/rsigma:latest \
-    engine daemon -r /rules/ -p /pipelines/ecs.yml --api-addr 0.0.0.0:9090
+    engine daemon -r /rules/ -p /pipelines/ecs.yml --input http \
+    --api-addr 0.0.0.0:9090 --allow-plaintext
 ```
+
+Inside a container the API has to bind a non-loopback address to be reachable through the published port, and the daemon refuses a plaintext non-loopback bind unless you pass `--tls-cert`/`--tls-key` or `--allow-plaintext`. The examples on this page use `--allow-plaintext` and publish the port on the host's loopback or behind a TLS-terminating proxy; see [TLS termination](../reference/security.md#tls-termination-for-the-api-listener) to serve TLS from the daemon itself.
 
 | Flag | Why |
 |------|-----|
@@ -105,7 +108,7 @@ docker run --rm \
     engine daemon -r /rules/ \
     --input http \
     --state-db /state/correlation.db \
-    --api-addr 0.0.0.0:9090
+    --api-addr 0.0.0.0:9090 --allow-plaintext
 ```
 
 On Linux hosts, the bind-mounted `$PWD/state` directory must be writable by uid `65534` (`nobody`). Either `chown -R 65534:65534 ./state` before starting, or use a Docker-managed volume (`-v rsigma-state:/state`) which Docker creates with the correct ownership.
@@ -137,6 +140,7 @@ services:
       - /state/correlation.db
       - --api-addr
       - 0.0.0.0:9090
+      - --allow-plaintext
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
@@ -172,7 +176,7 @@ docker run --rm \
     ghcr.io/timescale/rsigma:{{ rsigma.version }} \
     engine daemon -r /rules/ \
     --input "nats://nats.internal:4222/events.>" \
-    --api-addr 0.0.0.0:9090
+    --api-addr 0.0.0.0:9090 --allow-plaintext
 ```
 
 For OTLP, expose port 9090 (HTTP/REST + OTLP/HTTP + gRPC all share one listener) and point upstream agents at `http://<host>:9090/v1/logs`. See [OTLP Integration](../guide/otlp-integration.md) for agent-side recipes.
@@ -207,6 +211,8 @@ FROM docker/library/alpine:3.21
 
 ## See also
 
+- [Kubernetes](kubernetes.md) for running the image in a cluster with probes, a state volume, and a restricted security context.
+- [systemd](systemd.md) for running the binary as a hardened host service.
 - [Streaming Detection](../guide/streaming-detection.md) for daemon configuration that the container runs.
 - [Observability](../guide/observability.md) for the metrics endpoint exposed by the running container.
 - [Security Hardening](../reference/security.md) for the supply-chain controls (cosign, SLSA, SBOM, Grype scan gate).

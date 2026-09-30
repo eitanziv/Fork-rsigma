@@ -1,5 +1,7 @@
 # `rsigma-ir`
 
+{{ added "0.20.0" }}
+
 Shared intermediate representation (HIR) for Sigma rules. Sits between the parser AST and the eval/convert consumers so modifier resolution happens once.
 
 - [docs.rs/rsigma-ir](https://docs.rs/rsigma-ir)

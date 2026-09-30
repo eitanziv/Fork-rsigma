@@ -1,5 +1,7 @@
 # Verdict-Driven Corpora
 
+{{ added "0.22.0" }}
+
 When an analyst records a disposition, the admitted detection events behind that incident are useful regression evidence. True-positive and benign-true-positive verdicts become a corpus that [`rule backtest`](../cli/rule/backtest.md) can replay. False-positive verdicts become input for [`rule tune --from-dispositions`](../cli/rule/tune.md).
 
 The daemon does not keep those payloads on the incident summary. Verdict-driven capture is an opt-in, byte-bounded ring for detection results admitted by a `group_by` alert pipeline. Accepted dispositions enqueue one asynchronous bundle per original verdict. The ring is not an event store, is not queryable, and is not written to the SQLite state database.
@@ -111,5 +113,5 @@ There is no API to read or search the ring or the spool.
 - [Alert Pipeline](alert-pipeline.md)
 - [Rule Tuning](rule-tuning.md)
 - [CLI: `engine daemon`](../cli/engine/daemon.md)
-- [HTTP API: Dispositions](../reference/http-api.md#dispositions)
+- [HTTP API: Dispositions](../reference/http-api-state.md#dispositions)
 - [Security](../reference/security.md#verdict-driven-capture)

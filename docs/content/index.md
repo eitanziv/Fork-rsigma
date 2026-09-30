@@ -33,14 +33,14 @@ Author, test, deploy, detect, alert, measure, and hunt: one map of the full life
 :::
 ::: grid
 ::: card "CLI Reference" icon:terminal
-Per-subcommand reference for `engine`, `rule`, `backend`, `pipeline`, `config`, and `mcp`.
+Per-subcommand reference for `engine`, `rule`, `backend`, `pipeline`, `hunt`, `taxii`, `mcp`, and `config`.
 
 [CLI Reference](./cli/index.md)
 :::
 :::
 ::: grid
 ::: card "Rule conversion" icon:database
-Generate PostgreSQL, LynxDB, or Fibratus queries from Sigma rules for historical hunting.
+Generate PostgreSQL, LynxDB, or Fibratus queries natively, or Splunk, Elasticsearch, Kusto, and other pySigma targets through sigma-cli.
 
 [Rule conversion](./guide/rule-conversion.md)
 :::
@@ -62,7 +62,7 @@ Run the daemon with NATS, HTTP, or OTLP input. Hot-reload, metrics, state.
 | **Runtime evaluation** | Yes (streaming + stateful) | No (converter only) | Yes (stateless) | Yes (stateless) |
 | **Correlation rules** | All 8 types | Partial | No | No |
 | **Filter rules** | Yes | Yes | No | No |
-| **Conversion backends** | PostgreSQL, LynxDB, Fibratus | 20+ | No | No |
+| **Conversion backends** | PostgreSQL, LynxDB, Fibratus natively; pySigma backends through sigma-cli | 30+ | No | No |
 | **Streaming daemon** | Yes (NATS, HTTP, OTLP) | No | No | No |
 | **Dynamic pipelines** | Yes (HTTP, file, command, NATS) | Yes (HTTP, file, command) | No | No |
 | **Built-in linter** | {{ rsigma.lint.rules }} rules, auto-fix | Limited | No | No |
@@ -113,8 +113,18 @@ An article series on building RSigma and using it in production:
 
 ## At a glance
 
-- **Latest release:** `v{{ rsigma.version }}` (MIT licensed; seven crates in the workspace).
+- **Latest release:** `v{{ rsigma.version }}` (MIT licensed; {{ rsigma.crate_count }} crates in the workspace).
 - **MSRV:** Rust `{{ rsigma.msrv }}`, edition `{{ rsigma.edition }}`.
 - **Cross-platform binaries:** Linux, macOS, Windows on amd64 and arm64.
 - **Container image:** `{{ rsigma.docker_image }}:latest` (multi-arch, cosign-signed, SBOM, SLSA Build L3 provenance).
 - **Benchmarks:** detection and correlation throughput numbers live on the [benchmarks](benchmarks.md) page.
+
+## Versions
+
+This site is published from the `main` branch, so it can describe changes that are not in a release yet. Tags show when something became available, and each tag links to its release notes:
+
+- A tag below a page title gives the release that added the command or feature, for example {{ added "0.22.0" }} on a page added in v0.22.0. Every CLI command page has one; commands that predate v0.12.0 show v0.12.0, the release that moved the CLI to command groups and gave them their current names. Guide and reference pages without a tag describe features available since v0.12.0.
+- A tag on a section, flag, config key, or table row marks an addition made to an existing page from v0.22.0 onward. For older changes within a page, see the [release notes](release-notes.md).
+- {{ added "unreleased" }} marks a change merged to `main` that is not in a release yet.
+
+Run `rsigma --version` to see which release you have.

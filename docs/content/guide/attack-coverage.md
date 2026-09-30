@@ -1,5 +1,7 @@
 # ATT&CK Coverage
 
+{{ added "0.17.0" }}
+
 [`rsigma rule coverage`](../cli/rule/coverage.md) maps a rule set onto the MITRE ATT&CK matrix. It answers "what does my rule set cover, and where are the holes" by reading the `attack.*` tags off your rules, exporting an ATT&CK Navigator heatmap, and diffing your coverage against external references.
 
 Where [`rule backtest`](../cli/rule/backtest.md) tells you whether your rules fire correctly, `rule coverage` tells you whether you have rules for the techniques you care about. Together they are the two halves of a detection-as-code pipeline.
@@ -79,6 +81,8 @@ T1486        # data encrypted for impact
 The report's `targets.uncovered` is the list to work down.
 
 ## From gaps to simulations
+
+{{ added "0.22.0" }}
 
 `atomics_without_rule` is the set of techniques you could validate with Atomic Red Team today but have no detection for. `--emit atomics-plan` turns that list into a file: per uncovered technique, the test names, `auto_generated_guid`s, supported platforms, and ready-to-paste `Invoke-AtomicTest` invocations.
 

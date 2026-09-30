@@ -1,5 +1,7 @@
 # Drafting Rules from Logs
 
+{{ added "0.19.0" }}
+
 `rsigma rule draft` turns exemplar events into a complete draft Sigma rule. You supply the interesting events (from an incident, a red-team exercise, or a threat report's sample telemetry) and optionally a baseline corpus of normal traffic; the tool classifies fields and values, picks the discriminative ones, and emits standard Sigma YAML you review, edit, and commit. It proposes, you decide: the output is a starting point with explicit `TODO` placeholders, not a finished detection.
 
 ## Workflow
@@ -132,6 +134,8 @@ The exemplars are classified with the built-in schema classifier ([schema routin
 The rule uses the exemplars' field names as they appear in the events. ECS exemplars produce `process.command_line`, Sysmon exemplars produce `CommandLine`. Evaluate the draft against the same telemetry shape it was mined from, without a mapping pipeline; if you need the generic SigmaHQ field vocabulary, rename the fields as part of your review. Pipelines are out of scope at draft time: map or rename after you accept the draft.
 
 ## Drafting correlations
+
+{{ added "0.22.0" }}
 
 Use `--groups` when each positive example is a timed sequence rather than one event. An envelope NDJSON file identifies every event's group and supplies exactly one RFC3339 `timestamp` or Sigma `offset`:
 

@@ -20,7 +20,7 @@ These always show up. They cover ingest, matches, queue depth, back-pressure, re
 | `rsigma_reloads_total` | counter | none | Total reload attempts (file watcher, SIGHUP, `POST /api/v1/reload`). |
 | `rsigma_reloads_failed_total` | counter | none | Reload attempts that produced parse or compile errors. |
 | `rsigma_api_auth_failures_total` | counter | `reason` (`unauthorized`, `forbidden`) | API requests rejected by [bearer-token authentication](http-api.md#authentication): `unauthorized` is a missing or unrecognized token, `forbidden` a recognized token without the required permission. Each label value surfaces after its first rejection. Stays absent while authentication is disabled. |
-| `rsigma_audit_records_total` | counter | none | Control-plane API calls recorded in the [audit trail](http-api.md#audit-trail). Stays absent when audit is disabled (no `--state-db`). |
+| `rsigma_audit_records_total` | counter | none | Control-plane API calls recorded in the [audit trail](http-api-state.md#audit-trail). Stays absent when audit is disabled (no `--state-db`). |
 | `rsigma_audit_write_errors_total` | counter | none | Audit trail SQLite insert or optional sink emission failures. |
 | `rsigma_uptime_seconds` | gauge | none | Daemon uptime in seconds. |
 | `rsigma_input_queue_depth` | gauge | none | Events currently buffered in the source→engine channel. Tracked for every input, including the HTTP and OTLP push receivers. |
@@ -137,7 +137,7 @@ Exposed when the daemon is built with `daemon-tls`. Both metrics render with the
 
 ## Field observability (3 metrics)
 
-Exposed unconditionally; values stay at zero unless the daemon was started with `--observe-fields`. All three refresh on every `/metrics` scrape and after every successful `/api/v1/fields/*` call. See [HTTP API: Field observability](http-api.md#field-observability) for the matching endpoints.
+Exposed unconditionally; values stay at zero unless the daemon was started with `--observe-fields`. All three refresh on every `/metrics` scrape and after every successful `/api/v1/fields/*` call. See [HTTP API: Field observability](http-api-observability.md#field-observability) for the matching endpoints.
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
@@ -147,14 +147,14 @@ Exposed unconditionally; values stay at zero unless the daemon was started with 
 
 ## Schema observability (4 metrics)
 
-Exposed unconditionally; values stay at zero unless the daemon was started with `--observe-schemas` (or `--discover-schemas`, which implies it). All refresh on every `/metrics` scrape and on every `GET /api/v1/schemas` call. See [HTTP API: Schema observability](http-api.md#schema-observability) for the matching endpoint.
+Exposed unconditionally; values stay at zero unless the daemon was started with `--observe-schemas` (or `--discover-schemas`, which implies it). All refresh on every `/metrics` scrape and on every `GET /api/v1/schemas` call. See [HTTP API: Schema observability](http-api-observability.md#schema-observability) for the matching endpoint.
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `rsigma_events_by_schema_total` | counter | `schema` | Events classified into each recognized schema (`ecs`, `sysmon`, `windows_eventlog`, `cef`, `ocsf`, `generic_json`, or a user-defined name). |
 | `rsigma_events_unknown_schema_total` | counter | none | Events that matched no schema signature. A rising rate signals a source whose schema RSigma does not recognize; add a signature with `--schema-config`. |
 | `rsigma_events_ambiguous_schema_total` | counter | none | Events where two different-name signatures tied at the winning specificity, so the name tie-break decided routing. Resolve by giving one signature a distinguishing predicate or a higher specificity. |
-| `rsigma_unknown_schema_clusters` | gauge | none | Distinct clusters of unrecognized event shapes that schema discovery would propose a signature for. Zero unless the daemon was started with `--discover-schemas`; drives the [`GET /api/v1/schemas/suggestions`](http-api.md#get-apiv1schemassuggestions) endpoint. |
+| `rsigma_unknown_schema_clusters` | gauge | none | Distinct clusters of unrecognized event shapes that schema discovery would propose a signature for. Zero unless the daemon was started with `--discover-schemas`; drives the [`GET /api/v1/schemas/suggestions`](http-api-observability.md#get-apiv1schemassuggestions) endpoint. |
 
 ## Logsource-aware evaluation (4 metrics)
 
@@ -169,7 +169,7 @@ Exposed unconditionally; values stay at zero unless the daemon was started with 
 
 ## Live event tap (4 metrics)
 
-Exposed unconditionally; values stay at zero unless the tap is enabled (`daemon.tap.enabled: true`) and an operator opens a session. See [HTTP API: Live event tap](http-api.md#live-event-tap) and [`rsigma engine tap`](../cli/engine/tap.md).
+Exposed unconditionally; values stay at zero unless the tap is enabled (`daemon.tap.enabled: true`) and an operator opens a session. See [HTTP API: Live event tap](http-api-observability.md#live-event-tap) and [`rsigma engine tap`](../cli/engine/tap.md).
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
@@ -180,7 +180,7 @@ Exposed unconditionally; values stay at zero unless the tap is enabled (`daemon.
 
 ## Live detection tail (2 metrics)
 
-Exposed unconditionally; values stay at zero unless the tail is enabled (`daemon.tail.enabled: true`) and an operator opens a session. See [HTTP API: Live detection tail](http-api.md#live-detection-tail) and [`rsigma engine tail`](../cli/engine/tail.md).
+Exposed unconditionally; values stay at zero unless the tail is enabled (`daemon.tail.enabled: true`) and an operator opens a session. See [HTTP API: Live detection tail](http-api-observability.md#live-detection-tail) and [`rsigma engine tail`](../cli/engine/tail.md).
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
@@ -189,7 +189,7 @@ Exposed unconditionally; values stay at zero unless the tail is enabled (`daemon
 
 ## Triage feedback loop (4 metrics)
 
-Exposed when the triage feedback loop is enabled (`daemon.dispositions.enabled: true` or `--enable-dispositions`). The ingest counters pre-register their fixed label sets so they render with zeroed series on the first scrape; `rsigma_rule_false_positive_ratio` is absent for a rule until it reaches `daemon.dispositions.min_sample`. See the [Triage Feedback Loop](../guide/triage-feedback.md) guide and [HTTP API: Dispositions](http-api.md#dispositions).
+Exposed when the triage feedback loop is enabled (`daemon.dispositions.enabled: true` or `--enable-dispositions`). The ingest counters pre-register their fixed label sets so they render with zeroed series on the first scrape; `rsigma_rule_false_positive_ratio` is absent for a rule until it reaches `daemon.dispositions.min_sample`. See the [Triage Feedback Loop](../guide/triage-feedback.md) guide and [HTTP API: Dispositions](http-api-state.md#dispositions).
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
@@ -199,6 +199,8 @@ Exposed when the triage feedback loop is enabled (`daemon.dispositions.enabled: 
 | `rsigma_disposition_ingest_errors_total` | counter | `reason` | Ingest errors by reason (`parse`, `validation`). |
 
 ## Verdict-driven capture (7 metrics)
+
+{{ added "0.22.0" }}
 
 Exposed when capture is compiled into the daemon. Counters pre-register their fixed label sets so they render with zeroed series on the first scrape. See [Verdict-Driven Corpora](../guide/verdict-to-corpus.md).
 

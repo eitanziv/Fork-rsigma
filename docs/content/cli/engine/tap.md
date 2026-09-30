@@ -1,5 +1,7 @@
 # `rsigma engine tap`
 
+{{ added "0.17.0" }}
+
 Record a bounded, optionally-redacted window of a running daemon's live event stream into a replayable NDJSON fixture.
 
 ## Synopsis
@@ -112,7 +114,7 @@ A non-zero `dropped` means the session buffer filled under load (or a redacting 
 - [`engine eval`](eval.md) for replaying a captured fixture.
 - [`engine tail`](tail.md) for the detections-out counterpart.
 - [`engine status`](status.md) for the sibling daemon-client `--addr` convention.
-- [HTTP API: `GET /api/v1/tap`](../../reference/http-api.md#live-event-tap) for the raw endpoint, query params, and error semantics.
+- [HTTP API: `GET /api/v1/tap`](../../reference/http-api-observability.md#live-event-tap) for the raw endpoint, query params, and error semantics.
 - [HTTP API: Authentication](../../reference/http-api.md#authentication) when the daemon requires bearer tokens (`tap:read`).
 - [Security](../../reference/security.md#live-event-tap) for the exfiltration warning and mTLS guidance.
 - [Prometheus Metrics](../../reference/metrics.md) for `rsigma_tap_*` counters and gauges.

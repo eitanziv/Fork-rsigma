@@ -1,5 +1,7 @@
 # `rsigma rule stdin`
 
+{{ added "0.12.0" }}
+
 Read Sigma YAML from stdin and print the parsed AST as JSON.
 
 ## Synopsis

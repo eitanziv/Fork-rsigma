@@ -1,5 +1,7 @@
 # Rule Tuning
 
+{{ added "0.21.0" }}
+
 `rsigma rule tune` turns analyst-confirmed false positives into a reviewable Sigma filter rule while protecting a required set of known true positives. The command proposes a separate filter artifact; it never rewrites the detection rule and never merges a change.
 
 ## Workflow

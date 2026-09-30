@@ -1,5 +1,7 @@
 # OCSF Findings
 
+{{ added "0.21.0" }}
+
 The daemon can emit every finding as an [OCSF](https://ocsf.io) **Detection Finding** (class 2004) JSON object instead of RSigma's native NDJSON. OCSF is the finding interchange format Splunk, Elastic, CrowdStrike NG-SIEM, Amazon Security Lake, and Datadog converged on, so a `?format=ocsf` sink drops findings into those pipelines without a transform step of your own.
 
 It is a per-sink serialization choice, not a new sink type and not a new config section: append `?format=ocsf` to any line-oriented sink spec.

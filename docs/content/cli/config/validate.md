@@ -1,5 +1,7 @@
 # `rsigma config validate`
 
+{{ added "0.14.0" }}
+
 Load every config layer that would apply at runtime and report problems before they cause a daemon or eval to misbehave.
 
 ## Synopsis

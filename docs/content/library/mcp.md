@@ -1,5 +1,7 @@
 # `rsigma-mcp`
 
+{{ added "0.16.0" }}
+
 A [Model Context Protocol](https://modelcontextprotocol.io) server that exposes the RSigma toolchain (parse, lint, validate, evaluate, convert, reverse-convert, tune, fields, pipelines, ADS authoring) as MCP tools for AI agents. Built on [`rmcp`](https://crates.io/crates/rmcp), the official Rust MCP SDK.
 
 - [docs.rs/rsigma-mcp](https://docs.rs/rsigma-mcp)

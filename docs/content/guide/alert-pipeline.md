@@ -1,5 +1,7 @@
 # Alert Pipeline
 
+{{ added "0.18.0" }}
+
 The alert pipeline is an optional post-engine stage in the daemon's output path. It runs after post-evaluation [enrichment](enrichers.md) (and after [risk-based alerting](risk-based-alerting.md) when `--risk` is set) and before the sinks. It is modeled on the Prometheus Alertmanager processing pipeline and is strictly post-engine: it consumes `EvaluationResult`s, passes survivors through as `EvaluationResult`s, and (when grouping is enabled) also emits `IncidentResult`s on a background tick, so the evaluation hot path is untouched.
 
 It is configured with a separate YAML file via `--alert-pipeline <path>` (or the `daemon.alert_pipeline` config key) and is hot-reloaded on `SIGHUP`, file-watcher changes, and `POST /api/v1/reload`; a failed reload keeps the previous pipeline active.
@@ -211,7 +213,7 @@ Because the join happens at read time against the currently loaded rule set, eac
 
 A bundle is only served once the incident has cleared `group_wait` and been reported at least once, since until then its contents can still change. The snapshot routes report that as `bundle_ready`, and the bundle route returns `409` before it.
 
-See [`engine incidents export`](../cli/engine/incidents-export.md) and [HTTP API: incident bundles](../reference/http-api.md#get-apiv1incidentsidbundle).
+See [`engine incidents export`](../cli/engine/incidents-export.md) and [HTTP API: incident bundles](../reference/http-api-state.md#get-apiv1incidentsidbundle).
 
 ### Metrics
 

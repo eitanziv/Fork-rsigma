@@ -1,5 +1,7 @@
 # `rsigma backend formats`
 
+{{ added "0.12.0" }}
+
 List the output formats (and correlation methods) supported by one backend.
 
 ## Synopsis

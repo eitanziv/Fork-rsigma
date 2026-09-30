@@ -1,5 +1,7 @@
 # `rsigma config show`
 
+{{ added "0.14.0" }}
+
 Print the effective configuration after all layers have been merged, annotated with the layer each value came from.
 
 ## Synopsis

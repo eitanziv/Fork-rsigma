@@ -1,5 +1,7 @@
 # `rsigma engine incidents export`
 
+{{ added "0.21.0" }}
+
 Pull one incident's bundle from a running daemon and write it to stdout or a file.
 
 ## Synopsis
@@ -12,7 +14,7 @@ rsigma engine incidents export <INCIDENT_ID> [OPTIONS]
 
 An incident groups many detections under one id, and the grouped view alone does not say much: it carries rule *keys*, counts, and grouping values, not what those rules were looking for or why they matter. A bundle is that incident joined to the [ADS](../../guide/detection-strategy.md) documentation of every rule that contributed and the risk entities it overlaps, in one self-contained document. It is what you attach to a ticket, hand to an on-call engineer, or keep as the record of what the detection stack knew at the time.
 
-The command is the client side of [`GET /api/v1/incidents/{id}/bundle`](../../reference/http-api.md#get-apiv1incidentsidbundle). Incident ids come from [`GET /api/v1/incidents`](../../reference/http-api.md#get-apiv1incidents) or from an emitted incident's `incident_id`.
+The command is the client side of [`GET /api/v1/incidents/{id}/bundle`](../../reference/http-api-state.md#get-apiv1incidentsidbundle). Incident ids come from [`GET /api/v1/incidents`](../../reference/http-api-state.md#get-apiv1incidents) or from an emitted incident's `incident_id`.
 
 Like [`engine status`](status.md), it uses a synchronous HTTP client and does not need the `daemon` build feature, so a lightweight build can pull a bundle from a remote daemon. `--addr` follows the same convention: it defaults to `daemon.api.addr` from the resolved config, and a wildcard bind address (`0.0.0.0`, `[::]`) is mapped to loopback.
 
@@ -99,7 +101,7 @@ no such open incident
 
 ## See also
 
-- [HTTP API: incident bundles](../../reference/http-api.md#get-apiv1incidentsidbundle) for the raw endpoint, the bundle schema, and the status codes.
+- [HTTP API: incident bundles](../../reference/http-api-state.md#get-apiv1incidentsidbundle) for the raw endpoint, the bundle schema, and the status codes.
 - [HTTP API: Authentication](../../reference/http-api.md#authentication) for bearer tokens and the `incident-bundles:read` permission.
 - [Alert Pipeline](../../guide/alert-pipeline.md) for how incidents are grouped in the first place.
 - [Detection Strategy](../../guide/detection-strategy.md) for the ADS sections a bundle carries.
