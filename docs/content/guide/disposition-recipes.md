@@ -266,5 +266,5 @@ TheHive has no native benign-true-positive status. Teams that track BTP add a ca
 
 - [Triage Feedback Loop](triage-feedback.md) for the loop these recipes feed.
 - [Dynamic Sources](../reference/dynamic-sources.md) for the full source-file schema (HTTP `body`, `extract` languages, refresh policies, error handling).
-- [HTTP API: Dispositions](../reference/http-api.md#dispositions) for the record shape and the `POST` endpoint the outbound variants target.
+- [HTTP API: Dispositions](../reference/http-api-state.md#dispositions) for the record shape and the `POST` endpoint the outbound variants target.
 - [`engine daemon` disposition flags](../cli/engine/daemon.md#triage-feedback-loop) for `--disposition-source` and the `daemon.dispositions` config keys.

@@ -99,7 +99,7 @@ See [Triage feedback loop](../reference/metrics.md#triage-feedback-loop-4-metric
 - [Verdict-Driven Corpora](verdict-to-corpus.md)
 - [Rule Tuning](rule-tuning.md)
 - [Disposition Source Recipes](disposition-recipes.md)
-- [HTTP API: Dispositions](../reference/http-api.md#dispositions)
+- [HTTP API: Dispositions](../reference/http-api-state.md#dispositions)
 - [Detection Scorecard](detection-scorecard.md)
 - [Alert Pipeline](alert-pipeline.md)
 - [Webhooks](webhooks.md)

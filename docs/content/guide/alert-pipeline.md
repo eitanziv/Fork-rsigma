@@ -213,7 +213,7 @@ Because the join happens at read time against the currently loaded rule set, eac
 
 A bundle is only served once the incident has cleared `group_wait` and been reported at least once, since until then its contents can still change. The snapshot routes report that as `bundle_ready`, and the bundle route returns `409` before it.
 
-See [`engine incidents export`](../cli/engine/incidents-export.md) and [HTTP API: incident bundles](../reference/http-api.md#get-apiv1incidentsidbundle).
+See [`engine incidents export`](../cli/engine/incidents-export.md) and [HTTP API: incident bundles](../reference/http-api-state.md#get-apiv1incidentsidbundle).
 
 ### Metrics
 

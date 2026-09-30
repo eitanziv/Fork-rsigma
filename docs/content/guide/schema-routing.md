@@ -187,7 +187,7 @@ rsigma engine discover-schemas -e @events.ndjson --emit yaml >> schemas.yml
 
 The workflow is a loop: `engine classify` shows you have unknowns, `discover-schemas` proposes signatures, and classifying again with the pasted config verifies them (`--dry-run` previews the before/after classification counts in one step). Proposals are always declarative signatures a human reviews and renames; nothing is applied automatically.
 
-On a running daemon, `--discover-schemas` (which implies `--observe-schemas`) samples the shapes of unrecognized events live, and [`GET /api/v1/schemas/suggestions`](../reference/http-api.md#get-apiv1schemassuggestions) mines them into candidates. The daemon sample is keys-only, so its proposals use presence predicates; run the offline command over a corpus when you want `equals`/`in` value markers.
+On a running daemon, `--discover-schemas` (which implies `--observe-schemas`) samples the shapes of unrecognized events live, and [`GET /api/v1/schemas/suggestions`](../reference/http-api-observability.md#get-apiv1schemassuggestions) mines them into candidates. The daemon sample is keys-only, so its proposals use presence predicates; run the offline command over a corpus when you want `equals`/`in` value markers.
 
 ## See also
 
@@ -195,6 +195,6 @@ On a running daemon, `--discover-schemas` (which implies `--observe-schemas`) sa
 - [Logsource Routing](logsource-routing.md) for conflict-based pruning that composes with schema routing.
 - [CLI: `engine classify`](../cli/engine/classify.md) for one-shot classification and user signature authoring.
 - [CLI: `engine discover-schemas`](../cli/engine/discover-schemas.md) for offline signature mining.
-- [HTTP API: Schema observability](../reference/http-api.md#schema-observability) for `/api/v1/schemas` and `/api/v1/schemas/suggestions`.
+- [HTTP API: Schema observability](../reference/http-api-observability.md#schema-observability) for `/api/v1/schemas` and `/api/v1/schemas/suggestions`.
 - [Configuration reference](../reference/configuration.md) for the `daemon.schema` / `eval.schema` keys.
 - [Cloud Collection Recipes](cloud-collection-recipes.md) for schema-routing deployments of built-in cloud schemas.

@@ -284,7 +284,15 @@ export default {
           ],
         },
         { title: "Prometheus Metrics", path: "/reference/metrics" },
-        { title: "HTTP API", path: "/reference/http-api" },
+        {
+          title: "HTTP API",
+          path: "/reference/http-api",
+          collapsible: true,
+          children: [
+            { title: "Detection State", path: "/reference/http-api-state" },
+            { title: "Live Observability", path: "/reference/http-api-observability" },
+          ],
+        },
         { title: "Exit Codes", path: "/reference/exit-codes" },
         { title: "Environment Variables", path: "/reference/environment-variables" },
         { title: "Feature Flags", path: "/reference/feature-flags" },

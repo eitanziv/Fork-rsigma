@@ -16,7 +16,7 @@ Reads a JSON/NDJSON corpus, runs a pure-Rust, glass-box mining pass over the eve
 
 This closes the authoring loop the schema tooling otherwise leaves to you: `engine classify` shows you have unknowns, `discover-schemas` proposes signatures, and classifying again with the pasted config verifies them. It never loads rules, evaluates detections, or applies a discovered signature on its own; a human always reviews and renames the proposals first (the emitted names are placeholders like `discovered_alert`).
 
-For the live equivalent on a running daemon, see [`GET /api/v1/schemas/suggestions`](../../reference/http-api.md#get-apiv1schemassuggestions) and the `--discover-schemas` flag on [`engine daemon`](daemon.md).
+For the live equivalent on a running daemon, see [`GET /api/v1/schemas/suggestions`](../../reference/http-api-observability.md#get-apiv1schemassuggestions) and the `--discover-schemas` flag on [`engine daemon`](daemon.md).
 
 ## Flags
 
@@ -43,7 +43,7 @@ The global [`--output-format`](../../reference/output.md) flag selects `json`, `
 
 ## Redaction
 
-The offline command reads a corpus you already hold and derives low-cardinality value markers in-process, emitting them only into the candidate YAML for your review. The online [suggestions endpoint](../../reference/http-api.md#get-apiv1schemassuggestions) instead mines a keys-only sample (values are never retained), so its proposals are presence-only and carry `source: keys-only`.
+The offline command reads a corpus you already hold and derives low-cardinality value markers in-process, emitting them only into the candidate YAML for your review. The online [suggestions endpoint](../../reference/http-api-observability.md#get-apiv1schemassuggestions) instead mines a keys-only sample (values are never retained), so its proposals are presence-only and carry `source: keys-only`.
 
 ## Examples
 

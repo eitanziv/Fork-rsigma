@@ -113,5 +113,5 @@ There is no API to read or search the ring or the spool.
 - [Alert Pipeline](alert-pipeline.md)
 - [Rule Tuning](rule-tuning.md)
 - [CLI: `engine daemon`](../cli/engine/daemon.md)
-- [HTTP API: Dispositions](../reference/http-api.md#dispositions)
+- [HTTP API: Dispositions](../reference/http-api-state.md#dispositions)
 - [Security](../reference/security.md#verdict-driven-capture)

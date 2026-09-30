@@ -213,7 +213,7 @@ rsigma engine eval -r rules/ -e @events.ndjson \
 jq '.summary | {events_observed, unknown_count, missing_count}' coverage.json
 ```
 
-See [HTTP API: Field observability](../reference/http-api.md#field-observability) for the daemon endpoint payloads and pagination, [`engine daemon`](../cli/engine/daemon.md#field-observability-advanced) for the daemon flags, and [`engine eval`](../cli/engine/eval.md#field-observability-offline-coverage-report) for the offline equivalent.
+See [HTTP API: Field observability](../reference/http-api-observability.md#field-observability) for the daemon endpoint payloads and pagination, [`engine daemon`](../cli/engine/daemon.md#field-observability-advanced) for the daemon flags, and [`engine eval`](../cli/engine/eval.md#field-observability-offline-coverage-report) for the offline equivalent.
 
 ## Health probes
 

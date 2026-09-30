@@ -98,7 +98,7 @@ A non-zero `dropped` means a session buffer filled under load; the tail missed d
 - [`engine tap`](tap.md) for the events-in counterpart.
 - [`engine daemon`](daemon.md) for the long-running service and the `daemon.tail.*` limits.
 - [`engine status`](status.md) for the sibling daemon-client `--addr` convention.
-- [HTTP API: `GET /api/v1/detections/stream`](../../reference/http-api.md#live-detection-tail) for the raw endpoint, query params, and error semantics.
+- [HTTP API: `GET /api/v1/detections/stream`](../../reference/http-api-observability.md#live-detection-tail) for the raw endpoint, query params, and error semantics.
 - [HTTP API: Authentication](../../reference/http-api.md#authentication) when the daemon requires bearer tokens (`detections:read`).
 - [Streaming Detection](../../guide/streaming-detection.md) for the daemon overview.
 - [Prometheus Metrics](../../reference/metrics.md) for `rsigma_tail_*` counters and gauges.

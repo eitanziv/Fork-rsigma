@@ -121,7 +121,7 @@ Companion CLIs that talk to a running daemon differ in whether they send a beare
 
 ### Audit trail (config-file-only)
 
-When `--state-db` is set, the daemon records control-plane mutations (reload, silences, dispositions, observer resets, and similar) and serves them at `GET /api/v1/audit`. Data-plane ingest is never recorded. Tune or disable with the `daemon.api.audit` block (`enabled`, `max_entries`, `max_age`, `max_body_bytes`, optional `sink`); enabling audit without a state database fails startup. The optional `sink` is a detection-style sink URL that receives audit JSON lines with `on_full=drop` appended when absent; `?format=` is rejected on it. See [HTTP API: Audit trail](../../reference/http-api.md#audit-trail).
+When `--state-db` is set, the daemon records control-plane mutations (reload, silences, dispositions, observer resets, and similar) and serves them at `GET /api/v1/audit`. Data-plane ingest is never recorded. Tune or disable with the `daemon.api.audit` block (`enabled`, `max_entries`, `max_age`, `max_body_bytes`, optional `sink`); enabling audit without a state database fails startup. The optional `sink` is a detection-style sink URL that receives audit JSON lines with `on_full=drop` appended when absent; `?format=` is rejected on it. See [HTTP API: Audit trail](../../reference/http-api-state.md#audit-trail).
 
 ### TLS (requires the `daemon-tls` build feature)
 
@@ -223,11 +223,11 @@ These schema flags may also be supplied via the `daemon.schema` block in a [conf
 
 These logsource flags may also be supplied via the `daemon.logsource_routing` block in a [config file](../../reference/configuration.md) (`enabled`, `field_map`, `event_logsource`); a flag always wins over the file.
 
-See [Observability: detection coverage](../../guide/observability.md#detection-coverage-with-observe-fields) for the operator workflow, and [HTTP API](../../reference/http-api.md#field-observability) for the endpoint payloads.
+See [Observability: detection coverage](../../guide/observability.md#detection-coverage-with-observe-fields) for the operator workflow, and [HTTP API](../../reference/http-api-observability.md#field-observability) for the endpoint payloads.
 
 ### Live event tap
 
-The daemon serves [`GET /api/v1/tap`](../../reference/http-api.md#live-event-tap) (the endpoint behind [`rsigma engine tap`](tap.md)), which records a bounded window of the live event stream as a replayable NDJSON fixture. It is **disabled by default** because it can exfiltrate raw event traffic; enable it with `daemon.tap.enabled: true` and expose it only behind mTLS.
+The daemon serves [`GET /api/v1/tap`](../../reference/http-api-observability.md#live-event-tap) (the endpoint behind [`rsigma engine tap`](tap.md)), which records a bounded window of the live event stream as a replayable NDJSON fixture. It is **disabled by default** because it can exfiltrate raw event traffic; enable it with `daemon.tap.enabled: true` and expose it only behind mTLS.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -246,7 +246,7 @@ The tap can exfiltrate raw events; expose the admin API only behind mTLS and red
 
 ### Live detection tail
 
-The daemon also serves [`GET /api/v1/detections/stream`](../../reference/http-api.md#live-detection-tail) (the endpoint behind [`rsigma engine tail`](tail.md)), which streams live detections as NDJSON. It is **disabled by default**; enable it with `daemon.tail.enabled: true`.
+The daemon also serves [`GET /api/v1/detections/stream`](../../reference/http-api-observability.md#live-detection-tail) (the endpoint behind [`rsigma engine tail`](tail.md)), which streams live detections as NDJSON. It is **disabled by default**; enable it with `daemon.tail.enabled: true`.
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -262,7 +262,7 @@ The other keys are config-file-only under `daemon.tail`:
 
 ## Triage feedback loop
 
-The daemon serves [`POST`/`GET /api/v1/dispositions`](../../reference/http-api.md#dispositions), which ingest analyst verdicts and expose a per-rule false-positive ratio. It is **disabled by default**; enable it with `--enable-dispositions`, `daemon.dispositions.enabled: true`, or a configured pull source.
+The daemon serves [`POST`/`GET /api/v1/dispositions`](../../reference/http-api-state.md#dispositions), which ingest analyst verdicts and expose a per-rule false-positive ratio. It is **disabled by default**; enable it with `--enable-dispositions`, `daemon.dispositions.enabled: true`, or a configured pull source.
 
 | Flag | Default | Description |
 |------|---------|-------------|
