@@ -408,7 +408,7 @@ const STALE_BRAND_FILES = [
 ];
 
 /** Repo-root `assets/` files copied into the site so pages can embed them. */
-const COPIED_ASSETS = ["detection-loop.svg"];
+const COPIED_ASSETS = ["detection-loop.svg", "architecture.svg", "internal_architecture.svg"];
 
 /**
  * The repo copy of an SVG links to the published site with absolute URLs so
@@ -540,18 +540,44 @@ async function syncBrandAssets(repoRoot, docsRoot) {
 }
 
 /**
- * Wrap the detection-loop diagram image in an `<object>` so its links and
+ * Read the `viewBox` of each copied diagram so its `<object>` embed can carry
+ * the matching aspect ratio.
+ *
+ * @param {string} assetsDir
+ * @returns {Map<string, string>} file name to a CSS `aspect-ratio` value
+ */
+function diagramAspectRatios(assetsDir) {
+  const ratios = new Map();
+  for (const name of COPIED_ASSETS) {
+    const svg = fs.readFileSync(path.join(assetsDir, name), "utf8");
+    const viewBox = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+    if (!viewBox) {
+      throw new Error(`docmd-plugin-rsigma: ${name} has no "0 0 W H" viewBox`);
+    }
+    ratios.set(name, `${viewBox[1]} / ${viewBox[2]}`);
+  }
+  return ratios;
+}
+
+/**
+ * Wrap images of the copied diagrams in an `<object>` so their links and
  * hover styles work; SVG loaded through `<img>` is inert. docmd escapes raw
  * HTML in Markdown, so the page keeps a plain image and the swap happens here.
  * The original `<img>` stays inside as the fallback content.
  *
  * @param {string} html
+ * @param {Map<string, string>} ratios
  */
-function embedInteractiveDiagrams(html) {
+function embedInteractiveDiagrams(html, ratios) {
   return html.replace(
-    /(?<!<object[^>]*>)<img src="([^"]*\/assets\/images\/detection-loop\.svg)" alt="([^"]*)">/g,
-    (img, src, alt) =>
-      `<object class="loop-diagram" data="${src}" type="image/svg+xml" aria-label="${alt}">${img}</object>`,
+    /(?<!<object[^>]*>)<img src="([^"]*\/assets\/images\/([\w-]+\.svg))" alt="([^"]*)">/g,
+    (img, src, name, alt) => {
+      const ratio = ratios.get(name);
+      if (!ratio) {
+        return img;
+      }
+      return `<object class="diagram" data="${src}" type="image/svg+xml" aria-label="${alt}" style="aspect-ratio: ${ratio}">${img}</object>`;
+    },
   );
 }
 
@@ -633,6 +659,7 @@ export default {
     const logoSvg = path.join(root, "assets", "rsigma-logo.svg");
     await writeBrandImages(path.join(outputDir, "assets", "images"), logoSvg);
     await writeBrandImages(path.join(docsRoot, "assets", "images"), logoSvg);
+    const ratios = diagramAspectRatios(path.dirname(logoSvg));
     let stripped = 0;
     let titlesRendered = 0;
     for (const file of collectHtmlFiles(outputDir)) {
@@ -642,7 +669,7 @@ export default {
         stripped += 1;
       }
       next = injectAnalyticsConsentMode(next);
-      next = embedInteractiveDiagrams(next);
+      next = embedInteractiveDiagrams(next, ratios);
       const withTitles = renderMarkdownTitles(next);
       if (withTitles !== next) {
         titlesRendered += 1;

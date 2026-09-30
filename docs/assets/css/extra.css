@@ -48,11 +48,11 @@ html[data-theme="dark"] .sidebar-header .logo-link::after {
   display: block;
 }
 
-/* An <object> has no intrinsic aspect ratio, so the embedded SVG needs one to
-   scale with the content column instead of collapsing to 150px tall. */
-.loop-diagram {
+/* An <object> has no intrinsic aspect ratio, so each embedded SVG carries its
+   viewBox ratio inline to scale with the content column instead of collapsing
+   to 150px tall. */
+.diagram {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 1000 / 530;
 }
