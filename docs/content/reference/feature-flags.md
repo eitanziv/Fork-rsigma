@@ -45,7 +45,7 @@ The streaming runtime (event sources, sinks, daemon plumbing, dynamic pipelines)
 | `evtx` | no | `evtx` | `.evtx` file reader. |
 | `uds` | no | (Unix only) | Unix-domain socket event source and sink. Pulled in by the CLI `daemon` feature on Unix. |
 | `daachorse-index` | no | `rsigma-eval/daachorse-index` | Cross-rule AC support when used from `rsigma-runtime` consumers. |
-| `stix-enrich` | no | `rstix` (`store`, `store-fs`) | `type: stix` enricher primitive and [`EnricherResources::stix_store`](../../library/runtime.md#post-evaluation-enrichment). Pulled in by the CLI `stix-enrich` feature. |
+| `stix-enrich` | no | `rstix` (`store`, `store-fs`) | `type: stix` enricher primitive and [`EnricherResources::stix_store`](../library/runtime.md#post-evaluation-enrichment). Pulled in by the CLI `stix-enrich` feature. |
 
 ## `rsigma-convert`
 

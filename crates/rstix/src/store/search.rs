@@ -1,6 +1,7 @@
 //! Full-text search helpers for store queries.
 
 use crate::core::QueryableStixObject;
+use crate::model::common::ExternalReference;
 use crate::model::meta::MetaObject;
 use crate::model::sdo::SdoObject;
 use crate::model::stix_object::StixObject;
@@ -16,12 +17,9 @@ pub(crate) fn object_search_text(obj: &StixObject) -> String {
     match obj {
         StixObject::Sdo(sdo) => push_sdo_search_parts(sdo, &mut parts),
         StixObject::Sro(sro) => {
-            parts.extend(
-                sro.common_props()
-                    .labels
-                    .iter()
-                    .map(|label| label.to_ascii_lowercase()),
-            );
+            let common = sro.common_props();
+            parts.extend(common.labels.iter().map(|label| label.to_ascii_lowercase()));
+            push_external_reference_parts(&common.external_references, &mut parts);
         }
         StixObject::Sco(sco) => {
             if let Ok(value) = serde_json::to_value(sco) {
@@ -54,9 +52,25 @@ pub(crate) fn object_search_text(obj: &StixObject) -> String {
     parts.join("\n")
 }
 
+fn push_external_reference_parts(refs: &[ExternalReference], parts: &mut Vec<String>) {
+    for reference in refs {
+        parts.push(reference.source_name.to_ascii_lowercase());
+        if let Some(external_id) = &reference.external_id {
+            parts.push(external_id.to_ascii_lowercase());
+        }
+        if let Some(description) = &reference.description {
+            parts.push(description.to_ascii_lowercase());
+        }
+        if let Some(url) = &reference.url {
+            parts.push(url.to_ascii_lowercase());
+        }
+    }
+}
+
 fn push_sdo_search_parts(sdo: &SdoObject, parts: &mut Vec<String>) {
     let common = sdo.common_props();
     parts.extend(common.labels.iter().map(|label| label.to_ascii_lowercase()));
+    push_external_reference_parts(&common.external_references, parts);
     match sdo {
         SdoObject::Indicator(indicator) => {
             if let Some(name) = &indicator.name {

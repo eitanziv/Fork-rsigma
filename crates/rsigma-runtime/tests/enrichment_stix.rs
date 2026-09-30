@@ -87,8 +87,13 @@ async fn stix_text_search_injects_indicator_objects() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn stix_attack_technique_uses_rule_tags() {
-    let store = populated_store();
+async fn stix_attack_technique_finds_attack_pattern_by_external_id() {
+    let bundle = rstix::parse_bundle(include_str!(
+        "../../rstix/tests/fixtures/store/attack-pattern-powershell-t1059.json"
+    ))
+    .expect("parse bundle");
+    let store = Arc::new(MemoryStore::new());
+    store.import_bundle(&bundle).expect("import");
     let enricher = StixEnricher::new(
         "technique_lookup".into(),
         EnricherKind::Detection,
@@ -97,11 +102,11 @@ async fn stix_attack_technique_uses_rule_tags() {
             stix_id: None,
             text_search: None,
             attack_technique: true,
-            type_filter: vec![],
+            type_filter: vec![StixObjectKind::from_type_str("attack-pattern").unwrap()],
             max_results: 1,
         },
-        Some(ExtractExpr::Jq(".[0].labels[0]".into())),
-        Some(json!("miss")),
+        Some(ExtractExpr::Jq(".[0].name".into())),
+        None,
         Duration::from_secs(5),
         OnError::Skip,
         Scope::default(),
@@ -115,7 +120,7 @@ async fn stix_attack_technique_uses_rule_tags() {
         .as_ref()
         .and_then(|m| m.get("stix_technique"))
         .expect("stix_technique");
-    assert_eq!(value, "miss");
+    assert_eq!(value, "PowerShell");
 }
 
 #[tokio::test(flavor = "multi_thread")]

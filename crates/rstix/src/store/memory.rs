@@ -56,11 +56,53 @@ impl MemoryStore {
         }
     }
 
-    /// Drop every indexed object and search metadata.
+    /// Replace every indexed object and search metadata with `other`.
     ///
-    /// Used by [`FsStore::reload_from_disk`](super::FsStore::reload_from_disk) to
-    /// rebuild the in-memory index from on-disk envelopes without reopening the
-    /// store handle held by long-lived consumers (for example daemon enrichment).
+    /// Used by [`FsStore::reload_from_disk`](super::FsStore::reload_from_disk) after
+    /// building a fresh index from disk so a failed reload leaves the previous
+    /// corpus intact and queries never observe an empty intermediate state.
+    pub(crate) fn replace_with(&self, other: Self) -> Result<(), StoreError> {
+        *self.sdo.write().map_err(|_| StoreError::LockPoisoned)? = other
+            .sdo
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self.sro.write().map_err(|_| StoreError::LockPoisoned)? = other
+            .sro
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self.meta.write().map_err(|_| StoreError::LockPoisoned)? = other
+            .meta
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self.scos.write().map_err(|_| StoreError::LockPoisoned)? = other
+            .scos
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self
+            .fingerprint_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)? = other
+            .fingerprint_index
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self
+            .kind_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)? = other
+            .kind_index
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        *self
+            .text_index
+            .write()
+            .map_err(|_| StoreError::LockPoisoned)? = other
+            .text_index
+            .into_inner()
+            .map_err(|_| StoreError::LockPoisoned)?;
+        Ok(())
+    }
+
+    /// Drop every indexed object and search metadata.
     pub fn clear(&self) -> Result<(), StoreError> {
         self.sdo
             .write()

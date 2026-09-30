@@ -153,7 +153,7 @@ pub struct EnricherConfig {
     /// `stix`: template-expanded STIX id for a direct store lookup.
     #[serde(default)]
     pub stix_id: Option<String>,
-    /// `stix`: template-expanded substring for [`StixQuery::text_search`].
+    /// `stix`: template-expanded substring for [`rstix::store::StixQuery::text_search`].
     #[serde(default)]
     pub text_search: Option<String>,
     /// `stix`: derive `text_search` from the first `attack.t*` technique tag.

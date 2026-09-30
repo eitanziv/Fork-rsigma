@@ -10,7 +10,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 - Supports **`--allow-custom`** for MITRE ATT&CK bundles, default **`--strict`**, and structured import/validation summary output.
 - **`engine daemon --stix-store-allow-custom`**: load MITRE/custom types from disk (required when the store was populated with `--allow-custom`).
 
-rsigma: STIX store enrichment (`stix-enrich` feature)
+### rsigma: STIX store enrichment (`stix-enrich` feature) (#509)
 
 - Fifth enricher primitive **`type: stix`**: query a local [`FsStore`](crates/rstix/README.md#rstix-graph-marking-store) by `stix_id`, `text_search`, or `attack_technique` (first `attack.t*` tag) and inject matching objects under `enrichments.<field>`.
 - **`engine daemon --stix-store <DIR>`** (and `daemon.stix_store` in config): same on-disk layout as [`taxii sync`](docs/content/cli/taxii/sync.md). Store index reloads from disk on enricher hot-reload after external `taxii sync` writes.
