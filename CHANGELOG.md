@@ -4,6 +4,14 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### rsigma-mcp: enforce `--rules-dir` confinement and refuse process and network enrichers (security)
+
+Fixes [GHSA-8x2w-m5v2-phxr](https://github.com/timescale/rsigma/security/advisories/GHSA-8x2w-m5v2-phxr) and [GHSA-4q23-jm32-fhr9](https://github.com/timescale/rsigma/security/advisories/GHSA-4q23-jm32-fhr9). With `--rules-dir` set, `parse_rule`, `lint_rules`, `fix_rules`, `evaluate_events`, `list_fields`, `validate_rules`, `author_ads`, `resolve_pipeline`, and `convert_rules` accepted absolute and `../` paths outside the directory, so an MCP caller could read any file the server's OS user could read, and `fix_rules` with `write: true` could rewrite files outside it.
+
+- Every path argument (`path`, `events_path`, `enrichers_path`, and file-based `pipelines`) is now canonicalized and refused if it leaves `--rules-dir`. A missing file outside the root fails the same way as an existing one. Directory inputs containing a symlink are refused, matching `tune_rules`.
+- `evaluate_events` now builds only `template` enrichers (GHSA-4q23-jm32-fhr9). Inline `command` enrichers ran arbitrary local programs and `http` enrichers reached arbitrary network endpoints as the server process; both are refused, along with `lookup` and `stix`. Configure them on the daemon.
+- Delegated `convert_rules` passes only bare identifiers through as sigma-cli pipeline names and runs sigma-cli from the rules root, so a relative pipeline path can no longer resolve against the server's working directory.
+
 ### Dependency batch (late Sep 2026) (#512)
 
 Rolls up the open Dependabot PRs into a single merge, with `Cargo.lock` regenerated against current `main`. Rust: `jsonschema` 0.48.5 to 0.56.0 (#497, also moving `fancy-regex` 0.18.0 to 0.19.2 and `fraction` 0.15.4 to 0.17.0) and `dirs` 6.0.0 to 7.0.0 (#496). CI (all repinned by commit SHA, batched via the `actions-updates` group, #504): `taiki-e/install-action` v2.87.4 to v2.87.14, `docker/setup-buildx-action` v4.3.0 to v4.4.1, `docker/build-push-action` v7.3.0 to v7.4.0, `github/codeql-action/upload-sarif` v4.37.9 to v4.38.0, and `zizmorcore/zizmor-action` v0.6.3 to v0.6.4. VS Code extension: `@types/node` 26.5.1 to 26.6.1 and `@types/vscode` 1.137.0 to 1.138.0 (#502), `@vscode/vsce` 3.9.2 to 4.0.0 (#503), and the `brace-expansion` override 5.0.9 to 5.0.12 (#510). Docs: `markdown-it` 14.3.0 to 14.3.2 (#511). Held back: `yamlpath` 1.30.1 (#495) and `yamlpatch` 1.30.1 (#494) still pull `tree-sitter-iter` 1.28+ which requires rustc 1.97, above the 1.95.0 MSRV; `tikv-jemallocator` 0.7.0 (#425, jemalloc 5.3.1) still regresses musl routed daemon throughput about 4-7% versus 0.6.1.

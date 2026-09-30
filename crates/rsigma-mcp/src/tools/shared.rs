@@ -18,7 +18,7 @@ use rsigma_parser::{
 };
 use serde_json::{Value, json};
 
-use crate::input::resolve_path;
+use crate::input::{ensure_no_symlinks, resolve_confined_path};
 
 use super::RsigmaMcp;
 
@@ -29,7 +29,8 @@ pub struct SourceInput {
     #[serde(default)]
     pub yaml: Option<String>,
     /// Path to a Sigma YAML file (or directory, where the tool supports it).
-    /// Mutually exclusive with `yaml`. Resolved against `--rules-dir` when relative.
+    /// Mutually exclusive with `yaml`. Resolved against `--rules-dir` when
+    /// relative, and must stay inside it when one is configured.
     #[serde(default)]
     pub path: Option<String>,
 }
@@ -146,8 +147,9 @@ impl RsigmaMcp {
                 parse_sigma_yaml(text).map_err(|e| invalid(format!("parse error: {e}")))
             }
             (None, Some(p)) => {
-                let resolved = resolve_path(p, self.root());
+                let resolved = resolve_confined_path(p, self.root())?;
                 let result = if resolved.is_dir() {
+                    ensure_no_symlinks(&resolved, self.root())?;
                     parse_sigma_directory(&resolved)
                 } else {
                     parse_sigma_file(&resolved)
@@ -172,7 +174,7 @@ impl RsigmaMcp {
         if let Some(result) = resolve_builtin_pipeline(spec) {
             return result.map_err(|e| invalid(format!("builtin pipeline '{spec}': {e}")));
         }
-        let path = resolve_path(spec, self.root());
+        let path = resolve_confined_path(spec, self.root())?;
         parse_pipeline_file(&path)
             .map_err(|e| invalid(format!("pipeline '{}': {e}", path.display())))
     }
@@ -190,7 +192,7 @@ impl RsigmaMcp {
             (None, None) => Err(invalid("one of `events` or `events_path` is required")),
             (Some(list), None) => Ok(list),
             (None, Some(p)) => {
-                let path = resolve_path(p, self.root());
+                let path = resolve_confined_path(p, self.root())?;
                 let text = std::fs::read_to_string(&path)
                     .map_err(|e| invalid(format!("cannot read '{}': {e}", path.display())))?;
                 let mut out = Vec::new();

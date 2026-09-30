@@ -16,7 +16,7 @@ The server speaks JSON-RPC over **stdio**: stdin and stdout are the transport, s
 rsigma mcp serve --rules-dir /path/to/rules
 ```
 
-`--rules-dir` sets a default root so an agent can pass `path` arguments relative to a rules tree. `--lint-config` points the `lint_rules` tool at a `.rsigma-lint.yml` (disabled rules, severity overrides, extra tag namespaces).
+`--rules-dir` sets a root so an agent can pass `path` arguments relative to a rules tree, and confines every path argument to it: absolute paths, `../`, and symlinks that leave the root are refused, and so are directory inputs that contain symlinks. Set it whenever the agent processes untrusted content; without it, tools can read any file the server's OS user can read. See [Security Hardening](../reference/security.md#mcp-server-tool-surface). `--lint-config` points the `lint_rules` tool at a `.rsigma-lint.yml` (disabled rules, severity overrides, extra tag namespaces).
 
 ## Client setup
 
@@ -116,7 +116,7 @@ The server exposes read-only MCP resources so an agent can ground itself on the 
 
 ## Enrichment
 
-`evaluate_events` accepts an optional `enrichers` (inline YAML/JSON) or `enrichers_path`. The config follows the daemon's enrichers schema (`template`, `http`, `command` primitives with kind-aware template namespaces); the matches are enriched before being returned. Because the loader validates the config (including template-namespace checks) and surfaces failures as structured errors, the tool doubles as an enricher-config validator. `lookup` enrichers are not available here because they need the daemon's dynamic-source cache.
+`evaluate_events` accepts an optional `enrichers` (inline YAML/JSON) or `enrichers_path`. The config follows the daemon's enrichers schema, restricted to `template` enrichers (with kind-aware template namespaces); the matches are enriched before being returned. Because the loader validates the config (including template-namespace checks) and surfaces failures as structured errors, the tool doubles as a template-enricher validator. `command` and `http` enrichers are refused so a tool call cannot run local programs or reach network endpoints, and `lookup` and `stix` enrichers need resources only the daemon has; configure all four on the daemon.
 
 ### Example calls
 

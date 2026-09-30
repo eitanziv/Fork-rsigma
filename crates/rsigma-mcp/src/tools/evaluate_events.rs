@@ -9,10 +9,13 @@ use rsigma_eval::{CorrelationConfig, CorrelationEngine, Engine, EvaluationResult
 use rsigma_runtime::{EnrichersFile, EnrichmentPipeline, build_enrichers, load_enrichers_file};
 use serde_json::{Value, json};
 
-use crate::input::resolve_path;
+use crate::input::resolve_confined_path;
 
 use super::RsigmaMcp;
 use super::shared::{invalid, json_result, parse_match_detail, to_value};
+
+/// Enricher types `evaluate_events` builds in-process.
+const MCP_ENRICHER_TYPES: &[&str] = &["template"];
 
 /// Input for `evaluate_events`.
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -39,8 +42,8 @@ pub struct EvaluateInput {
     #[serde(default)]
     pub timestamp_fields: Vec<String>,
     /// Inline enrichers config (YAML/JSON) applied to results before returning.
-    /// Mutually exclusive with `enrichers_path`. `lookup` enrichers are not
-    /// supported here (no dynamic-source cache); use the daemon for those.
+    /// Mutually exclusive with `enrichers_path`. Only `template` enrichers are
+    /// supported here; use the daemon for `lookup`, `http`, `command`, and `stix`.
     #[serde(default)]
     pub enrichers: Option<String>,
     /// Path to an enrichers config file. Mutually exclusive with `enrichers`.
@@ -141,7 +144,7 @@ impl RsigmaMcp {
     }
 
     /// Build an optional [`EnrichmentPipeline`] from an inline config xor a path.
-    /// `lookup` enrichers are unsupported here (no dynamic-source cache).
+    /// Only the types in [`MCP_ENRICHER_TYPES`] are accepted.
     fn build_enrichment(
         &self,
         enrichers: Option<&str>,
@@ -159,10 +162,25 @@ impl RsigmaMcp {
                     .map_err(|e| invalid(format!("invalid enrichers config: {e}")))?,
             ),
             (None, Some(p)) => {
-                let path = resolve_path(p, self.root());
+                let path = resolve_confined_path(p, self.root())?;
                 Some(load_enrichers_file(&path).map_err(|e| invalid(e.to_string()))?)
             }
         };
+
+        // `command` and `http` would let any MCP caller run local programs or
+        // reach internal network endpoints as the server process.
+        if let Some(cfg) = file
+            .iter()
+            .flat_map(|f| &f.enrichers)
+            .find(|cfg| !MCP_ENRICHER_TYPES.contains(&cfg.type_name.as_str()))
+        {
+            return Err(invalid(format!(
+                "enricher '{}': type '{}' is not available over MCP (supported: {}); use the daemon for it",
+                cfg.id,
+                cfg.type_name,
+                MCP_ENRICHER_TYPES.join(", ")
+            )));
+        }
 
         match file {
             None => Ok(None),
@@ -275,6 +293,55 @@ enrichers:
             .await
             .unwrap_err();
         assert!(format!("{err:?}").contains("namespace"));
+    }
+
+    fn eval_with_enrichers(enrichers: &str) -> EvaluateInput {
+        EvaluateInput {
+            yaml: Some(VALID_RULE.to_string()),
+            path: None,
+            events: Some(vec![json!({ "CommandLine": "cmd /c whoami" })]),
+            events_path: None,
+            pipelines: vec![],
+            match_detail: None,
+            timestamp_fields: vec![],
+            enrichers: Some(enrichers.to_string()),
+            enrichers_path: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn evaluate_events_rejects_command_enricher() {
+        let enrichers = r#"
+enrichers:
+  - id: exec
+    kind: detection
+    type: command
+    inject_field: out
+    output: raw
+    command: ["echo", "executed"]
+"#;
+        let err = handler()
+            .run_evaluate_events(eval_with_enrichers(enrichers))
+            .await
+            .unwrap_err();
+        assert!(format!("{err:?}").contains("not available over MCP"));
+    }
+
+    #[tokio::test]
+    async fn evaluate_events_rejects_http_enricher() {
+        let enrichers = r#"
+enrichers:
+  - id: fetch
+    kind: detection
+    type: http
+    inject_field: out
+    url: "http://169.254.169.254/latest/meta-data/"
+"#;
+        let err = handler()
+            .run_evaluate_events(eval_with_enrichers(enrichers))
+            .await
+            .unwrap_err();
+        assert!(format!("{err:?}").contains("not available over MCP"));
     }
 
     #[tokio::test]

@@ -25,7 +25,7 @@ use serde_json::{Value, json};
 
 use super::RsigmaMcp;
 use super::shared::{NATIVE_TARGETS, get_backend, invalid, json_result, try_native_backend};
-use crate::input::{resolve_confined_path, resolve_path};
+use crate::input::resolve_confined_path;
 
 /// How long a delegated sigma-cli invocation may run before the subprocess is
 /// killed. pySigma cold-start alone can take seconds; a plugin-heavy convert
@@ -186,16 +186,21 @@ impl RsigmaMcp {
             (None, Some(p)) => self.delegated_input_path(p)?,
         };
 
-        // Pipelines: an existing file is confined like `path`; anything else
-        // is passed through verbatim as a sigma-cli pipeline name. rsigma
-        // builtin names (ecs_windows, sysmon) are not translated.
+        // Pipelines: a bare identifier with no matching file under the root is
+        // passed through verbatim as a sigma-cli pipeline name; anything else
+        // is a path and is confined like `path`. rsigma builtin names
+        // (ecs_windows, sysmon) are not translated.
         let mut pipeline_paths = Vec::with_capacity(input.pipelines.len());
         for spec in &input.pipelines {
-            if resolve_path(spec, self.root()).is_file() {
-                pipeline_paths.push(self.delegated_input_path(spec)?);
+            let path = if is_pipeline_name(spec) {
+                match self.delegated_input_path(spec) {
+                    Ok(path) if path.is_file() => path,
+                    _ => PathBuf::from(spec),
+                }
             } else {
-                pipeline_paths.push(PathBuf::from(spec));
-            }
+                self.delegated_input_path(spec)?
+            };
+            pipeline_paths.push(path);
         }
 
         // Sorted for deterministic argv (HashMap iteration order is random).
@@ -224,6 +229,9 @@ impl RsigmaMcp {
             .args(&argv)
             .stdin(std::process::Stdio::null())
             .kill_on_drop(true);
+        if let Some(root) = self.root() {
+            command.current_dir(root);
+        }
 
         let output = match tokio::time::timeout(timeout, command.output()).await {
             Err(_) => {
@@ -310,6 +318,16 @@ impl RsigmaMcp {
     fn delegated_input_path(&self, path: &str) -> Result<PathBuf, McpError> {
         resolve_confined_path(path, self.root())
     }
+}
+
+/// Whether a pipeline spec is a bare sigma-cli pipeline name rather than a
+/// path. Names cannot contain separators or dots, so they cannot escape the
+/// rules root.
+fn is_pipeline_name(spec: &str) -> bool {
+    !spec.is_empty()
+        && spec
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 #[cfg(test)]
@@ -498,6 +516,39 @@ mod tests {
         let cli = SigmaCli::from_program("/nonexistent/never-spawned", true);
         let err = block_on(handler.delegate_convert(&cli, input, TEST_TIMEOUT)).unwrap_err();
         assert!(format!("{err:?}").contains("escapes the configured --rules-dir"));
+    }
+
+    #[test]
+    fn delegation_refuses_pipeline_escaping_rules_dir() {
+        let root = tempfile::tempdir().unwrap();
+        let handler = delegating_handler(Some(root.path().to_path_buf()));
+        let cli = SigmaCli::from_program("/nonexistent/never-spawned", true);
+
+        // Neither an existing nor a missing file outside the root may reach
+        // sigma-cli, whose working directory would otherwise resolve it.
+        let outside = tempfile::NamedTempFile::with_suffix(".yml").unwrap();
+        for spec in [
+            outside.path().to_string_lossy().into_owned(),
+            "../rsigma-no-such-pipeline.yml".to_string(),
+        ] {
+            let mut input = convert_input("splunk");
+            input.pipelines = vec![spec];
+            let err = block_on(handler.delegate_convert(&cli, input, TEST_TIMEOUT)).unwrap_err();
+            assert!(format!("{err:?}").contains("escapes the configured --rules-dir"));
+        }
+    }
+
+    #[test]
+    fn pipeline_names_are_bare_identifiers() {
+        assert!(is_pipeline_name("sysmon"));
+        assert!(is_pipeline_name("windows-logsources"));
+        assert!(is_pipeline_name("ecs_windows"));
+        assert!(!is_pipeline_name(""));
+        assert!(!is_pipeline_name(".."));
+        assert!(!is_pipeline_name("pipeline.yml"));
+        assert!(!is_pipeline_name("../pipeline"));
+        assert!(!is_pipeline_name("/etc/passwd"));
+        assert!(!is_pipeline_name("dir\\pipeline"));
     }
 
     #[test]

@@ -268,6 +268,47 @@ async fn call_evaluate_events_round_trip() {
 }
 
 #[tokio::test]
+async fn call_fix_rules_cannot_read_outside_rules_dir() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let secret = outside.path().join("secret.txt");
+    std::fs::write(&secret, "TOP-SECRET-MARKER\n").unwrap();
+    let handler = RsigmaMcp::new(
+        Some(root.path().to_path_buf()),
+        LintConfig::default(),
+        false,
+    );
+    let (server, client) = connect_handler(handler).await;
+
+    let mut req = CallToolRequestParams::new("fix_rules");
+    req.arguments = Some(object!({ "path": secret.display().to_string() }));
+    let err = client.call_tool(req).await.unwrap_err();
+    let message = format!("{err:?}");
+    assert!(message.contains("escapes the configured --rules-dir"));
+    assert!(!message.contains("TOP-SECRET-MARKER"));
+
+    client.cancel().await.ok();
+    server.cancel().await.ok();
+}
+
+#[tokio::test]
+async fn call_evaluate_events_refuses_command_enricher() {
+    let (server, client) = connect().await;
+
+    let mut req = CallToolRequestParams::new("evaluate_events");
+    req.arguments = Some(object!({
+        "yaml": RULE,
+        "events": [ { "CommandLine": "cmd /c whoami" } ],
+        "enrichers": "enrichers:\n  - id: exec\n    kind: detection\n    type: command\n    inject_field: out\n    output: raw\n    command: [\"echo\", \"executed\"]\n",
+    }));
+    let err = client.call_tool(req).await.unwrap_err();
+    assert!(format!("{err:?}").contains("not available over MCP"));
+
+    client.cancel().await.ok();
+    server.cancel().await.ok();
+}
+
+#[tokio::test]
 async fn call_tune_rules_round_trip() {
     let (server, client) = connect().await;
 

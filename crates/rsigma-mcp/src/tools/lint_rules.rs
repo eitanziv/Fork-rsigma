@@ -10,7 +10,7 @@ use rsigma_parser::{
 };
 use serde_json::{Value, json};
 
-use crate::input::resolve_path;
+use crate::input::{ensure_no_symlinks, resolve_confined_path};
 
 use super::RsigmaMcp;
 use super::shared::{SourceInput, invalid, json_result, warning_json};
@@ -40,8 +40,9 @@ impl RsigmaMcp {
                     vec![("<inline>".to_string(), lint_yaml_str_with_config(text, cfg))]
                 }
                 (None, Some(p)) => {
-                    let path = resolve_path(p, self.root());
+                    let path = resolve_confined_path(p, self.root())?;
                     if path.is_dir() {
+                        ensure_no_symlinks(&path, self.root())?;
                         lint_yaml_directory_with_config(&path, cfg)
                             .map_err(|e| invalid(format!("cannot lint '{}': {e}", path.display())))?
                             .into_iter()

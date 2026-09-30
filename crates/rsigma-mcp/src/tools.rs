@@ -36,6 +36,8 @@ use crate::daemon::{DaemonClient, DaemonConnect, DaemonError};
 use shared::to_value;
 
 mod author_ads;
+#[cfg(test)]
+mod confinement_tests;
 mod convert_rules;
 mod create_silence;
 mod evaluate_events;

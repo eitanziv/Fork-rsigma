@@ -192,6 +192,15 @@ Verdict-driven capture ([Verdict-Driven Corpora](../guide/verdict-to-corpus.md))
 - **The ring is not persisted.** A restart loses capture for open incidents rather than writing raw payloads into `--state-db`.
 - **No read or search API.** The spool is write-only from the daemon.
 
+## MCP server tool surface
+
+The MCP server ([`rsigma mcp serve`](../cli/mcp/serve.md)) treats every tool argument as untrusted, because an agent can be steered by prompt-injected content it is asked to process (a third-party rule set, an issue being summarized).
+
+- **`--rules-dir` is a confinement boundary.** When it is set, every path argument (`path`, `events_path`, `enrichers_path`, and file-based `pipelines` in every tool) is canonicalized and refused if it leaves the directory, whether it is absolute, uses `../`, or resolves through a symlink. A missing file outside the root is refused the same way as an existing one, so callers cannot probe for files. Directory inputs that contain a symlink anywhere in the tree are refused. `fix_rules` with `write: true` only writes to files inside the root.
+- **Without `--rules-dir`, paths are unconfined.** The server can read any file its OS user can read. Always set `--rules-dir` when the server is reachable by an agent that processes untrusted content.
+- **No process execution or network egress from enrichers.** `evaluate_events` builds only `template` enrichers. `command`, `http`, `lookup`, and `stix` enrichers are refused; configure them on the daemon instead.
+- **sigma-cli delegation** (`--allow-sigma-cli`, off by default) spawns a subprocess with the rules root as its working directory. Only bare identifiers (letters, digits, `_`, `-`) are passed through as sigma-cli pipeline names; anything else is treated as a path and confined.
+
 ## Filesystem footprint
 
 The daemon never writes outside the paths it is explicitly given:

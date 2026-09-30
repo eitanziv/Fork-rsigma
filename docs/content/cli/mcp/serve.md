@@ -23,7 +23,7 @@ The command is gated behind the opt-in `mcp` Cargo feature: build from source wi
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--lint-config <PATH>` | lint defaults | A lint config file (`.rsigma-lint.yml`) applied by the `lint_rules` tool (disabled rules, severity overrides, extra tag namespaces). Config key: `mcp.lint_config`. |
-| `--rules-dir <PATH>` | none | Default root directory for relative `path` arguments in tool calls, so an agent can reference rules by a path relative to a rules tree. Config key: `mcp.rules_dir`. |
+| `--rules-dir <PATH>` | none | Root directory for path arguments in tool calls. Relative paths resolve against it, and any path that leaves it (absolute, `../`, or through a symlink) is refused. Without it, tools can read any file the server's OS user can read. Config key: `mcp.rules_dir`. |
 | `--allow-sigma-cli` | off | Allow the `convert_rules` tool to delegate targets without a native backend to an installed [sigma-cli](../../reference/backends/sigma-cli.md), reaching the full pySigma backend set. Delegated calls spawn a subprocess (60s timeout, at most 2 concurrent); `path` and file-based `pipelines` inputs stay confined to `--rules-dir` when it is set. Config key: `mcp.allow_sigma_cli`. |
 | `--daemon-url <URL>` | none | Base URL of a running rsigma daemon (`http://127.0.0.1:9090`). Registers the Operate-cycle read tools against that API. Unix-socket URLs are unsupported; use TCP loopback. Config key: `mcp.daemon_url`. |
 | `--daemon-ca <PATH>` | none | Extra root CA (PEM) for a self-signed daemon TLS listener. Config key: `mcp.daemon_ca`. |

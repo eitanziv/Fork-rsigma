@@ -8,7 +8,7 @@ use rsigma_parser::lint::FixDisposition;
 use rsigma_parser::{LintWarning, apply_fixes_to_source, lint_yaml_str_with_config};
 use serde_json::{Value, json};
 
-use crate::input::resolve_path;
+use crate::input::resolve_confined_path;
 
 use super::RsigmaMcp;
 use super::shared::{invalid, json_result};
@@ -82,10 +82,10 @@ impl RsigmaMcp {
         let mut written = false;
         if input.write && changed {
             // `write` requires a path, validated above; resolve and persist.
-            let path = resolve_path(
+            let path = resolve_confined_path(
                 input.path.as_deref().expect("path required for write"),
                 self.root(),
-            );
+            )?;
             std::fs::write(&path, &outcome.fixed_source)
                 .map_err(|e| invalid(format!("cannot write '{}': {e}", path.display())))?;
             written = true;
