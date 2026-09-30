@@ -26,7 +26,7 @@ pub struct TaxiiStoreArgs {
     #[arg(long, value_name = "DIR")]
     pub store: PathBuf,
 
-    /// STIX bundle id recorded for [`StixStore::export_bundle`](rstix::store::StixStore::export_bundle).
+    /// STIX bundle id recorded for [`StixStore::export_bundle`].
     ///
     /// Defaults to the `id` in the bundle file when present.
     #[arg(long = "bundle-id")]

@@ -455,7 +455,7 @@ pub(crate) struct DaemonArgs {
 
     /// Local STIX store root for `type: stix` enrichers (`stix-enrich` feature).
     ///
-    /// Same on-disk layout as [`taxii sync`](crate::commands::taxii::sync::TaxiiSyncArgs::store).
+    /// Same on-disk layout as `rsigma taxii sync --store`.
     /// Reloaded from disk on enricher hot-reload (SIGHUP / file watcher /
     /// `POST /api/v1/reload`) so `taxii sync` updates are visible without
     /// restarting the daemon.

@@ -28,7 +28,7 @@ pub struct StixEnricherQuery {
     /// Template-expanded substring passed to [`StixQuery::text_search`].
     pub text_search: Option<String>,
     /// When true, derive `text_search` from the first `attack.t*` technique tag
-    /// on the firing rule (`attack.t1059.001` → `t1059.001`).
+    /// on the firing rule (`attack.t1059.001` → `1059.001`).
     pub attack_technique: bool,
     /// Optional STIX type filter (for example `indicator`, `attack-pattern`).
     pub type_filter: Vec<StixObjectKind>,
