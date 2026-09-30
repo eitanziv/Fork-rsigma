@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Docs: version tags, deployment guides, a loop tutorial, and troubleshooting
+### Docs: version tags, deployment guides, a loop tutorial, and troubleshooting (#519)
 
 Every CLI command page, and every guide, reference, and library page for a feature added after v0.12.0, now carries an "Added in vX" tag linking to that release's notes; sections and table rows added since v0.22.0 are tagged too, and unreleased work shows an "Unreleased" tag until the release that ships it. The build fails when a tag names an unknown release or its link does not resolve.
 
