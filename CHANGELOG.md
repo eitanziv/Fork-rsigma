@@ -12,6 +12,8 @@ New pages: [Kubernetes](https://rsigma.io/deployment/kubernetes/) and [systemd](
 
 Fixes: the Docker, README, and combined cloud-recipe daemon examples now start (a non-loopback plaintext bind needs `--allow-plaintext` or TLS), the home page counts the workspace crates from `Cargo.toml` and lists every command group, and two cross-page anchors that did not resolve now do.
 
+The site now builds with docmd 0.9.7. Its new AI chat plugin, which is on by default and sends reader questions to a third-party service, is turned off. Page titles in the new focus mode render inline code instead of raw backticks.
+
 ### Interactive detection engineering loop diagram in the docs (#518)
 
 On the [Detection Engineering Loop](https://rsigma.io/guide/detection-engineering-loop/) guide, the diagram is now interactive: hovering a stage highlights its card, leader line, and ribbon node while the other stages fade, stage headers and nodes jump to the matching section, and each command or feature links to its CLI reference or guide page. The docs plugin copies `assets/detection-loop.svg` into the site at build time, embeds it with `<object>` (keeping the image as fallback), and rewrites its `https://rsigma.io/` links to the configured base path so they follow the host serving the build. The README keeps rendering the same file as a static image.

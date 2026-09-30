@@ -157,6 +157,10 @@ const emittedReleaseAnchors = new Set();
  * Markdown links, and it calls `onBeforeParse` for the home page without a
  * file path, so the link is rooted at the site base rather than page-relative.
  *
+ * Each tag is closed with `:::` so text after it on the same line stays
+ * outside the tag. docmd only honors that terminator when whitespace or the end
+ * of the line follows it, so a tag directly followed by punctuation is an error.
+ *
  * @param {string} src
  * @param {string} page Page path for error messages.
  * @param {Map<string, string>} releases
@@ -168,7 +172,13 @@ function expandVersionTags(src, page, releases) {
   }
   const tagRe = /\{\{\s*added\s+"([^"]+)"\s*\}\}/g;
   const notes = `${siteBase.endsWith("/") ? siteBase : `${siteBase}/`}release-notes/`;
-  const render = (_match, version) => {
+  const render = (match, version, offset, text) => {
+    const next = text.charAt(offset + match.length);
+    if (next && !/\s/.test(next)) {
+      throw new Error(
+        `docmd-plugin-rsigma: ${page} has "${next}" directly after {{ added "${version}" }}; put whitespace or a line end after the tag`,
+      );
+    }
     if (version !== "unreleased" && !releases.has(version)) {
       throw new Error(
         `docmd-plugin-rsigma: ${page} tags unknown version "${version}"; use a released X.Y.Z from CHANGELOG.md or "unreleased"`,
@@ -177,8 +187,8 @@ function expandVersionTags(src, page, releases) {
     const anchor = releaseAnchor(version, releases);
     emittedReleaseAnchors.add(anchor);
     return version === "unreleased"
-      ? `::: tag "Unreleased" icon:flask-conical color:#d97706 url:"${notes}#${anchor}"`
-      : `::: tag "Added in v${version}" icon:tag url:"${notes}#${anchor}"`;
+      ? `::: tag "Unreleased" icon:flask-conical color:#d97706 url:"${notes}#${anchor}" :::`
+      : `::: tag "Added in v${version}" icon:tag url:"${notes}#${anchor}" :::`;
   };
   const skipRe = /(`+[^`]*`+)/;
   let inFence = false;
@@ -304,9 +314,9 @@ function stripInlineCode(text) {
 /**
  * docmd derives the page title from the first Markdown H1 but keeps the raw
  * text, so a heading like `` # `rsigma engine discover-schemas` `` leaves
- * literal backticks in the header bar, the `<title>`, and the social meta. Fix
- * that after render: the visible header title renders the code span as `<code>`
- * (matching the in-body H1), and the plain-text `<title>` / meta strip the
+ * literal backticks in the header bar, the focus-mode title, the `<title>`, and
+ * the social meta. Fix that after render: the visible titles render the code
+ * span as `<code>` (matching the in-body H1), and the plain-text `<title>` / meta strip the
  * markers. Pages whose title has no backticks are left untouched.
  *
  * @param {string} html
@@ -315,6 +325,11 @@ function stripInlineCode(text) {
 function renderMarkdownTitles(html) {
   let out = html.replace(
     /(<span class="header-title">)([\s\S]*?)(<\/span>)/,
+    (match, open, inner, close) =>
+      inner.includes("`") ? `${open}${inlineCodeToHtml(inner.trim())}${close}` : match,
+  );
+  out = out.replace(
+    /(<h1 class="docmd-focus-title">)([\s\S]*?)(<\/h1>)/,
     (match, open, inner, close) =>
       inner.includes("`") ? `${open}${inlineCodeToHtml(inner.trim())}${close}` : match,
   );

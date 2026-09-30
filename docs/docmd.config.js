@@ -28,8 +28,6 @@ export default {
       },
     },
   },
-  // docmd 0.8.17 renders the consent banner from this key, but `docs:validate`
-  // still reports it as an unknown top-level property. The warning is spurious.
   cookie: {
     enabled: true,
     message: "We use optional analytics cookies to understand how this documentation is used.",
@@ -54,6 +52,12 @@ export default {
       commitHistory: true,
     },
     mermaid: {},
+    // The AI chat plugin is on by default and sends reader questions to
+    // api.docmd.io, a processor the privacy page does not cover.
+    ai: { enabled: false },
+    // docmd prefixes plugin keys with `@docmd/plugin-` for its registry check,
+    // so this local plugin always logs "not found in official registry". It
+    // still loads.
     "docmd-plugin-rsigma": {},
   },
   navigation: [
