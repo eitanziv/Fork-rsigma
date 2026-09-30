@@ -157,4 +157,4 @@ To take one rule through drafting, testing, deployment, triage, tuning, measurem
 - **Threat hunters**: [evaluating rules](../guide/evaluating-rules.md), [input formats](../guide/input-formats.md), [EVTX files](../guide/input-formats.md#evtx-windows-event-log-feature-gated).
 - **Library users**: [embedding the crates](../library/index.md).
 
-If anything in this quick start did not work, run the [quick-verification checklist](../guide/observability.md#quick-verification) or [open an issue](https://{{ rsigma.repo_url | replace("https://", "") }}/issues).
+If anything in this quick start did not work, see [Troubleshooting](troubleshooting.md), run the [quick-verification checklist](../guide/observability.md#quick-verification), or [open an issue](https://{{ rsigma.repo_url | replace("https://", "") }}/issues).

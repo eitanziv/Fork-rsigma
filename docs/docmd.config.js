@@ -65,6 +65,7 @@ export default {
         { title: "Quick Start", path: "/getting-started/quick-start" },
         { title: "Tutorial: The Detection Loop", path: "/getting-started/detection-loop" },
         { title: "Core Concepts", path: "/getting-started/concepts" },
+        { title: "Troubleshooting", path: "/getting-started/troubleshooting" },
       ],
     },
     {
