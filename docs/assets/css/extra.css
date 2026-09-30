@@ -3,40 +3,8 @@
   font-size: 0.78rem;
 }
 
-.sidebar-header .logo-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
-  text-decoration: none;
-}
-
 .sidebar-header .logo-link img {
   margin: 0;
-}
-
-/* On the dark theme, sit the mark on a darker rounded backing so the orange
-   "tiger claw" facets read against it instead of the near-black sidebar. */
-html[data-theme="dark"] .sidebar-header .logo-link img {
-  background: #05070d;
-  padding: 0.3rem 0.55rem;
-  border-radius: 0.6rem;
-}
-
-/* The docmd theme renders the sidebar logo as an image only, so the wordmark
-   beside it comes from CSS. Doing it here rather than rewriting built HTML
-   keeps `docmd dev` and `docmd build` showing the same header. */
-.sidebar-header .logo-link::after {
-  content: "RSigma";
-  font-size: 2rem;
-  font-weight: 800;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  color: #000;
-  letter-spacing: -0.01em;
-  line-height: 1;
-}
-
-html[data-theme="dark"] .sidebar-header .logo-link::after {
-  color: #fff;
 }
 
 /* docmd renders headings as flex containers. Any inline markup in a heading

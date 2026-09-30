@@ -399,13 +399,24 @@ function injectAnalyticsConsentMode(html) {
 /** Legacy generated/copied brand files to remove when refreshing assets. */
 const STALE_BRAND_FILES = [
   "sidebar-logo.svg",
+  "logo.png",
   "logo-dark.png",
+  "favicon.png",
   "favicon-dark.png",
-  "favicon.svg",
   "rsigma-logotype.svg",
   "rsigma-logo.svg",
   "rsigma-logotype.png",
 ];
+
+/** Repo-root `assets/` brand files published under a fixed site name. */
+const BRAND_COPIES = {
+  "logo.svg": "rsigma-logotype-horizontal.svg",
+  "logo-dark.svg": "rsigma-logotype-horizontal-dark.svg",
+  "favicon.svg": "rsigma-icon.svg",
+};
+
+/** Sizes packed into `favicon.ico` for browsers without SVG favicon support. */
+const ICO_SIZES = [16, 32, 48];
 
 /** Repo-root `assets/` files copied into the site so pages can embed them. */
 const COPIED_ASSETS = ["detection-loop.svg", "architecture.svg", "internal_architecture.svg"];
@@ -425,53 +436,117 @@ function relinkToSiteBase(data) {
   return Buffer.from(data.toString("utf8").replaceAll(`href="${origin}`, `href="${base}`), "utf8");
 }
 
-/** @type {{ svg: string, images: Record<string, Buffer> } | null} */
+/** @type {{ key: string, images: Record<string, Buffer> } | null} */
 let brandImageCache = null;
 
 /**
- * Render the brand image set from the logo SVG: the sidebar logo (one image
- * serves both themes; the mark's orange facets carry it on any background, and
- * the dark theme adds a darker backing in CSS) plus a square PNG favicon.
- * Memoised on the SVG source so repeated builds in one `docmd dev` session
- * rasterise once.
+ * Pack PNG images into an ICO container. Every browser that still asks for
+ * `favicon.ico` reads PNG-encoded entries.
  *
- * @param {string} logoSvgPath
+ * @param {{ size: number, png: Buffer }[]} entries
+ * @returns {Buffer}
+ */
+function packIco(entries) {
+  const header = Buffer.alloc(6 + 16 * entries.length);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(entries.length, 4);
+  let offset = header.length;
+  entries.forEach(({ size, png }, i) => {
+    const at = 6 + 16 * i;
+    header.writeUInt8(size >= 256 ? 0 : size, at);
+    header.writeUInt8(size >= 256 ? 0 : size, at + 1);
+    header.writeUInt16LE(1, at + 4);
+    header.writeUInt16LE(32, at + 6);
+    header.writeUInt32LE(png.length, at + 8);
+    header.writeUInt32LE(offset, at + 12);
+    offset += png.length;
+  });
+  return Buffer.concat([header, ...entries.map((e) => e.png)]);
+}
+
+/**
+ * Build the brand image set from the repo-root `assets/` SVGs: the light and
+ * dark sidebar lockups and the SVG favicon are copied as-is; `favicon.ico`
+ * (from the small mark) and `apple-touch-icon.png` (the full mark on white,
+ * since iOS fills transparency with black) are rasterised. Memoised on the
+ * sources so repeated builds in one `docmd dev` session rasterise once.
+ *
+ * @param {string} assetsDir
  * @returns {Promise<Record<string, Buffer>>}
  */
-async function renderBrandImages(logoSvgPath) {
-  const svg = fs.readFileSync(logoSvgPath, "utf8");
-  if (brandImageCache && brandImageCache.svg === svg) {
+async function renderBrandImages(assetsDir) {
+  const read = (name) => {
+    const file = path.join(assetsDir, name);
+    if (!fs.existsSync(file)) {
+      throw new Error(`docmd-plugin-rsigma: missing brand asset ${file}`);
+    }
+    return fs.readFileSync(file);
+  };
+  const mark = read("rsigma-logo.svg");
+  const copies = Object.fromEntries(
+    Object.entries(BRAND_COPIES).map(([dest, src]) => [dest, read(src)]),
+  );
+  const key = [mark, ...Object.values(copies)].map((b) => b.toString("utf8")).join("\0");
+  if (brandImageCache && brandImageCache.key === key) {
     return brandImageCache.images;
   }
 
-  const mark = await sharp(Buffer.from(svg), { density: 192 })
-    .trim()
-    .png()
-    .toBuffer({ resolveWithObject: true });
+  const icon = copies["favicon.svg"];
+  const icoEntries = await Promise.all(
+    ICO_SIZES.map(async (size) => ({
+      size,
+      png: await sharp(icon, { density: 300 }).resize(size, size).png().toBuffer(),
+    })),
+  );
 
-  const logo = await sharp(mark.data)
-    .resize({ height: 512, withoutEnlargement: true })
-    .png()
-    .toBuffer();
-
-  // Pad to a square in one pipeline, then resize in another: sharp applies
-  // resize before extend within a single pipeline, so they must be separate.
-  const square = Math.max(mark.info.width, mark.info.height);
-  const squareBuf = await sharp(mark.data)
-    .extend({
-      top: Math.floor((square - mark.info.height) / 2),
-      bottom: Math.ceil((square - mark.info.height) / 2),
-      left: Math.floor((square - mark.info.width) / 2),
-      right: Math.ceil((square - mark.info.width) / 2),
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
+  const touchSize = 180;
+  const touchPad = 16;
+  const touchMark = await sharp(mark, { density: 300 })
+    .resize(touchSize - 2 * touchPad, touchSize - 2 * touchPad, {
+      fit: "contain",
+      background: { r: 255, g: 255, b: 255, alpha: 0 },
     })
     .png()
     .toBuffer();
-  const favicon = await sharp(squareBuf).resize(256, 256).png().toBuffer();
+  const touchIcon = await sharp(touchMark)
+    .extend({
+      top: touchPad,
+      bottom: touchPad,
+      left: touchPad,
+      right: touchPad,
+      background: { r: 255, g: 255, b: 255, alpha: 0 },
+    })
+    .flatten({ background: "#ffffff" })
+    .png()
+    .toBuffer();
 
-  const images = { "logo.png": logo, "favicon.png": favicon };
-  brandImageCache = { svg, images };
+  const images = {
+    ...copies,
+    "favicon.ico": packIco(icoEntries),
+    "apple-touch-icon.png": touchIcon,
+  };
+  brandImageCache = { key, images };
   return images;
+}
+
+/**
+ * docmd emits a single `<link rel="icon">` for `config.favicon`. Keep it as
+ * the SVG icon and add the ICO fallback (for browsers without SVG favicons)
+ * and the Apple touch icon beside it, reusing its page-relative prefix and
+ * cache-busting query.
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+function injectIconLinks(html) {
+  return html.replace(
+    /<link id="site-favicon" rel="icon" href="([^"]*)favicon\.svg(\?[^"]*)?">/,
+    (_tag, prefix, query = "") =>
+      `<link rel="icon" href="${prefix}favicon.ico${query}" sizes="32x32">` +
+      `<link id="site-favicon" rel="icon" href="${prefix}favicon.svg${query}" type="image/svg+xml">` +
+      `<link rel="apple-touch-icon" href="${prefix}apple-touch-icon.png${query}">`,
+  );
 }
 
 /**
@@ -496,16 +571,15 @@ function writeIfChanged(filePath, data) {
 
 /**
  * @param {string} destDir
- * @param {string} logoSvgPath
+ * @param {string} assetsDir
  */
-async function writeBrandImages(destDir, logoSvgPath) {
+async function writeBrandImages(destDir, assetsDir) {
   fs.mkdirSync(destDir, { recursive: true });
-  const images = await renderBrandImages(logoSvgPath);
+  const images = await renderBrandImages(assetsDir);
   for (const [name, data] of Object.entries(images)) {
     writeIfChanged(path.join(destDir, name), data);
   }
 
-  const assetsDir = path.dirname(logoSvgPath);
   for (const name of COPIED_ASSETS) {
     const src = path.join(assetsDir, name);
     if (!fs.existsSync(src)) {
@@ -523,8 +597,8 @@ async function writeBrandImages(destDir, logoSvgPath) {
 }
 
 /**
- * Generate brand images from the canonical theme-aware logo SVG at the repo
- * root into `{docsRoot}/assets/images/`. Keeps a single source of truth at the
+ * Generate brand images from the canonical SVGs in the repo-root `assets/`
+ * into `{docsRoot}/assets/images/`. Keeps a single source of truth at the
  * repo root without git symlinks (which break on many Windows clones and are
  * unreliable on static hosts).
  *
@@ -532,11 +606,7 @@ async function writeBrandImages(destDir, logoSvgPath) {
  * @param {string} docsRoot
  */
 async function syncBrandAssets(repoRoot, docsRoot) {
-  const logoSvg = path.join(repoRoot, "assets", "rsigma-logo.svg");
-  if (!fs.existsSync(logoSvg)) {
-    throw new Error(`docmd-plugin-rsigma: missing brand asset ${logoSvg}`);
-  }
-  await writeBrandImages(path.join(docsRoot, "assets", "images"), logoSvg);
+  await writeBrandImages(path.join(docsRoot, "assets", "images"), path.join(repoRoot, "assets"));
 }
 
 /**
@@ -681,10 +751,13 @@ export default {
     const log = typeof ctx?.log === "function" ? ctx.log : () => {};
     const docsRoot = process.cwd();
     const root = repoRoot ?? findRepoRoot(docsRoot);
-    const logoSvg = path.join(root, "assets", "rsigma-logo.svg");
-    await writeBrandImages(path.join(outputDir, "assets", "images"), logoSvg);
-    await writeBrandImages(path.join(docsRoot, "assets", "images"), logoSvg);
-    const ratios = diagramAspectRatios(path.dirname(logoSvg));
+    const assetsDir = path.join(root, "assets");
+    await writeBrandImages(path.join(outputDir, "assets", "images"), assetsDir);
+    await writeBrandImages(path.join(docsRoot, "assets", "images"), assetsDir);
+    // Browsers request /favicon.ico on their own for pages without icon links
+    // (raw files, feeds), so the site root carries a copy too.
+    writeIfChanged(path.join(outputDir, "favicon.ico"), (await renderBrandImages(assetsDir))["favicon.ico"]);
+    const ratios = diagramAspectRatios(assetsDir);
     let stripped = 0;
     let titlesRendered = 0;
     for (const file of collectHtmlFiles(outputDir)) {
@@ -694,6 +767,7 @@ export default {
         stripped += 1;
       }
       next = injectAnalyticsConsentMode(next);
+      next = injectIconLinks(next);
       next = embedInteractiveDiagrams(next, ratios);
       const withTitles = renderMarkdownTitles(next);
       if (withTitles !== next) {

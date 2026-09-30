@@ -10,12 +10,12 @@ export default {
   out: "site",
   base,
   logo: {
-    light: "/assets/images/logo.png",
-    dark: "/assets/images/logo.png",
+    light: "/assets/images/logo.svg",
+    dark: "/assets/images/logo-dark.svg",
     alt: "RSigma",
-    height: "3rem",
+    height: "2.75rem",
   },
-  favicon: "/assets/images/favicon.png",
+  favicon: "/assets/images/favicon.svg",
   theme: {
     appearance: "dark",
     customCss: ["/assets/css/extra.css"],
