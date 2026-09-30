@@ -4,6 +4,10 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### CLI command tree lists every subcommand (#520)
+
+The [CLI Reference](https://rsigma.io/cli/) command tree and quick-navigation table now match the binary: they add `rule test`, `hunt run`, and `taxii store`, follow the CLI's group order, and describe `engine incidents export` as exporting one incident's evidence bundle. The feature note adds `taxii store` to `taxii-sync` and notes that `hunt run --emit events` needs `hunt-postgres`.
+
 ### Plain-text code blocks render without highlighting (#520)
 
 Docs code blocks fenced as `text` (command trees, sample output, directory layouts) no longer pick up code coloring. The site's highlighter tokenizes every block the same way regardless of language, so an apostrophe such as the one in "daemon's" opened a colored "string" that ran to the next apostrophe; those blocks now render as escaped plain text.
