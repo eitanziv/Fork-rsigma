@@ -1,5 +1,7 @@
 # `rsigma backend targets`
 
+{{ added "0.12.0" }}
+
 List the conversion backends compiled into this binary.
 
 ## Synopsis

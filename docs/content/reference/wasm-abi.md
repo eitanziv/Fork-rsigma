@@ -1,5 +1,7 @@
 # WASM ABI
 
+{{ added "0.19.0" }}
+
 RSigma continuously builds `rsigma-parser` and `rsigma-eval` for `wasm32-unknown-unknown` with default features disabled, and CI instantiates a linked smoke module in a JavaScript-free runtime (Wasmtime). That verifies the crates remain host-neutral and free of JavaScript imports. There is no first-party published `.wasm` artifact and no shipped raw host/guest export surface today.
 
 This page reserves ABI version 1 as the design contract for a possible first-party guest. Downstream wrappers (for example [detection.studio](https://github.com/northsh/detection.studio/tree/main/rsigma-wasm) via `wasm-bindgen`) may use the crates today without implementing this ABI.

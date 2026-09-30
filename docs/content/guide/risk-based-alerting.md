@@ -1,5 +1,7 @@
 # Risk-Based Alerting
 
+{{ added "0.18.0" }}
+
 Risk-based alerting (RBA) shifts the unit of alerting from the individual detection to the **entity** a detection touches. Instead of paging on every firing, the daemon annotates each firing with a risk score and one or more risk objects (entities such as a user, host, or source IP), accumulates that risk per entity over a sliding window, and raises a single high-fidelity incident only when an entity's accumulated risk crosses a threshold. This is the model Splunk RBA and Entity Risk Scoring popularized: many low-signal detections become one well-evidenced incident on the entity they implicate.
 
 It is an optional, post-engine layer. It runs in the daemon sink path after enrichment and before the alert pipeline, so the evaluation hot path is untouched, and it is off unless you pass `--risk <path>` (or set `daemon.risk` in the config). Enabling annotation alone (no `incident:` block) is valid: every firing is scored and tagged with its entities, and you can route or accumulate that downstream.

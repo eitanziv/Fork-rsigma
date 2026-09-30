@@ -5,6 +5,8 @@ import { parse as parseYaml } from "yaml";
 
 /** @type {Record<string, unknown> | null} */
 let rsigmaVars = null;
+/** @type {Map<string, string> | null} */
+let releases = null;
 /** @type {string | null} */
 let repoRoot = null;
 /** Published site origin and base path, from the resolved docmd config. */
@@ -56,12 +58,16 @@ function loadRsigmaVars(root) {
     }
   }
 
+  const members = cargoText.match(/^members = \[([\s\S]*?)\]/m);
+  const crateCount = members ? [...members[1].matchAll(/"[^"]+"/g)].length : undefined;
+
   const rsigma = {
     ...(staticVars.rsigma ?? {}),
     version: pkg.version,
     edition: pkg.edition,
     msrv: pkg["rust-version"],
     license: pkg.license,
+    crate_count: crateCount,
   };
 
   return { rsigma };
@@ -106,6 +112,93 @@ function substituteRsigmaMacros(src, vars) {
     (_match, dottedPath, search, replaceWith) =>
       applyReplaceFilter(getVar(vars, `rsigma.${dottedPath}`), search, replaceWith),
   );
+}
+
+/**
+ * Read the released versions from `CHANGELOG.md` headings
+ * (`## [X.Y.Z] - YYYY-MM-DD`), keyed by version with the release date.
+ *
+ * @param {string} root Repository root.
+ * @returns {Map<string, string>}
+ */
+function loadReleases(root) {
+  const text = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
+  const releases = new Map();
+  for (const m of text.matchAll(/^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})\s*$/gm)) {
+    releases.set(m[1], m[2]);
+  }
+  return releases;
+}
+
+/**
+ * Heading id docmd assigns to a version section on the release-notes page,
+ * which inlines the changelog under its `# Changelog` title.
+ *
+ * @param {string} version `X.Y.Z` or `unreleased`
+ * @param {Map<string, string>} releases
+ * @returns {string}
+ */
+function releaseAnchor(version, releases) {
+  if (version === "unreleased") {
+    return "changelog-unreleased";
+  }
+  return `changelog-${version.replaceAll(".", "")}-${releases.get(version)}`;
+}
+
+/** Anchors emitted by version tags, checked against the built release notes. */
+const emittedReleaseAnchors = new Set();
+
+/**
+ * Expand `{{ added "X.Y.Z" }}` and `{{ added "unreleased" }}` into docmd
+ * inline tags linking to the matching release-notes section. Fenced code
+ * blocks and inline code spans are left alone so the syntax can be quoted.
+ *
+ * docmd does not rebase tag URLs for its pretty-URL output the way it does
+ * Markdown links, and it calls `onBeforeParse` for the home page without a
+ * file path, so the link is rooted at the site base rather than page-relative.
+ *
+ * @param {string} src
+ * @param {string} page Page path for error messages.
+ * @param {Map<string, string>} releases
+ * @returns {string}
+ */
+function expandVersionTags(src, page, releases) {
+  if (!/\{\{\s*added\s/.test(src)) {
+    return src;
+  }
+  const tagRe = /\{\{\s*added\s+"([^"]+)"\s*\}\}/g;
+  const notes = `${siteBase.endsWith("/") ? siteBase : `${siteBase}/`}release-notes/`;
+  const render = (_match, version) => {
+    if (version !== "unreleased" && !releases.has(version)) {
+      throw new Error(
+        `docmd-plugin-rsigma: ${page} tags unknown version "${version}"; use a released X.Y.Z from CHANGELOG.md or "unreleased"`,
+      );
+    }
+    const anchor = releaseAnchor(version, releases);
+    emittedReleaseAnchors.add(anchor);
+    return version === "unreleased"
+      ? `::: tag "Unreleased" icon:flask-conical color:#d97706 url:"${notes}#${anchor}"`
+      : `::: tag "Added in v${version}" icon:tag url:"${notes}#${anchor}"`;
+  };
+  const skipRe = /(`+[^`]*`+)/;
+  let inFence = false;
+  return src
+    .split("\n")
+    .map((line) => {
+      const t = line.trimStart();
+      if (t.startsWith("```") || t.startsWith("~~~")) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) {
+        return line;
+      }
+      return line
+        .split(skipRe)
+        .map((seg) => (seg.startsWith("`") ? seg : seg.replace(tagRe, render)))
+        .join("");
+    })
+    .join("\n");
 }
 
 /**
@@ -484,6 +577,7 @@ export default {
     const docsRoot = process.cwd();
     repoRoot = findRepoRoot(docsRoot);
     rsigmaVars = loadRsigmaVars(repoRoot);
+    releases = loadReleases(repoRoot);
     await syncBrandAssets(repoRoot, docsRoot);
   },
 
@@ -494,8 +588,12 @@ export default {
     if (!rsigmaVars) {
       rsigmaVars = loadRsigmaVars(repoRoot);
     }
+    if (!releases) {
+      releases = loadReleases(repoRoot);
+    }
     let out = inlineIncludeMarkdown(src, filePath ?? repoRoot, repoRoot);
     out = substituteRsigmaMacros(out, rsigmaVars);
+    out = expandVersionTags(out, filePath ?? "a page", releases);
     // Linkify `#123` issue/PR shorthand on the release-notes page (the inlined
     // CHANGELOG), replacing the old MkDocs magiclink behaviour.
     if (typeof filePath === "string" && /release-notes\.md$/.test(filePath)) {
@@ -539,8 +637,28 @@ export default {
         fs.writeFileSync(file, next);
       }
     }
+    const notesHtml = path.join(outputDir, "release-notes", "index.html");
+    if (emittedReleaseAnchors.size > 0 && fs.existsSync(notesHtml)) {
+      const notes = fs.readFileSync(notesHtml, "utf8");
+      const broken = [];
+      for (const file of collectHtmlFiles(outputDir)) {
+        const html = fs.readFileSync(file, "utf8");
+        for (const m of html.matchAll(/<a href="([^"]*)" class="docmd-tag-link"/g)) {
+          const [target, anchor = ""] = m[1].split("#");
+          const resolved = path.resolve(path.dirname(file), target, "index.html");
+          if (resolved !== notesHtml || !notes.includes(`id="${anchor}"`)) {
+            broken.push(`${path.relative(outputDir, file)} -> ${m[1]}`);
+          }
+        }
+      }
+      if (broken.length > 0) {
+        throw new Error(
+          `docmd-plugin-rsigma: version tags do not resolve to a release-notes heading:\n  ${broken.join("\n  ")}`,
+        );
+      }
+    }
     log(
-      `docmd-plugin-rsigma: stripped <base> tag from ${stripped} pages, rendered Markdown in ${titlesRendered} page titles`,
+      `docmd-plugin-rsigma: stripped <base> tag from ${stripped} pages, rendered Markdown in ${titlesRendered} page titles, checked ${emittedReleaseAnchors.size} version-tag anchors`,
     );
   },
 };

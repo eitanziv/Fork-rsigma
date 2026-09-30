@@ -1,5 +1,7 @@
 # Webhooks
 
+{{ added "0.17.0" }}
+
 The webhook sink delivers detections and correlations to any HTTP endpoint as a templated request. It is one generic, template-driven sink rather than a set of bespoke integrations: Slack, Microsoft Teams, Discord, and PagerDuty are field-parametric YAML recipes you paste and adapt (see the catalog below), and the engine stays service-agnostic.
 
 Webhooks compose with the other `--output` sinks. The daemon fans each result into every sink, so you can keep a durable NATS or file record while a webhook posts an alert to chat.

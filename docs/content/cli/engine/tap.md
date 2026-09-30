@@ -1,5 +1,7 @@
 # `rsigma engine tap`
 
+{{ added "0.17.0" }}
+
 Record a bounded, optionally-redacted window of a running daemon's live event stream into a replayable NDJSON fixture.
 
 ## Synopsis

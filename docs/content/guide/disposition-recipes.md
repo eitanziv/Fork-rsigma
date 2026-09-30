@@ -1,5 +1,7 @@
 # Disposition Source Recipes
 
+{{ added "0.19.0" }}
+
 The [triage feedback loop](triage-feedback.md) turns analyst verdicts into a live per-rule false-positive ratio. Its pull path, `--disposition-source`, reads verdicts from wherever they already live: your case system. This page gives copy-paste, tested `--disposition-source` configs for the three most common ones, TheHive, Jira, and GitHub Issues, so you do not have to re-derive the extract expression, the auth wiring, and the idempotency reasoning yourself.
 
 Each recipe is one [dynamic-source](../reference/dynamic-sources.md) file: an HTTP source that polls the case system for recently-closed cases on an interval, and a jq `extract` that reshapes that system's API response into [disposition records](triage-feedback.md#disposition-format). No extra service, no glue script. The exact files below are committed as test fixtures and run against canned API responses in CI, so they cannot silently drift from what the engine accepts.

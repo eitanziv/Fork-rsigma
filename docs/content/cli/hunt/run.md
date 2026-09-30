@@ -1,5 +1,7 @@
 # `rsigma hunt run`
 
+{{ added "0.22.0" }}
+
 Convert detection rules with the PostgreSQL backend, execute the query read-only against a log archive, and stream the matching rows back as exemplar-shaped NDJSON events.
 
 ## Synopsis

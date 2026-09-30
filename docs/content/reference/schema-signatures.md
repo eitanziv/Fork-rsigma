@@ -1,5 +1,7 @@
 # Schema Signatures
 
+{{ added "0.18.0" }}
+
 Schema signatures are the declarative rules that [schema routing](../guide/schema-routing.md) and [`engine classify`](../cli/engine/classify.md) use to recognize an event's schema from its content. This page is the complete reference for the signature grammar, the predicate forms, and their exact semantics.
 
 A signature is a `name`, an optional `specificity`, and a `match` list of predicates that must all hold (logical AND). Signatures are loaded from the `schemas:` block of a `--schema-config` YAML file and merged over the built-ins. Multiple signatures may share a `name` (this is how OR across whole signatures is expressed): the built-in `sysmon` schema is three separate signatures, and the classifier reports the shared name.

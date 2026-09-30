@@ -1,5 +1,7 @@
 # `rsigma engine eval`
 
+{{ added "0.12.0" }}
+
 One-shot evaluation of Sigma rules against events from a file, stdin, or an inline argument.
 
 ## Synopsis

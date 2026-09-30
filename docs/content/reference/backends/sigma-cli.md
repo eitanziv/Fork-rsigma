@@ -1,5 +1,7 @@
 # sigma-cli delegation
 
+{{ added "0.17.0" }}
+
 rsigma converts a handful of targets natively (`postgres`, `lynxdb`, `fibratus`). For any other target, `rsigma backend convert` delegates to an external [sigma-cli](https://github.com/SigmaHQ/sigma-cli) when one is installed, so the full pySigma backend ecosystem (`splunk`, `elasticsearch`, `kusto`, `qradar`, `loki`, `crowdstrike`, and 30+ more) is reachable through the same `rsigma backend convert` command. This is a light subprocess wrapper, not an embedded Python interpreter: no Python runtime is required unless you actually convert to a delegated target.
 
 ## Resolution order

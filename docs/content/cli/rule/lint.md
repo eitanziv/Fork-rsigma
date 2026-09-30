@@ -1,5 +1,7 @@
 # `rsigma rule lint`
 
+{{ added "0.12.0" }}
+
 Lint Sigma rules against the v2.1.0 specification with {{ rsigma.lint.rules }} built-in checks.
 
 ## Synopsis

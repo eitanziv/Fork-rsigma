@@ -1,5 +1,7 @@
 # Schema Routing
 
+{{ added "0.18.0" }}
+
 Real-world streams mix log schemas: one feed can carry ECS-normalized events, raw (rendered) Windows Event Log, flat Sysmon JSON, CEF, OCSF, and vendor-specific shapes, often all as JSON with only the field names differing. Schema routing recognizes each event's schema from its content and evaluates it against the field-mapping pipeline bound to that schema, so a single ruleset matches across all of them without pre-splitting the stream upstream.
 
 It builds on [schema classification](../cli/engine/classify.md): the same signatures that `engine classify` reports drive the routing decision.

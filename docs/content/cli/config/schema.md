@@ -1,5 +1,7 @@
 # `rsigma config schema`
 
+{{ added "0.14.0" }}
+
 Emit a [JSON Schema](https://json-schema.org/) describing the RSigma config file.
 
 ## Synopsis

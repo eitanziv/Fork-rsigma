@@ -1,5 +1,7 @@
 # rstix
 
+{{ added "0.15.0" }}
+
 `rstix` is the RSigma workspace crate for **STIX 2.1**. It provides typed Rust objects for all 42 built-in STIX types (3 meta, 19 SDO, 2 SRO, 18 SCO), bundle ingestion with streaming, extension round-trip, T1 advisory validation via `Bundle::validate()` (default `serde`), and an optional T2 Validation Pipeline (`validate` feature).
 
 API reference: [docs.rs/rstix](https://docs.rs/rstix), the [crate README](https://github.com/timescale/rsigma/blob/main/crates/rstix/README.md), and the [crate source](https://github.com/timescale/rsigma/tree/main/crates/rstix).

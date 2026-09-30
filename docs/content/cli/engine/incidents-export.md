@@ -1,5 +1,7 @@
 # `rsigma engine incidents export`
 
+{{ added "0.21.0" }}
+
 Pull one incident's bundle from a running daemon and write it to stdout or a file.
 
 ## Synopsis

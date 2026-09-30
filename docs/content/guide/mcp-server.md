@@ -1,5 +1,7 @@
 # MCP Server
 
+{{ added "0.16.0" }}
+
 `rsigma mcp serve` runs a [Model Context Protocol](https://modelcontextprotocol.io) server that gives any MCP-aware agent (Cursor, Claude Code, and others) a structured tool surface over the RSigma Sigma toolchain. Instead of shelling out to the CLI and scraping text, an agent calls typed tools and gets back machine-readable JSON: ASTs, lint findings with spans and fix availability, evaluation matches, backend queries, reverse-converted drafts, and field inventories.
 
 The server is gated behind the opt-in `mcp` Cargo feature. Build from source with `--features mcp`; the prebuilt binaries and Docker image (built with `--all-features`) include it.
@@ -63,17 +65,19 @@ Fifteen Engineer-cycle tools always register. When `--daemon-url` (or `mcp.daemo
 | `fix_rules` | `yaml` or file `path`, `lint_rules`, `write` | Applies safe auto-fixes; returns the fixed YAML and applied/failed/skipped-unsafe counts. `write: true` (path only) persists to disk. |
 | `author_ads` | `yaml` or file/dir `path` | Per rule: the current ADS sections, the required sections missing under the active config, and a `rsigma.ads.*` scaffold to complete. |
 | `tune_rules` | rules (`yaml` or confined file/dir `path`), target `rule`, inline `false_positives` and `true_positives`, optional `pipelines` and tuning bounds | A verified `TuneReport` containing filter YAML, field rationale, clusters, FP coverage, warnings, and before/after counts. |
-| `test_exemplars` | rules (`yaml` or confined file/dir `path`), optional `pipelines` | The shared exemplar report: per-entry expect/actual/pass plus rules with no exemplars. |
-| `list_incidents` | optional `min_level`, `limit` | Open incidents from `GET /api/v1/incidents`. Registers when a daemon URL is set. |
-| `get_incident` | `id` | One open incident from `GET /api/v1/incidents/{id}`. 404 and grouping-disabled 503 come back as content errors. |
-| `get_incident_bundle` | `id`, optional `format` (`json` or `markdown`) | Evidence bundle from `GET /api/v1/incidents/{id}/bundle`. |
-| `list_risk_entities` | (none) | Open risk entities from `GET /api/v1/risk`. Empty responses include a note so a disabled accumulator is not mistaken for a clean estate. |
-| `get_rule_quality` | optional `rule_id` | Per-rule quality view from `GET /api/v1/dispositions`. |
-| `list_silences` | (none) | Operator silences from `GET /api/v1/silences`, with `origin` and `state`. |
-| `create_silence` | `matchers`, exactly one of `ends_at` or `duration`, optional `id`/`starts_at`/`comment`/`created_by` | Write-gated. Creates a TTL-bounded silence; a retried client `id` returns the existing entry. |
-| `post_disposition` | `verdict` plus `fingerprint` or `incident_id`, optional `rule_id`/`scope`/`timestamp`/`analyst`/`note` | Write-gated. Returns the ingest summary; a redelivered identity is `duplicate`, not an error. |
+| `test_exemplars` | rules (`yaml` or confined file/dir `path`), optional `pipelines` | The shared exemplar report: per-entry expect/actual/pass plus rules with no exemplars. {{ added "0.22.0" }} |
+| `list_incidents` | optional `min_level`, `limit` | Open incidents from `GET /api/v1/incidents`. Registers when a daemon URL is set. {{ added "0.22.0" }} |
+| `get_incident` | `id` | One open incident from `GET /api/v1/incidents/{id}`. 404 and grouping-disabled 503 come back as content errors. {{ added "0.22.0" }} |
+| `get_incident_bundle` | `id`, optional `format` (`json` or `markdown`) | Evidence bundle from `GET /api/v1/incidents/{id}/bundle`. {{ added "0.22.0" }} |
+| `list_risk_entities` | (none) | Open risk entities from `GET /api/v1/risk`. Empty responses include a note so a disabled accumulator is not mistaken for a clean estate. {{ added "0.22.0" }} |
+| `get_rule_quality` | optional `rule_id` | Per-rule quality view from `GET /api/v1/dispositions`. {{ added "0.22.0" }} |
+| `list_silences` | (none) | Operator silences from `GET /api/v1/silences`, with `origin` and `state`. {{ added "0.22.0" }} |
+| `create_silence` | `matchers`, exactly one of `ends_at` or `duration`, optional `id`/`starts_at`/`comment`/`created_by` | Write-gated. Creates a TTL-bounded silence; a retried client `id` returns the existing entry. {{ added "0.22.0" }} |
+| `post_disposition` | `verdict` plus `fingerprint` or `incident_id`, optional `rule_id`/`scope`/`timestamp`/`analyst`/`note` | Write-gated. Returns the ingest summary; a redelivered identity is `duplicate`, not an error. {{ added "0.22.0" }} |
 
 ## Operate cycle
+
+{{ added "0.22.0" }}
 
 The operate tools are thin wrappers over the daemon control-plane API. They register only when the MCP server is pointed at a daemon, and the two mutating tools take a second explicit gate. An agent discovers what it is allowed to do from `tools/list`.
 

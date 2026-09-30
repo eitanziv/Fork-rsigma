@@ -118,3 +118,13 @@ An article series on building RSigma and using it in production:
 - **Cross-platform binaries:** Linux, macOS, Windows on amd64 and arm64.
 - **Container image:** `{{ rsigma.docker_image }}:latest` (multi-arch, cosign-signed, SBOM, SLSA Build L3 provenance).
 - **Benchmarks:** detection and correlation throughput numbers live on the [benchmarks](benchmarks.md) page.
+
+## Versions
+
+This site is published from the `main` branch, so it can describe changes that are not in a release yet. Tags show when something became available, and each tag links to its release notes:
+
+- A tag below a page title, such as {{ added "0.22.0" }}, gives the release that added the command or feature. Every CLI command page has one; commands that predate v0.12.0 show v0.12.0, the release that moved the CLI to command groups and gave them their current names. Guide and reference pages without a tag describe features available since v0.12.0.
+- A tag on a section, flag, config key, or table row marks an addition made to an existing page from v0.22.0 onward. For older changes within a page, see the [release notes](release-notes.md).
+- {{ added "unreleased" }} marks a change merged to `main` that is not in a release yet.
+
+Run `rsigma --version` to see which release you have.

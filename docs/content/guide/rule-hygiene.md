@@ -1,5 +1,7 @@
 # Rule Hygiene
 
+{{ added "0.18.0" }}
+
 Detection programs accumulate rules faster than they retire them. Elastic's [Detection Engineering Behavior Maturity Model (DEBMM)](https://www.elastic.co/security-labs/elastic-releases-debmm) puts structured rule management, continuous review, and low-noise maintenance at the center of a mature detection program, and published lifecycles such as the [SANS detection engineering lifecycle](https://www.sans.org/blog/logs-alerts-introducing-detection-engineering-poster) treat deployment and maintenance (including tuning and retirement) as an ongoing phase rather than a one-time ship. Without a forcing function the catalog fills with unowned, untagged, never-firing, and stale rules. `rsigma rule hygiene` is that forcing function. It assembles the signals RSigma already produces into one report of retirement and clean-up candidates, then lets CI gate on them.
 
 This guide covers which input feeds which signal, how to read the report, and how to wire `--fail-on` into CI.

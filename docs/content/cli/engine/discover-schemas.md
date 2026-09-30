@@ -1,5 +1,7 @@
 # `rsigma engine discover-schemas`
 
+{{ added "0.19.0" }}
+
 Mine unrecognized events into candidate schema signatures you can review and commit.
 
 ## Synopsis

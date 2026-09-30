@@ -1,5 +1,7 @@
 # `rsigma rule visibility`
 
+{{ added "0.17.0" }}
+
 Score telemetry visibility: turn the field-observability signal into a [DeTT&CT](https://github.com/rabobank-cdc/DeTTECT) data-source and technique administration YAML plus a visibility [ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/) layer.
 
 ## Synopsis

@@ -1,5 +1,7 @@
 # `rsigma rule doc`
 
+{{ added "0.18.0" }}
+
 Report or scaffold the Alerting and Detection Strategy (ADS) document for one or more Sigma rules.
 
 ## Synopsis

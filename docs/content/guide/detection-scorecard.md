@@ -1,5 +1,7 @@
 # Detection Scorecard
 
+{{ added "0.17.0" }}
+
 The detection scorecard is the single artifact a mature detection program reviews on a cadence: a per-rule table of precision, volume, ATT&CK context, and a keep/tune/retire verdict. [`rsigma rule scorecard`](../cli/rule/scorecard.md) produces it by fusing the rule-side outputs the toolkit already emits, so it adds no new collection or evaluation.
 
 ## Why a scorecard

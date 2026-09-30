@@ -1,5 +1,7 @@
 # `rsigma taxii sync`
 
+{{ added "0.23.0" }}
+
 Fetch objects from a TAXII 2.1 collection and persist them in a local on-disk STIX store ([`FsStore`](../../library/rstix.md#rstix-graph-marking-store)).
 
 Requires the **`taxii-sync`** Cargo feature (included in prebuilt release binaries and the GHCR image built with `--all-features`).

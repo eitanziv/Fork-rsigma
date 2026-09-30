@@ -1,5 +1,7 @@
 # Logsource-Aware Evaluation
 
+{{ added "0.18.0" }}
+
 When one stream carries events from many platforms (Windows servers and Linux hosts on the same collector, say), most rules in a large ruleset cannot apply to any given event: a `product: windows` rule never matches a Linux event, and vice versa. Logsource-aware evaluation lets an event tagged with its logsource skip the rules that definitely conflict with it, so a mixed-product stream only pays for the rules that can match.
 
 This is the lighter, single-engine sibling of [schema routing](schema-routing.md). Schema routing recognizes an event's schema and applies the matching field-mapping pipeline; logsource routing keeps one ruleset in its native field names and prunes by the rule's declared `product`/`service`/`category`. The two compose: with both enabled, each routed per-schema engine also prunes its own candidates by logsource.

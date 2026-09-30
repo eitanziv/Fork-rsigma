@@ -46,6 +46,8 @@ custom_attributes:
 
 ## `rsigma.exemplars`
 
+{{ added "0.22.0" }}
+
 A list of machine-verifiable example events on a detection or correlation rule. Nested `custom_attributes.rsigma.exemplars` wins over a top-level dotted `rsigma.exemplars` key, matching the parser's existing custom-attribute precedence. Filter rules must not carry exemplars.
 
 ```yaml

@@ -1,5 +1,7 @@
 # `rsigma engine tail`
 
+{{ added "0.17.0" }}
+
 Stream a running daemon's live detections to the terminal.
 
 ## Synopsis

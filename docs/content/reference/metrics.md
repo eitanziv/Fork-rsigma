@@ -200,6 +200,8 @@ Exposed when the triage feedback loop is enabled (`daemon.dispositions.enabled: 
 
 ## Verdict-driven capture (7 metrics)
 
+{{ added "0.22.0" }}
+
 Exposed when capture is compiled into the daemon. Counters pre-register their fixed label sets so they render with zeroed series on the first scrape. See [Verdict-Driven Corpora](../guide/verdict-to-corpus.md).
 
 | Metric | Type | Labels | Description |

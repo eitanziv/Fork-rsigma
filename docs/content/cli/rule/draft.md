@@ -1,5 +1,7 @@
 # `rsigma rule draft`
 
+{{ added "0.19.0" }}
+
 Draft a Sigma detection rule or temporal correlation from exemplar events, optionally contrasted against a baseline corpus.
 
 ## Synopsis
@@ -23,8 +25,8 @@ Two things stay yours: the metadata (title, description, tags, level are placeho
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-e, --event <EVENT>` | stdin | Exemplars: a single event as a JSON string, or `@path` to an NDJSON file (or `.evtx` in builds with the `evtx` feature). If omitted, reads NDJSON from stdin. |
-| `--groups <@PATH>` | unset | Grouped, timed exemplars from one envelope NDJSON file or a directory containing one NDJSON file per group. |
-| `--negative <@PATH>` | unset | Grouped examples that the drafted correlation must not match. Requires `--groups`. |
+| `--groups <@PATH>` | unset | Grouped, timed exemplars from one envelope NDJSON file or a directory containing one NDJSON file per group. {{ added "0.22.0" }} |
+| `--negative <@PATH>` | unset | Grouped examples that the drafted correlation must not match. Requires `--groups`. {{ added "0.22.0" }} |
 | `--group-by <FIELD>` | inferred | Correlation entity field. Repeatable for an explicit composite key. |
 | `--correlation-type <auto\|temporal\|temporal_ordered>` | `auto` | Infer consistent ordering, force unordered temporal behavior, or require consistent ordering. |
 | `--min-groups <N>` | `3` | Minimum positive groups required for correlation drafting. |
@@ -98,6 +100,8 @@ rsigma engine eval --rules draft.yml -e @incident.ndjson
 The command already runs this loop internally (the draft is guaranteed to parse, lint findings surface as warnings, and every exemplar matches), but re-running it after your metadata edits catches typos.
 
 ### Draft a temporal correlation
+
+{{ added "0.22.0" }}
 
 Envelope NDJSON carries a group id, exactly one time key, and an event:
 

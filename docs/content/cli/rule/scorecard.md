@@ -1,5 +1,7 @@
 # `rsigma rule scorecard`
 
+{{ added "0.17.0" }}
+
 Fuse the detection-as-code rule-side outputs into the per-rule keep/tune/retire verdict table a mature detection program reviews on a cadence.
 
 ## Synopsis

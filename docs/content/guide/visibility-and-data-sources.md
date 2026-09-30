@@ -1,5 +1,7 @@
 # Visibility and Data Sources
 
+{{ added "0.17.0" }}
+
 Detection coverage answers "which techniques do my rules detect." Visibility answers a question that comes first: "which telemetry do I actually receive, and do my rules depend on data I am not collecting." A rule for a data source you do not ingest never fires, no matter how good it is. [`rsigma rule visibility`](../cli/rule/visibility.md) turns the field-observability signal RSigma already produces into the two artifacts blue teams use to track data-source maturity: a [DeTT&CT](https://github.com/rabobank-cdc/DeTTECT) administration pair and a visibility [ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/) layer.
 
 ## The workflow

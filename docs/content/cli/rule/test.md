@@ -1,5 +1,7 @@
 # `rsigma rule test`
 
+{{ added "0.22.0" }}
+
 Replay embedded `rsigma.exemplars` against their host detection and correlation rules.
 
 ## Synopsis

@@ -1,5 +1,7 @@
 # `rsigma rule condition`
 
+{{ added "0.12.0" }}
+
 Parse a Sigma condition expression and print the AST.
 
 ## Synopsis

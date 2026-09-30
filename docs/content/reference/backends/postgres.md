@@ -38,9 +38,9 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 | `exists: false` | `"field" IS NULL` |
 | `all` | values combined with `AND` instead of the default `OR` |
 | `fieldref` | `lower(("field")::text) = lower(("other")::text)` (case-insensitive); `"field" = "other"` with `cased` |
-| `fieldref` with `contains` | `strpos(lower(("field")::text), lower(("other")::text)) > 0`. `startswith` uses `strpos(...) = 1`. `endswith` uses `right(("field")::text, char_length(("other")::text)) = ("other")::text`. `|cased` drops the `lower()` calls. `%` and `_` in the referenced value stay literal. |
+| `fieldref` with `contains` | `strpos(lower(("field")::text), lower(("other")::text)) > 0`. `startswith` uses `strpos(...) = 1`. `endswith` uses `right(("field")::text, char_length(("other")::text)) = ("other")::text`. `|cased` drops the `lower()` calls. `%` and `_` in the referenced value stay literal. {{ added "0.23.0" }} |
 | `neq` | `NOT "field" = 'value'`. A list negates the whole item: `NOT ("field" = 'a' OR "field" = 'b')`. |
-| `fieldref` with `neq` | `(lower(("field")::text) = lower(("other")::text)) IS NOT TRUE AND "field" IS NOT NULL`. A missing referenced field still matches when the left field is present. |
+| `fieldref` with `neq` | `(lower(("field")::text) = lower(("other")::text)) IS NOT TRUE AND "field" IS NOT NULL`. A missing referenced field still matches when the left field is present. {{ added "0.23.0" }} |
 | `null` value | `"field" IS NULL` |
 | keywords | `to_tsvector('simple', ROW(*)::text) @@ plainto_tsquery('simple', 'value')` |
 

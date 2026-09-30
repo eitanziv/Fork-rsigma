@@ -1,5 +1,7 @@
 # `rsigma engine status`
 
+{{ added "0.17.0" }}
+
 Query a running daemon's `/api/v1/status` endpoint and render the snapshot through the shared output layer.
 
 ## Synopsis
