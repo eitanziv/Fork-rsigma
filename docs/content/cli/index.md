@@ -2,7 +2,7 @@
 
 `rsigma` is a single binary that exposes every operation through noun-led command groups: `engine`, `rule`, `backend`, `pipeline`, `hunt`, `taxii`, `mcp`, and `config`. Each subcommand is independent and self-contained; there is no global state. A YAML config file is optional but supported, with strict flag > env > file > default precedence. See the [Configuration Reference](../reference/configuration.md).
 
-`engine daemon` and `pipeline resolve` require the `daemon` Cargo feature; `mcp` requires the `mcp` feature; `taxii sync` requires the `taxii-sync` feature. Prebuilt release archives and the GHCR Docker image are built with `--all-features`, so those commands are present there. Source builds need the matching features enabled.
+`engine daemon` and `pipeline resolve` require the `daemon` Cargo feature; `mcp` requires the `mcp` feature; `taxii sync` and `taxii store` require the `taxii-sync` feature; `hunt run --emit events` requires the `hunt-postgres` feature (`--emit sql` works without it). Prebuilt release archives and the GHCR Docker image are built with `--all-features`, so those commands are present there. Source builds need the matching features enabled.
 
 This reference documents every subcommand with its flag table, verified examples, and exit-code semantics. For narrative walkthroughs see the [User Guide](../guide/evaluating-rules.md).
 
@@ -11,9 +11,10 @@ This reference documents every subcommand with its flag table, verified examples
 | Group | Subcommands | What it does |
 |-------|-------------|--------------|
 | [`engine`](engine/eval.md) | `eval`, `explain`, `classify`, `discover-schemas`, `status`, `incidents export`, `tap`, `tail`, `daemon` | Run and inspect Sigma rules against events: one-shot, explain, classify, or long-running |
-| [`rule`](rule/parse.md) | `parse`, `validate`, `lint`, `fields`, `draft`, `tune`, `reverse`, `doc`, `backtest`, `coverage`, `scorecard`, `visibility`, `hygiene`, `condition`, `stdin`, `migrate-sources` | Inspect, draft, lint, tune, reverse-convert, backtest, score, and ATT&CK-map Sigma rule files |
+| [`rule`](rule/parse.md) | `parse`, `validate`, `lint`, `fields`, `draft`, `tune`, `reverse`, `doc`, `test`, `backtest`, `coverage`, `scorecard`, `visibility`, `hygiene`, `condition`, `stdin`, `migrate-sources` | Inspect, draft, lint, tune, reverse-convert, backtest, score, and ATT&CK-map Sigma rule files |
 | [`backend`](backend/convert.md) | `convert`, `targets`, `formats` | Convert Sigma rules into backend-native queries (PostgreSQL, LynxDB, Fibratus, and delegated sigma-cli targets) |
 | [`pipeline`](pipeline/diff.md) | `diff`, `resolve` | Diff pipeline rewrites and test dynamic sources |
+| [`hunt`](hunt/run.md) | `run` | Hunt a PostgreSQL/TimescaleDB archive with converted rules, streaming matches back as events |
 | [`mcp`](mcp/serve.md) | `serve` | Run the Model Context Protocol server for agent tooling (`mcp` feature) |
 | [`taxii`](taxii/sync.md) | `sync`, `store` | TAXII collection sync and local bundle import into a STIX store (`taxii-sync` feature) |
 | [`config`](config/init.md) | `init`, `validate`, `show`, `schema`, `path`, `reload` | Scaffold, validate, introspect, and reload the YAML config file |
@@ -45,7 +46,7 @@ rsigma
 │   ├── discover-schemas       mine unrecognized events into candidate schemas
 │   ├── status                 query a running daemon's /api/v1/status snapshot
 │   ├── incidents
-│   │   └── export             export open incidents from a running daemon
+│   │   └── export             export one incident's evidence bundle
 │   ├── tap                    capture a bounded window of the live event stream
 │   ├── tail                   stream a running daemon's live detections
 │   └── daemon                 long-running streaming detection (`daemon` feature)
@@ -58,6 +59,7 @@ rsigma
 │   ├── tune                   propose a verified filter from FP/TP exemplars
 │   ├── reverse                reverse-convert a SIEM query into a draft Sigma rule
 │   ├── doc                    report or scaffold ADS detection-strategy documents
+│   ├── test                   replay embedded rsigma.exemplars against their rules
 │   ├── backtest               replay a corpus and diff per-rule fires vs expectations
 │   ├── coverage               map rules onto ATT&CK; Navigator export + gap analysis
 │   ├── scorecard              fuse backtest/coverage into keep/tune/retire verdicts
@@ -73,17 +75,20 @@ rsigma
 ├── pipeline
 │   ├── diff                   show how pipelines rewrite a rule before evaluation
 │   └── resolve                offline source resolution + dry-run (`daemon` feature)
+├── hunt                       (`hunt-postgres` feature for `--emit events`)
+│   └── run                    hunt a PostgreSQL archive with converted rules
 ├── mcp                        (`mcp` feature)
 │   └── serve                  run the Model Context Protocol server
-├── taxii                      (`taxii-sync` feature)
-│   └── sync                   import a TAXII collection into a local store
-└── config
-    ├── init                   scaffold a commented rsigma.yaml
-    ├── validate               check files for unknown keys and inactive sections
-    ├── show                   print the effective config with per-leaf sources
-    ├── schema                 emit the JSON Schema
-    ├── path                   list the config files that would be loaded
-    └── reload                 hot-reload a running daemon (POST /api/v1/reload)
+├── config
+│   ├── init                   scaffold a commented rsigma.yaml
+│   ├── validate               check files for unknown keys and inactive sections
+│   ├── show                   print the effective config with per-leaf sources
+│   ├── schema                 emit the JSON Schema
+│   ├── path                   list the config files that would be loaded
+│   └── reload                 hot-reload a running daemon (POST /api/v1/reload)
+└── taxii                      (`taxii-sync` feature)
+    ├── sync                   import a TAXII collection into a local store
+    └── store                  import a local STIX bundle file into a store
 ```
 
 ## Exit codes

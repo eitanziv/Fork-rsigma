@@ -4,6 +4,18 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### CLI command tree lists every subcommand (#520)
+
+The [CLI Reference](https://rsigma.io/cli/) command tree and quick-navigation table now match the binary: they add `rule test`, `hunt run`, and `taxii store`, follow the CLI's group order, and describe `engine incidents export` as exporting one incident's evidence bundle. The feature note adds `taxii store` to `taxii-sync` and notes that `hunt run --emit events` needs `hunt-postgres`.
+
+### Plain-text code blocks render without highlighting (#520)
+
+Docs code blocks fenced as `text` (command trees, sample output, directory layouts) no longer pick up code coloring. The site's highlighter tokenizes every block the same way regardless of language, so an apostrophe such as the one in "daemon's" opened a colored "string" that ran to the next apostrophe; those blocks now render as escaped plain text.
+
+### Redraw the architecture diagrams (#520)
+
+The ecosystem diagram now shows the daemon as it runs today: rules, pipelines, log events, dynamic sources, and TAXII-synced threat intel feeding the detection engine, enrichment (including `stix` lookups), the opt-in risk, alert pipeline, and disposition layers, and the state store, with the HTTP API, operator tooling, sinks (including webhook and OCSF output), and the paths outside the daemon (`engine eval`, `backend convert`, `hunt run`, rule authoring, MCP, LSP). The crate map is now a dependency graph of all nine crates, including `rstix`, drawn from the actual `Cargo.toml` edges. Both diagrams follow the reader's light or dark preference, and on the [Architecture](https://rsigma.io/reference/architecture/) page every label links to the guide, reference, or CLI section it names. The page drops its Mermaid copy along with `assets/architecture.mmd`, and its dependency notes are corrected: `rsigma-convert` depends on `rsigma-eval`, `rsigma-runtime` depends on `rstix`, and the CLI does not depend on `rsigma-lsp`.
+
 ### Docs: version tags, deployment guides, a loop tutorial, and troubleshooting (#519)
 
 Every CLI command page, and every guide, reference, and library page for a feature added after v0.12.0, now carries an "Added in vX" tag linking to that release's notes; sections and table rows added since v0.22.0 are tagged too, and unreleased work shows an "Unreleased" tag until the release that ships it. The build fails when a tag names an unknown release or its link does not resolve.
