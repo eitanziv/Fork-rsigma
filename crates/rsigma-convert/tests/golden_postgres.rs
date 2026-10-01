@@ -119,3 +119,8 @@ fn golden_neq() {
 fn golden_custom_table() {
     run_golden("custom_table");
 }
+
+#[test]
+fn golden_temporal_default_condition() {
+    run_golden("temporal_default_condition");
+}
