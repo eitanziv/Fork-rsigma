@@ -159,8 +159,8 @@ fn cmd_hunt_run(args: HuntRunArgs, ctx: &OutputCtx) {
         })
     };
     let window = HuntWindow {
-        since: args.since.as_deref().map(&parse_bound),
-        until: args.until.as_deref().map(&parse_bound),
+        since: args.since.as_deref().map(parse_bound),
+        until: args.until.as_deref().map(parse_bound),
     };
 
     let options: HashMap<String, String> = args

@@ -198,6 +198,58 @@ fn test_window_temporal_ordered_wrong_order() {
 }
 
 #[test]
+fn test_window_temporal_duplicate_rule_refs_count_once() {
+    let refs = vec![
+        "rule_a".to_string(),
+        "rule_a".to_string(),
+        "rule_b".to_string(),
+    ];
+    let cond = CompiledCondition {
+        field: None,
+        predicates: vec![(ConditionOperator::Gte, 2.0)],
+        percentile: None,
+    };
+    let mut state = WindowState::new_for(CorrelationType::Temporal);
+    state.push_temporal(1000, "rule_a");
+    assert!(
+        state
+            .check_condition(&cond, CorrelationType::Temporal, &refs, None)
+            .is_none()
+    );
+    assert_eq!(
+        state.current_value(CorrelationType::Temporal, &refs, None),
+        Some(1.0)
+    );
+
+    state.push_temporal(1001, "rule_b");
+    assert_eq!(
+        state.check_condition(&cond, CorrelationType::Temporal, &refs, None),
+        Some(2.0)
+    );
+}
+
+#[test]
+fn test_window_temporal_ordered_duplicate_rule_refs_count_once() {
+    let refs = vec![
+        "rule_a".to_string(),
+        "rule_a".to_string(),
+        "rule_b".to_string(),
+    ];
+    let mut state = WindowState::new_for(CorrelationType::TemporalOrdered);
+    state.push_temporal(1000, "rule_a");
+    state.push_temporal(1001, "rule_b");
+    let cond = CompiledCondition {
+        field: None,
+        predicates: vec![(ConditionOperator::Gte, 2.0)],
+        percentile: None,
+    };
+    assert_eq!(
+        state.check_condition(&cond, CorrelationType::TemporalOrdered, &refs, None),
+        Some(2.0)
+    );
+}
+
+#[test]
 fn test_window_value_sum() {
     let mut state = WindowState::new_for(CorrelationType::ValueSum);
     state.push_numeric(1000, 500.0);

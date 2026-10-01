@@ -231,7 +231,7 @@ When the `re` modifier is present, string values are parsed with `SigmaValue::fr
 
 - **Threshold (mapping):** `{ gte: 100 }` or `{ gt: 10, lte: 100, field: "TargetUser" }`. Operators: `lt`, `lte`, `gt`, `gte`, `eq`, `neq`. Values must be numeric.
 - **Extended (string):** `"rule_a and rule_b"` for temporal types — parsed as a boolean expression over rule references.
-- **Default (temporal, no condition):** `Threshold { predicates: [(Gte, 1)], field: None }`.
+- **Default (temporal, no condition):** `Threshold { predicates: [(Gte, N)], field: None }`, where `N` is the number of distinct entries in `rules`, so every referenced rule must match within the timespan. A temporal correlation with neither a condition nor any rules is a parse error.
 - **Timeframe/timespan:** The parser accepts both `timeframe` and `timespan` keys.
 - **Custom attributes:** Both detection and correlation rules expose a unified `custom_attributes` map (`HashMap<String, yaml_serde::Value>`). It merges (a) any arbitrary top-level YAML key that is not part of the Sigma schema, (b) entries of the optional top-level `custom_attributes:` mapping (explicit block wins over arbitrary keys of the same name), and (c) values set by pipeline `SetCustomAttribute` transformations (applied last, last-write-wins). Engines read `rsigma.*` extensions (`rsigma.suppress`, `rsigma.action`, `rsigma.correlation_event_mode`, etc.) from this map.
 

@@ -234,22 +234,12 @@ impl WindowState {
                 // If an extended expression is provided, evaluate it
                 if let Some(expr) = extended_expr {
                     if eval_temporal_expr(expr, rule_hits) {
-                        // Return the count of fired rules as the value
-                        let fired: usize = rule_refs
-                            .iter()
-                            .filter(|r| rule_hits.get(r.as_str()).is_some_and(|ts| !ts.is_empty()))
-                            .count();
-                        return Some(fired as f64);
+                        return Some(count_fired_rules(rule_refs, rule_hits) as f64);
                     } else {
                         return None;
                     }
                 }
-                // Default: count how many distinct referenced rules have fired
-                let fired: usize = rule_refs
-                    .iter()
-                    .filter(|r| rule_hits.get(r.as_str()).is_some_and(|ts| !ts.is_empty()))
-                    .count();
-                fired as f64
+                count_fired_rules(rule_refs, rule_hits) as f64
             }
             (WindowState::Temporal { rule_hits }, CorrelationType::TemporalOrdered) => {
                 // If an extended expression is provided, evaluate it first
@@ -260,7 +250,7 @@ impl WindowState {
                 }
                 // Check if all referenced rules fired in order
                 if check_temporal_ordered(rule_refs, rule_hits) {
-                    rule_refs.len() as f64
+                    count_distinct_rules(rule_refs) as f64
                 } else {
                     0.0
                 }
@@ -367,13 +357,7 @@ impl WindowState {
             (
                 WindowState::Temporal { rule_hits },
                 CorrelationType::Temporal | CorrelationType::TemporalOrdered,
-            ) => {
-                let fired = rule_refs
-                    .iter()
-                    .filter(|r| rule_hits.get(r.as_str()).is_some_and(|ts| !ts.is_empty()))
-                    .count();
-                Some(fired as f64)
-            }
+            ) => Some(count_fired_rules(rule_refs, rule_hits) as f64),
             (WindowState::NumericAgg { entries }, CorrelationType::ValueSum) => {
                 Some(entries.iter().map(|(_, v)| v).sum())
             }
@@ -503,6 +487,21 @@ pub fn apply_window_open(
             }
         }
     }
+}
+
+/// Number of distinct rule references, so a rule listed twice in `rules`
+/// counts once.
+fn count_distinct_rules(rule_refs: &[String]) -> usize {
+    rule_refs.iter().collect::<HashSet<_>>().len()
+}
+
+/// Number of distinct referenced rules with at least one hit in the window.
+fn count_fired_rules(rule_refs: &[String], rule_hits: &HashMap<String, VecDeque<i64>>) -> usize {
+    rule_refs
+        .iter()
+        .filter(|r| rule_hits.get(r.as_str()).is_some_and(|ts| !ts.is_empty()))
+        .collect::<HashSet<_>>()
+        .len()
 }
 
 /// Check if all referenced rules fired in the correct order within the window.

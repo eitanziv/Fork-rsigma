@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use yaml_serde::Value;
 
@@ -142,7 +142,7 @@ pub(super) fn parse_correlation_rule(
         .unwrap_or(false);
 
     // Condition
-    let condition = parse_correlation_condition(corr, correlation_type)?;
+    let condition = parse_correlation_condition(corr, correlation_type, &rules)?;
 
     // Aliases
     let aliases = parse_correlation_aliases(corr);
@@ -212,6 +212,7 @@ pub(super) fn parse_correlation_rule(
 fn parse_correlation_condition(
     corr: &yaml_serde::Mapping,
     correlation_type: CorrelationType,
+    rules: &[String],
 ) -> Result<CorrelationCondition> {
     let condition_val = corr.get(val_key("condition"));
 
@@ -274,11 +275,17 @@ fn parse_correlation_condition(
             Ok(CorrelationCondition::Extended(expr))
         }
         None => {
-            // Default for temporal types: all rules must match
+            // Default for temporal types: every distinct referenced rule must match.
             match correlation_type {
                 CorrelationType::Temporal | CorrelationType::TemporalOrdered => {
+                    let distinct = rules.iter().collect::<HashSet<_>>().len();
+                    if distinct == 0 {
+                        return Err(SigmaParserError::InvalidCorrelation(
+                            "Temporal correlation without a condition requires at least one rule in 'rules'".into(),
+                        ));
+                    }
                     Ok(CorrelationCondition::Threshold {
-                        predicates: vec![(ConditionOperator::Gte, 1)],
+                        predicates: vec![(ConditionOperator::Gte, distinct as u64)],
                         field: None,
                         percentile: None,
                     })
