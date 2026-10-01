@@ -963,6 +963,68 @@ correlation:
     }
 }
 
+fn temporal_correlation_yaml(corr_type: &str, rules: &str) -> String {
+    format!(
+        r#"
+title: Temporal Without Condition
+correlation:
+    type: {corr_type}
+    rules: {rules}
+    group-by:
+        - Host
+    timespan: 5m
+"#
+    )
+}
+
+#[test]
+fn test_temporal_without_condition_requires_every_rule() {
+    for corr_type in ["temporal", "temporal_ordered"] {
+        let yaml = temporal_correlation_yaml(corr_type, "[rule_a, rule_b, rule_c]");
+        let collection = parse_sigma_yaml(&yaml).unwrap();
+        assert!(collection.errors.is_empty(), "{:?}", collection.errors);
+        match &collection.correlations[0].condition {
+            CorrelationCondition::Threshold {
+                predicates,
+                field,
+                percentile,
+            } => {
+                assert_eq!(predicates, &[(ConditionOperator::Gte, 3)], "{corr_type}");
+                assert!(field.is_none());
+                assert!(percentile.is_none());
+            }
+            other => panic!("Expected threshold condition, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_temporal_without_condition_counts_duplicate_rules_once() {
+    let yaml = temporal_correlation_yaml("temporal", "[rule_a, rule_b, rule_a]");
+    let collection = parse_sigma_yaml(&yaml).unwrap();
+    match &collection.correlations[0].condition {
+        CorrelationCondition::Threshold { predicates, .. } => {
+            assert_eq!(predicates, &[(ConditionOperator::Gte, 2)]);
+        }
+        other => panic!("Expected threshold condition, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_temporal_without_condition_or_rules_is_error() {
+    let yaml = temporal_correlation_yaml("temporal", "[]");
+    let collection = parse_sigma_yaml(&yaml).unwrap();
+    assert!(collection.correlations.is_empty());
+    assert!(
+        collection
+            .errors
+            .iter()
+            .any(|e| e.contains("requires at least one rule")),
+        "{:?}",
+        collection.errors
+    );
+}
+
 #[test]
 fn test_parse_neq_modifier() {
     let yaml = r#"

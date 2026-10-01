@@ -927,6 +927,68 @@ level: high
 }
 
 #[test]
+fn test_temporal_without_condition_requires_every_rule() {
+    // An omitted condition on a temporal correlation means every referenced
+    // rule must match within the timespan, not just any one of them.
+    let yaml = r#"
+title: Rule A
+id: rule-a
+logsource:
+    category: test
+detection:
+    selection:
+        EventType: a
+    condition: selection
+---
+title: Rule B
+id: rule-b
+logsource:
+    category: test
+detection:
+    selection:
+        EventType: b
+    condition: selection
+---
+title: A and B
+correlation:
+    type: temporal
+    rules:
+        - rule-a
+        - rule-b
+    group-by:
+        - Host
+    timespan: 5m
+level: high
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    engine.add_collection(&collection).unwrap();
+
+    let a = json!({"EventType": "a", "Host": "h1"});
+    let b = json!({"EventType": "b", "Host": "h1"});
+    assert_eq!(
+        engine
+            .process_event_at(&JsonEvent::borrow(&a), 1000)
+            .correlation_count(),
+        0,
+        "a single referenced rule must not satisfy the default condition"
+    );
+    assert_eq!(
+        engine
+            .process_event_at(&JsonEvent::borrow(&a), 1010)
+            .correlation_count(),
+        0,
+        "repeated hits of the same rule must not satisfy the default condition"
+    );
+    assert_eq!(
+        engine
+            .process_event_at(&JsonEvent::borrow(&b), 1020)
+            .correlation_count(),
+        1
+    );
+}
+
+#[test]
 fn test_temporal_referenced_by_name_when_rule_also_has_id() {
     // Regression: when a rule carries both `id` and `name` and the temporal
     // correlation references it by `name`, the tracked identity must be the
