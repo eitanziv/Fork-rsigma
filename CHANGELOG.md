@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Temporal correlations without a condition require every referenced rule
+### Temporal correlations without a condition require every referenced rule (#524)
 
 A `temporal` correlation that omits `condition` now fires only when every referenced rule matches within the timespan, as the Sigma correlation specification and pySigma define it. The parser used to default the threshold to `gte: 1`, so the first match of any single referenced rule fired the correlation. The default is now `gte: <number of distinct rules>`, which applies to `engine eval`, the daemon, and the PostgreSQL `HAVING` clause that `backend convert` emits. `temporal_ordered` already behaved correctly because its window value is non-zero only once every rule has fired in order. A temporal correlation with neither a condition nor any `rules` is now a parse error instead of a correlation that can never fire.
 
