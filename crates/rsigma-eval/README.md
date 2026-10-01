@@ -247,6 +247,7 @@ Stateful processing with sliding time windows, group-by aggregation, and all 8 c
 
 - **Group-by partitioning**: composite keys with field aliasing across referenced rules
 - **Correlation chaining**: correlation results propagate to higher-level correlations and those parent firings are emitted (max depth: **10**, `MAX_CHAIN_DEPTH`)
+- **Temporal counting**: `temporal` and `temporal_ordered` thresholds count distinct referenced rules, so a rule listed twice in `rules` counts once
 - **Extended temporal conditions**: boolean expressions over rule references (e.g. `rule_a and rule_b and not rule_c`)
 - **Cycle detection**: DFS-based validation of the correlation reference graph at load time
 
