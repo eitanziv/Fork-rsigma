@@ -14,3 +14,5 @@ matches: [0, 1]
 known_failures:
   lynxdb: the i flag is dropped from the regex
   test-pysigma: the i flag is dropped instead of rendered as (?i)
+  fibratus: the i flag is dropped from the regex
+  fibratus-nomacros: the i flag is dropped from the regex

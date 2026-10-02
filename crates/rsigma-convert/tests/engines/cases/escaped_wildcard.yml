@@ -14,3 +14,5 @@ matches: [0]
 known_failures:
   lynxdb: the literal star is emitted inside quotes, where LynxDB still treats it as a wildcard
   test-pysigma: the escape of a literal * is dropped
+  fibratus: a literal * renders as \* in the string, which the Fibratus parser rejects as a bad escape
+  fibratus-nomacros: a literal * renders as \* in the string, which the Fibratus parser rejects as a bad escape

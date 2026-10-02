@@ -16,3 +16,5 @@ known_failures:
   postgres-jsonb: NOT over a missing field evaluates to NULL, so the event is dropped
   postgres-columns: NOT over a missing field evaluates to NULL, so the event is dropped
   test-pysigma: backslashes in values are doubled
+  fibratus: NOT over a field the event lacks evaluates to false, so the event is dropped
+  fibratus-nomacros: NOT over a field the event lacks evaluates to false, so the event is dropped

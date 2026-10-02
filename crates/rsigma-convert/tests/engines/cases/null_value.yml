@@ -16,3 +16,5 @@ matches: [0, 1]
 known_failures:
   lynxdb: NOT field=* does not match a field that is present with a null value
   test-pysigma: backslashes in values are doubled
+  fibratus: null renders as = '', which matches an empty string instead of an absent field
+  fibratus-nomacros: null renders as = '', which matches an empty string instead of an absent field
