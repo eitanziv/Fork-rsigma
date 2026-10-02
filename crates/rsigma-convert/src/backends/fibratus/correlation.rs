@@ -1397,8 +1397,9 @@ correlation:
     }
 
     #[test]
-    fn value_count_missing_field_rejected() {
-        let err = run(r#"
+    fn value_count_missing_field_rejected_by_parser() {
+        let collection = collection(
+            r#"
 title: R
 id: 00000000-0000-0000-0000-000000000050
 detection:
@@ -1416,9 +1417,15 @@ correlation:
   timespan: 5m
   condition:
     gte: 2
-"#)
-        .unwrap_err();
-        assert!(format!("{err}").contains("field"));
+"#,
+        );
+        assert!(collection.correlations.is_empty());
+        assert!(
+            collection
+                .errors
+                .iter()
+                .any(|error| error.to_string().contains("requires 'field'"))
+        );
     }
 
     // -----------------------------------------------------------------
