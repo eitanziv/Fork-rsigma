@@ -451,8 +451,7 @@ where
 {
     if let Some(expect_exists) = item.exists {
         if let Some(field) = &item.field {
-            let exists = event.get_field(field).is_some_and(|v| !v.is_null());
-            return exists == expect_exists;
+            return event.get_field(field).is_some() == expect_exists;
         }
         return !expect_exists;
     }

@@ -235,8 +235,8 @@ pub(crate) fn eval_array_item<E: Event>(
 ) -> bool {
     if let Some(expect_exists) = item.exists {
         let exists = match &item.field {
-            Some(name) => element_field(member, name).is_some_and(|v| !v.is_null()),
-            None => !member.is_null(),
+            Some(name) => element_field(member, name).is_some(),
+            None => true,
         };
         return exists == expect_exists;
     }

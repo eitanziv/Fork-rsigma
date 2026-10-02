@@ -1357,7 +1357,7 @@ detection:
         let explicit_null = json!({"connections": [{"dest": null}]});
         assert!(explain_rule(&rule, &JsonEvent::borrow(&present)).matched);
         assert!(!explain_rule(&rule, &JsonEvent::borrow(&absent)).matched);
-        assert!(!explain_rule(&rule, &JsonEvent::borrow(&explicit_null)).matched);
+        assert!(explain_rule(&rule, &JsonEvent::borrow(&explicit_null)).matched);
 
         let exp = explain_rule(&rule, &JsonEvent::borrow(&absent));
         match selection_detection(&exp) {

@@ -127,10 +127,8 @@ impl CompiledMatcher {
             CompiledMatcher::NumericLte(n) => match_numeric_value(value, |v| v <= *n),
 
             // -- Special --
-            CompiledMatcher::Exists(expect) => {
-                let exists = !value.is_null();
-                exists == *expect
-            }
+            // A value is present even when it is null.
+            CompiledMatcher::Exists(expect) => *expect,
 
             CompiledMatcher::FieldRef {
                 field: ref_field,

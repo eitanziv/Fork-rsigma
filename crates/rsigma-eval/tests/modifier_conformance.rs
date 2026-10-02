@@ -277,13 +277,22 @@ fn expand_treats_escaped_percent_as_a_literal() {
         json!({"F": "C:\\Users\\bob\\AppData", "user": "bob"}),
         json!({"F": "C:\\Users%user%\\AppData", "user": "bob"}),
     ];
-    assert_eq!(matching("selection:\n  F|expand: '\\%plain%name%'", &events), [0]);
     assert_eq!(
-        matching("selection:\n  F|expand: 'C:\\Users\\\\%user%\\AppData'", &events),
+        matching("selection:\n  F|expand: '\\%plain%name%'", &events),
+        [0]
+    );
+    assert_eq!(
+        matching(
+            "selection:\n  F|expand: 'C:\\Users\\\\%user%\\AppData'",
+            &events
+        ),
         [1]
     );
     assert_eq!(
-        matching("selection:\n  F|expand: 'C:\\Users\\%user%\\AppData'", &events),
+        matching(
+            "selection:\n  F|expand: 'C:\\Users\\%user%\\AppData'",
+            &events
+        ),
         [2]
     );
 }
@@ -316,4 +325,19 @@ fn placeholder_pipelines_skip_escaped_percent_and_unresolved_placeholders() {
         matching_with("selection:\n  F|expand: '%a%-%b%'", Some(pipeline), &events),
         [0]
     );
+}
+
+#[test]
+fn exists_checks_presence_and_counts_null_as_present() {
+    let events = [
+        json!({"User": "admin"}),
+        json!({"User": ""}),
+        json!({"User": null}),
+        json!({"Image": "x"}),
+    ];
+    assert_eq!(
+        matching("selection:\n  User|exists: true", &events),
+        [0, 1, 2]
+    );
+    assert_eq!(matching("selection:\n  User|exists: false", &events), [3]);
 }
