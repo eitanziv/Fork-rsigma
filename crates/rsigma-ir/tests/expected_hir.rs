@@ -7,7 +7,7 @@ mod common;
 
 use common::rule_from;
 use rsigma_ir::lower::{LowerOptions, lower_rule};
-use rsigma_ir::{IrCondition, IrRuleMetadata};
+use rsigma_ir::{IrCondition, IrError, IrRuleMetadata};
 use rsigma_parser::{Quantifier, SelectorPattern};
 
 fn selector(quantifier: Quantifier, pattern: SelectorPattern) -> IrCondition {
@@ -31,9 +31,7 @@ fn expected_hir_stubs_are_well_formed() {
 // =============================================================================
 
 #[test]
-fn lower_vacuous_all_of_preserves_selector() {
-    // `all of selection_*` with zero matching names stays a selector; eval
-    // resolves the empty set to vacuous truth at match time.
+fn lower_rejects_a_selector_over_zero_names() {
     let rule = rule_from(
         r#"
 title: Vacuous All Of Zero
@@ -44,15 +42,11 @@ detection:
     condition: all of selection_*
 "#,
     );
-    let ir = lower_rule(&rule, &LowerOptions::default()).expect("lower");
-    assert_eq!(
-        ir.conditions,
-        vec![selector(
-            Quantifier::All,
-            SelectorPattern::Pattern("selection_*".into())
-        )]
+    let err = lower_rule(&rule, &LowerOptions::default()).unwrap_err();
+    assert!(
+        matches!(&err, IrError::NoSelectorMatches(s) if s == "all of selection_*"),
+        "{err}"
     );
-    assert_eq!(ir.metadata.title, "Vacuous All Of Zero");
 }
 
 #[test]
@@ -125,11 +119,13 @@ detection:
 fn lower_multiple_selectors_under_and() {
     let rule = rule_from(
         r#"
-title: Vacuous All Of Multiple
+title: Multiple Selectors
 logsource: { category: test }
 detection:
-    filter_main:
+    selection_a1:
         Image: 'notepad.exe'
+    selection_b1:
+        User: 'alice'
     condition: all of selection_a* and all of selection_b*
 "#,
     );

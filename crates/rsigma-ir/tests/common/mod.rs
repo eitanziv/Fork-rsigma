@@ -2,8 +2,7 @@
 //!
 //! Prefer [`compiled_from`] + [`rule_matches`] for pure condition/matcher
 //! semantics. [`engine_from`] goes through [`Engine`] indices/prefilters and
-//! can drop rules whose unused detections constrain the index (see the
-//! vacuous `all of` fixtures).
+//! can drop rules whose unused detections constrain the index.
 
 // Each integration test binary includes this module but uses a subset of helpers.
 #![allow(dead_code)]

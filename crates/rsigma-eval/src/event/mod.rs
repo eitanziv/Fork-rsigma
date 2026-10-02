@@ -166,7 +166,7 @@ pub trait Event {
     fn get_field(&self, path: &str) -> Option<EventValue<'_>>;
 
     /// Check if any string value anywhere in the event satisfies a predicate.
-    /// Used by keyword detection.
+    /// Used by keyword detection. Numeric values count as their decimal text.
     fn any_string_value(&self, pred: &dyn Fn(&str) -> bool) -> bool;
 
     /// Collect all string values in the event.

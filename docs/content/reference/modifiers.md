@@ -2,7 +2,7 @@
 
 {{ added "unreleased" }}
 
-This page describes how the evaluator and the converters interpret Sigma value modifiers where the specification leaves room for interpretation. The behavior follows the [Sigma specification](https://github.com/SigmaHQ/sigma-specification) and matches pySigma unless a section says otherwise.
+This page describes how the evaluator and the converters interpret Sigma value modifiers where the specification leaves room for interpretation. The behavior follows the [Sigma specification](https://github.com/SigmaHQ/sigma-specification) and matches pySigma unless a section says otherwise. For keywords and modifiers without a field name, see [Keywords and Conditions](conditions.md).
 
 ## Modifier chains
 

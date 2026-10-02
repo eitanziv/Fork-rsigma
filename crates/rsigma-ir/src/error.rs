@@ -17,8 +17,8 @@ pub enum IrError {
     #[error("expected numeric value: {0}")]
     ExpectedNumeric(String),
 
-    #[error("selector resolved zero matches but condition required at least one: {0:?}")]
-    NoSelectorMatches(Vec<String>),
+    #[error("selector '{0}' matches no detection identifier")]
+    NoSelectorMatches(String),
 
     #[error("custom attribute {0:?} could not be projected: {1}")]
     CustomAttribute(String, String),

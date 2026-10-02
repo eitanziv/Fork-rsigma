@@ -132,7 +132,8 @@ impl<'a> Event for JsonEvent<'a> {
     /// Iterate over all string values in the event (for keyword detection).
     ///
     /// Recursively walks the entire event object and yields every string
-    /// value found, including inside nested objects and arrays. Traversal
+    /// value found, including inside nested objects and arrays. Numbers are
+    /// yielded in their JSON text form, since keywords match them too. Traversal
     /// is capped at 64 levels of nesting to prevent stack overflow.
     fn all_string_values(&self) -> Vec<Cow<'_, str>> {
         let mut values = Vec::new();
@@ -294,6 +295,7 @@ fn any_string_value_json(v: &Value, pred: &dyn Fn(&str) -> bool, depth: usize) -
     }
     match v {
         Value::String(s) => pred(s.as_str()),
+        Value::Number(n) => pred(&n.to_string()),
         Value::Object(map) => map
             .values()
             .any(|val| any_string_value_json(val, pred, depth - 1)),
@@ -335,6 +337,7 @@ fn collect_string_values_json<'a>(v: &'a Value, out: &mut Vec<Cow<'a, str>>, dep
     }
     match v {
         Value::String(s) => out.push(Cow::Borrowed(s.as_str())),
+        Value::Number(n) => out.push(Cow::Owned(n.to_string())),
         Value::Object(map) => {
             for val in map.values() {
                 collect_string_values_json(val, out, depth - 1);
@@ -355,6 +358,7 @@ fn visit_string_values_json(v: &Value, visit: &mut dyn FnMut(&str), depth: usize
     }
     match v {
         Value::String(s) => visit(s.as_str()),
+        Value::Number(n) => visit(&n.to_string()),
         Value::Object(map) => {
             for val in map.values() {
                 visit_string_values_json(val, visit, depth - 1);
@@ -545,7 +549,8 @@ mod tests {
         assert!(strs.contains(&"world"));
         assert!(strs.contains(&"one"));
         assert!(strs.contains(&"two"));
-        assert_eq!(values.len(), 4);
+        assert!(strs.contains(&"42"));
+        assert_eq!(values.len(), 5);
     }
 
     #[test]

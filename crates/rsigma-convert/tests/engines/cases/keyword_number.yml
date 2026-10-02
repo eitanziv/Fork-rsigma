@@ -1,0 +1,15 @@
+description: A numeric keyword matches a numeric value and the same number inside a string.
+rule:
+  title: keyword number
+  logsource: {category: process_creation, product: windows}
+  detection:
+    keywords:
+      - 4624
+    condition: keywords
+events:
+  - {ProcessId: 4624}
+  - {CommandLine: 'logon 4624 succeeded'}
+  - {ProcessId: 4625}
+  - {CommandLine: 'logon 4688'}
+matches: [0, 1]
+unsupported: [fibratus, fibratus-nomacros]

@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use rsigma_ir::{IrCondition, IrDetection, IrDetectionItem, IrMatcher, IrNumber};
+use rsigma_ir::{IrCondition, IrDetection, IrDetectionItem, IrMatcher, IrNumber, IrStrOp};
 use rsigma_parser::{Quantifier, SelectorPattern};
 
 use crate::backend::{Backend, CompareOp, TokenType};
@@ -214,15 +214,47 @@ pub fn default_convert_ir_detection<B: Backend + ?Sized>(
     }
 }
 
+/// A full-text term matches anywhere in the event, so only a value without an
+/// explicit operator or with `contains` has a faithful keyword rendering.
 fn convert_keyword<B: Backend + ?Sized>(
     backend: &B,
     matcher: &IrMatcher,
     state: &mut ConversionState,
 ) -> Result<String> {
     match matcher {
-        IrMatcher::Str { pattern, .. } => backend.convert_keyword_str(pattern, state),
+        IrMatcher::Str {
+            op: IrStrOp::Exact | IrStrOp::Contains,
+            pattern,
+            ..
+        } => backend.convert_keyword_str(pattern, state),
         IrMatcher::NumericEq(n) => backend.convert_keyword_num(number(n)?, state),
         _ => Err(ConvertError::UnsupportedKeyword),
+    }
+}
+
+/// Render the matcher of a field-less item as full-text terms, one per value,
+/// joined by the item's value-list operator.
+fn convert_keyword_item<B: Backend + ?Sized>(
+    backend: &B,
+    matcher: &IrMatcher,
+    state: &mut ConversionState,
+) -> Result<String> {
+    match matcher {
+        IrMatcher::AnyOf(ms) | IrMatcher::AllOf(ms) => {
+            let parts = ms
+                .iter()
+                .map(|m| {
+                    let expr = convert_keyword_item(backend, m, state)?;
+                    Ok(Operand::new(expr, matcher_op(m)))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            join(backend, matches!(matcher, IrMatcher::AllOf(_)), parts)
+        }
+        IrMatcher::Not(inner) => {
+            let expr = convert_keyword_item(backend, inner, state)?;
+            negate(backend, Operand::new(expr, matcher_op(inner)))
+        }
+        other => convert_keyword(backend, other, state),
     }
 }
 
@@ -232,10 +264,9 @@ pub fn default_convert_ir_detection_item<B: Backend + ?Sized>(
     item: &IrDetectionItem,
     state: &mut ConversionState,
 ) -> Result<String> {
-    let field = item
-        .field
-        .as_deref()
-        .ok_or(ConvertError::MissingFieldName)?;
+    let Some(field) = item.field.as_deref() else {
+        return convert_keyword_item(backend, &item.matcher, state);
+    };
 
     // A positional array index (`field[N]`) must not silently emit a literal
     // field reference on backends that cannot lower element-N semantics.

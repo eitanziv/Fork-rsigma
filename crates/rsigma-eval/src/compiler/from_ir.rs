@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rsigma_ir::{
-    IrCondition, IrDetection, IrDetectionItem, IrExpandPart, IrMatcher, IrNumber, IrRule,
-    IrTimePart,
+    IrCondition, IrDetection, IrDetectionItem, IrExpandPart, IrMatcher, IrNumber, IrPattern,
+    IrPatternPart, IrRule, IrStrOp, IrTimePart,
 };
 use rsigma_parser::ConditionExpr;
 
@@ -51,7 +51,19 @@ pub fn compile_to_compiled(ir: &IrRule) -> Result<CompiledRule> {
     })
 }
 
+/// Where a detection is evaluated: against the whole event, or against one
+/// member of an array (`field[any]` and friends).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Scope {
+    Event,
+    Element,
+}
+
 pub(super) fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDetection> {
+    compile_ir_detection_in(detection, Scope::Event)
+}
+
+fn compile_ir_detection_in(detection: &IrDetection, scope: Scope) -> Result<CompiledDetection> {
     match detection {
         IrDetection::AllOf(items) => {
             if items.is_empty() {
@@ -59,7 +71,10 @@ pub(super) fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDe
                     "AllOf detection must not be empty (vacuous truth)".into(),
                 ));
             }
-            let compiled: Result<Vec<_>> = items.iter().map(compile_ir_detection_item).collect();
+            let compiled: Result<Vec<_>> = items
+                .iter()
+                .map(|item| compile_ir_detection_item_in(item, scope))
+                .collect();
             Ok(CompiledDetection::AllOf(compiled?))
         }
         IrDetection::AnyOf(dets) => {
@@ -68,7 +83,10 @@ pub(super) fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDe
                     "AnyOf detection must not be empty (would never match)".into(),
                 ));
             }
-            let compiled: Result<Vec<_>> = dets.iter().map(compile_ir_detection).collect();
+            let compiled: Result<Vec<_>> = dets
+                .iter()
+                .map(|d| compile_ir_detection_in(d, scope))
+                .collect();
             Ok(CompiledDetection::AnyOf(compiled?))
         }
         IrDetection::ArrayMatch {
@@ -78,7 +96,7 @@ pub(super) fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDe
         } => Ok(CompiledDetection::ArrayMatch {
             field: field.clone(),
             quantifier: *quantifier,
-            body: Box::new(compile_ir_detection(body)?),
+            body: Box::new(compile_ir_detection_in(body, Scope::Element)?),
         }),
         IrDetection::And(dets) => {
             if dets.is_empty() {
@@ -86,7 +104,10 @@ pub(super) fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDe
                     "And detection must not be empty".into(),
                 ));
             }
-            let compiled: Result<Vec<_>> = dets.iter().map(compile_ir_detection).collect();
+            let compiled: Result<Vec<_>> = dets
+                .iter()
+                .map(|d| compile_ir_detection_in(d, scope))
+                .collect();
             Ok(CompiledDetection::And(compiled?))
         }
         IrDetection::Conditional { named, condition } => {
@@ -97,7 +118,7 @@ pub(super) fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDe
             }
             let compiled: Result<HashMap<String, CompiledDetection>> = named
                 .iter()
-                .map(|(k, d)| Ok((k.clone(), compile_ir_detection(d)?)))
+                .map(|(k, d)| Ok((k.clone(), compile_ir_detection_in(d, scope)?)))
                 .collect();
             Ok(CompiledDetection::Conditional {
                 named: compiled?,
@@ -105,7 +126,10 @@ pub(super) fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDe
             })
         }
         IrDetection::Keywords(matcher) => {
-            let compiled = compile_ir_matcher(matcher)?;
+            let compiled = match scope {
+                Scope::Event => compile_keyword_matcher(matcher)?,
+                Scope::Element => compile_ir_matcher(matcher)?,
+            };
             // Keywords are OR-semantics; apply AnyOf optimizer when present.
             let matcher = match compiled {
                 CompiledMatcher::AnyOf(ms) => optimizer::optimize_any_of(ms),
@@ -116,8 +140,22 @@ pub(super) fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDe
     }
 }
 
+#[cfg(test)]
 pub(super) fn compile_ir_detection_item(item: &IrDetectionItem) -> Result<CompiledDetectionItem> {
-    let matcher = compile_ir_matcher(&item.matcher)?;
+    compile_ir_detection_item_in(item, Scope::Event)
+}
+
+/// A field-less item matches like a keyword at event scope and matches the
+/// member itself at array element scope.
+fn compile_ir_detection_item_in(
+    item: &IrDetectionItem,
+    scope: Scope,
+) -> Result<CompiledDetectionItem> {
+    let matcher = if item.field.is_none() && scope == Scope::Event {
+        compile_keyword_matcher(&item.matcher)?
+    } else {
+        compile_ir_matcher(&item.matcher)?
+    };
     let bloom_eligible =
         item.field.is_some() && crate::engine::bloom_index::is_positive_substring_matcher(&matcher);
 
@@ -199,6 +237,55 @@ fn compile_ir_matcher(matcher: &IrMatcher) -> Result<CompiledMatcher> {
             let compiled: Result<Vec<_>> = ms.iter().map(compile_ir_matcher).collect();
             Ok(CompiledMatcher::AllOf(compiled?))
         }
+    }
+}
+
+/// Compile a matcher that is tested against every value in the event.
+///
+/// Keywords match anywhere in a value, so a value without an explicit string
+/// operator matches as a substring. Keyword values are strings in the Sigma
+/// specification, so a number matches as a case-insensitive substring of its
+/// decimal text.
+fn compile_keyword_matcher(matcher: &IrMatcher) -> Result<CompiledMatcher> {
+    match matcher {
+        IrMatcher::Str {
+            op: IrStrOp::Exact,
+            pattern,
+            case_insensitive,
+        } => compile_str(IrStrOp::Contains, pattern, *case_insensitive),
+        IrMatcher::Encoded {
+            encodings,
+            op: IrStrOp::Exact,
+            pattern,
+            case_insensitive,
+        } => compile_encoded(encodings, IrStrOp::Contains, pattern, *case_insensitive),
+        IrMatcher::NumericEq(n) => {
+            let pattern = IrPattern {
+                parts: vec![IrPatternPart::Literal(decimal_text(ir_number_literal(n)?))],
+            };
+            compile_str(IrStrOp::Contains, &pattern, true)
+        }
+        IrMatcher::Not(inner) => Ok(CompiledMatcher::Not(Box::new(compile_keyword_matcher(
+            inner,
+        )?))),
+        IrMatcher::AnyOf(ms) => {
+            let compiled: Result<Vec<_>> = ms.iter().map(compile_keyword_matcher).collect();
+            Ok(optimizer::optimize_any_of(compiled?))
+        }
+        IrMatcher::AllOf(ms) => {
+            let compiled: Result<Vec<_>> = ms.iter().map(compile_keyword_matcher).collect();
+            Ok(CompiledMatcher::AllOf(compiled?))
+        }
+        other => compile_ir_matcher(other),
+    }
+}
+
+/// Decimal text of a number, without a fractional part for whole numbers.
+fn decimal_text(n: f64) -> String {
+    if n.fract() == 0.0 && (i64::MIN as f64..=i64::MAX as f64).contains(&n) {
+        (n as i64).to_string()
+    } else {
+        n.to_string()
     }
 }
 

@@ -50,14 +50,18 @@ pub fn detection_name_matches(pattern: &str, name: &str) -> bool {
 impl SelectorPattern {
     /// Return true if this selector pattern matches a detection identifier.
     ///
-    /// Identifiers beginning with `_` are conventionally hidden from `them`
-    /// expansions (matching the behavior already shared between the evaluator
-    /// and the converter). For [`SelectorPattern::Pattern`], dispatch goes
-    /// through [`detection_name_matches`].
+    /// Identifiers beginning with `_` are hidden from `them` and from every
+    /// pattern that does not itself begin with `_`, as in the Sigma
+    /// specification and pySigma. Otherwise
+    /// [`SelectorPattern::Pattern`] dispatches through
+    /// [`detection_name_matches`].
     pub fn matches_detection_name(&self, name: &str) -> bool {
         match self {
             SelectorPattern::Them => !name.starts_with('_'),
-            SelectorPattern::Pattern(pat) => detection_name_matches(pat, name),
+            SelectorPattern::Pattern(pat) => {
+                (pat.starts_with('_') || !name.starts_with('_'))
+                    && detection_name_matches(pat, name)
+            }
         }
     }
 }
@@ -104,10 +108,11 @@ mod tests {
 
     #[test]
     fn underscore_pattern_is_literal() {
-        // A leading underscore in the pattern is treated as a literal character
-        // (the `_`-prefix convention only suppresses identifiers from `them`).
+        // A leading underscore in the glob is an ordinary character; hiding
+        // `_` identifiers is the selector's job, not the glob's.
         assert!(detection_name_matches("_helper", "_helper"));
         assert!(!detection_name_matches("_helper", "helper"));
+        assert!(detection_name_matches("*", "_helper"));
     }
 
     #[test]
@@ -122,9 +127,20 @@ mod tests {
         let pat = SelectorPattern::Pattern("selection_*".to_string());
         assert!(pat.matches_detection_name("selection_main"));
         assert!(!pat.matches_detection_name("filter_main"));
-        // A pattern with a literal `_` prefix still applies normally; the
-        // `_`-prefix convention only matters for the `them` form.
+    }
+
+    #[test]
+    fn selector_pattern_skips_underscore_names_unless_it_starts_with_one() {
+        let star = SelectorPattern::Pattern("*".to_string());
+        assert!(star.matches_detection_name("selection"));
+        assert!(!star.matches_detection_name("_internal"));
+        let suffix = SelectorPattern::Pattern("*_main".to_string());
+        assert!(!suffix.matches_detection_name("_sel_main"));
+
         let internal = SelectorPattern::Pattern("_internal".to_string());
         assert!(internal.matches_detection_name("_internal"));
+        let hidden = SelectorPattern::Pattern("_*".to_string());
+        assert!(hidden.matches_detection_name("_internal"));
+        assert!(!hidden.matches_detection_name("selection"));
     }
 }

@@ -162,6 +162,36 @@ fn null_on_absent_field_is_gated_by_level() {
     assert_eq!(fm.matcher, Some(MatcherKind::Null));
 }
 
+#[test]
+fn keyword_all_reports_the_value_each_term_matched() {
+    let yaml = r#"
+title: Reverse Shell
+logsource:
+    product: linux
+detection:
+    keywords:
+        '|all':
+            - 'bash -c'
+            - '/dev/tcp/'
+    condition: keywords
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = Engine::new();
+    engine.set_match_detail(MatchDetailLevel::Summary);
+    engine.add_collection(&collection).unwrap();
+    let ev = json!({ "Image": "/bin/bash -c", "CommandLine": "cat < /dev/tcp/host/80" });
+    let results = engine.evaluate(&JsonEvent::borrow(&ev));
+    let det = results[0].as_detection().unwrap();
+    let mut values: Vec<&str> = det
+        .matched_fields
+        .iter()
+        .filter(|f| f.matcher == Some(MatcherKind::Keyword))
+        .map(|f| f.value.as_str().unwrap())
+        .collect();
+    values.sort();
+    assert_eq!(values, ["/bin/bash -c", "cat < /dev/tcp/host/80"]);
+}
+
 fn array_engine(yaml: &str, level: MatchDetailLevel) -> Engine {
     let collection = parse_sigma_yaml(yaml).unwrap();
     let mut engine = Engine::new();

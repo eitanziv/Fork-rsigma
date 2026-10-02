@@ -276,11 +276,20 @@ impl CompiledMatcher {
     /// Check if this matcher matches any string value in the event.
     /// Used for keyword detection (field-less matching).
     ///
-    /// Avoids allocating a `Vec` of all strings and a `String` per value by
-    /// using `matches_str` with a short-circuiting traversal.
-    #[inline]
+    /// `AllOf` requires every child to match somewhere in the event, not all
+    /// in the same value, and `Not` holds when the inner matcher matches no
+    /// value. Other matchers test each value with `matches_str` through a
+    /// short-circuiting traversal, avoiding a `Vec` of all strings.
     pub fn matches_keyword(&self, event: &impl Event) -> bool {
-        event.any_string_value(&|s| self.matches_str(s))
+        match self {
+            CompiledMatcher::AllOf(children)
+            | CompiledMatcher::CaseInsensitiveGroup {
+                children,
+                mode: GroupMode::All,
+            } => children.iter().all(|m| m.matches_keyword(event)),
+            CompiledMatcher::Not(inner) => !inner.matches_keyword(event),
+            _ => event.any_string_value(&|s| self.matches_str(s)),
+        }
     }
 
     /// Describe this matcher's shape for match-detail reporting.
