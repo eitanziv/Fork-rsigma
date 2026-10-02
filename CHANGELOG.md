@@ -4,6 +4,10 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Performance regression checks run only for relevant changes
+
+The 20-minute coarse performance regression gate no longer runs for every change under `crates/`. Pull requests trigger it only when they change the evaluator hot path, dependencies, the Rust toolchain, or the performance harness. Changes limited to conversion backends, MCP, LSP, STIX, docs, integration tests, benchmarks, or unrelated CLI/daemon code no longer wait for the gate. Weekly and manually dispatched measurements still run the full performance matrix.
+
 ### Keywords and condition selectors follow the Sigma specification (#532)
 
 `engine eval`, the daemon, and `backend convert` now interpret keyword detections and condition selectors the way the Sigma specification and pySigma define them. The new [Keywords and Conditions](https://rsigma.io/reference/conditions/) reference describes the semantics.
