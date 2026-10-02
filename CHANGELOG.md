@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Keywords and condition selectors follow the Sigma specification
+### Keywords and condition selectors follow the Sigma specification (#532)
 
 `engine eval`, the daemon, and `backend convert` now interpret keyword detections and condition selectors the way the Sigma specification and pySigma define them. The new [Keywords and Conditions](https://rsigma.io/reference/conditions/) reference describes the semantics.
 
