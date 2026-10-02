@@ -55,7 +55,10 @@ fn write_rules(dir: &std::path::Path, files: &[(&str, &str)]) {
 }
 
 fn build_processor(rules_dir: &std::path::Path) -> LogProcessor {
-    let corr_config = CorrelationConfig::default();
+    let corr_config = CorrelationConfig {
+        emit_detections: true,
+        ..Default::default()
+    };
     let mut engine = RuntimeEngine::new(rules_dir.to_path_buf(), vec![], corr_config, false);
     engine.load_rules().unwrap();
     LogProcessor::new(engine, Arc::new(NoopMetrics))
