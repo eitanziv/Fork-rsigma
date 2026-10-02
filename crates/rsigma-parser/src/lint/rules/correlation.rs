@@ -28,8 +28,13 @@ const TYPES_REQUIRING_CONDITION: &[&str] = &[
 ];
 
 /// Correlation types that require condition.field.
-const TYPES_REQUIRING_FIELD: &[&str] =
-    &["value_count", "value_sum", "value_avg", "value_percentile"];
+const TYPES_REQUIRING_FIELD: &[&str] = &[
+    "value_count",
+    "value_sum",
+    "value_avg",
+    "value_percentile",
+    "value_median",
+];
 
 fn is_valid_timespan(s: &str) -> bool {
     if s.is_empty() {
@@ -40,7 +45,9 @@ fn is_valid_timespan(s: &str) -> bool {
         return false;
     }
     let num_part = &s[..s.len() - 1];
-    !num_part.is_empty() && num_part.chars().all(|c| c.is_ascii_digit())
+    !num_part.is_empty()
+        && num_part.chars().all(|c| c.is_ascii_digit())
+        && num_part.parse::<u64>().is_ok_and(|n| n > 0)
 }
 
 pub(crate) fn lint_correlation_rule(m: &yaml_serde::Mapping, warnings: &mut Vec<LintWarning>) {
@@ -270,7 +277,7 @@ fn lint_correlation_condition(
 
     for (k, v) in cond {
         let ks = k.as_str().unwrap_or("");
-        if ks == "field" {
+        if ks == "field" || ks == "percentile" {
             continue;
         }
         if !VALID_CONDITION_OPERATORS.contains(&ks) {
@@ -461,7 +468,7 @@ correlation:
 
     #[test]
     fn timespan_zero_seconds() {
-        assert!(is_valid_timespan("0s"));
+        assert!(!is_valid_timespan("0s"));
     }
 
     #[test]
