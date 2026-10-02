@@ -7,8 +7,16 @@ on:
   push:
     branches: [main]
     paths: &paths
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/rsigma-convert/Cargo.toml"
       - "crates/rsigma-convert/src/*.rs"
       - "crates/rsigma-convert/src/backends/test.rs"
+      - "crates/rsigma-parser/Cargo.toml"
+      - "crates/rsigma-parser/src/**"
+      - "crates/rsigma-ir/Cargo.toml"
+      - "crates/rsigma-ir/src/**"
       - "crates/rsigma-convert/tests/engines/mod.rs"
       - "crates/rsigma-convert/tests/engines/cases/**"
       - "crates/rsigma-convert/tests/engines/pysigma/**"

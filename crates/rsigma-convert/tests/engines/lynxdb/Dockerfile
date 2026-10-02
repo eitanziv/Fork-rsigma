@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 # LynxDB server for the LynxDB backend engine tests. The release tarball is
 # fetched by URL and verified against the SHA-256 published in the release's
 # checksums.txt.
