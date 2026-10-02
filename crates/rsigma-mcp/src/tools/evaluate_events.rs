@@ -99,8 +99,10 @@ impl RsigmaMcp {
                 .map_err(|e| invalid(format!("rule compile error: {e}")))?;
             engine.evaluate_batch(&refs)
         } else {
-            let mut config = CorrelationConfig::default();
-            config.emit_detections = input.emit_detections;
+            let mut config = CorrelationConfig {
+                emit_detections: input.emit_detections,
+                ..Default::default()
+            };
             if !input.timestamp_fields.is_empty() {
                 let mut fields = input.timestamp_fields.clone();
                 fields.extend(config.timestamp_fields);
