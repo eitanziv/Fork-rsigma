@@ -4,6 +4,16 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Keywords and condition selectors follow the Sigma specification
+
+`engine eval`, the daemon, and `backend convert` now interpret keyword detections and condition selectors the way the Sigma specification and pySigma define them. The new [Keywords and Conditions](https://rsigma.io/reference/conditions/) reference describes the semantics.
+
+- A field-less `|all` list, such as `'|all': ['bash -c', '/dev/tcp/']`, never matched, because one event value had to equal every term, and conversion failed for a missing field name. Each value must now occur somewhere in the event, a field-less value without a string operator matches as a substring, and `|neq` holds when no event value matches. Conversion renders one full-text term per value. A field-less value inside an array body still matches the member itself.
+- A numeric keyword such as `4624` never matched. Keyword numbers now match their decimal text, and the keyword search covers numeric event values.
+- A selector pattern such as `1 of *` or `all of sel*` also matched detections whose names start with an underscore. Only patterns that start with an underscore select them now, as `them` already did.
+- A selector that matches no detection, such as `all of zzz*`, was true in eval while conversion rejected the rule. It is now a compile error everywhere (`IrError::NoSelectorMatches`, which now carries the selector text).
+- The PostgreSQL backend rendered keyword searches over flat columns as `ROW(*)::text`, which PostgreSQL rejects, so keyword rules failed to run without `-O json_field`. The row is now referenced by the unqualified table name.
+
 ### Value modifiers follow the Sigma specification (#531)
 
 `engine eval`, the daemon, and filters now interpret value modifiers the way the Sigma specification and pySigma define them. Rules and filters share one interpretation, since filters are compiled through the IR like rules. The new [Value Modifiers](https://rsigma.io/reference/modifiers/) reference describes the semantics.

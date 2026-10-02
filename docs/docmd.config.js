@@ -303,6 +303,7 @@ export default {
         { title: "Environment Variables", path: "/reference/environment-variables" },
         { title: "Feature Flags", path: "/reference/feature-flags" },
         { title: "Value Modifiers", path: "/reference/modifiers" },
+        { title: "Keywords and Conditions", path: "/reference/conditions" },
         { title: "Custom Attributes", path: "/reference/custom-attributes" },
         { title: "Builtin Pipelines", path: "/reference/builtin-pipelines" },
         { title: "Dynamic Pipeline Sources", path: "/reference/dynamic-sources" },

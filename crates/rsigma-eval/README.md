@@ -170,7 +170,8 @@ Contrasts false-positive events with required true-positive exemplars and emits 
 2. **Detection compilation** (`compile_detection`):
    - `AllOf` → compile each item, reject empty.
    - `AnyOf` → recursively compile each sub-detection, reject empty.
-   - `Keywords` → compile each value as case-insensitive contains, combine with `AnyOf`.
+   - `Keywords` → compile each value as case-insensitive contains, combine with `AnyOf`. A number matches its decimal text.
+   - A field-less item such as `'|all': [a, b]` matches like a keyword: a value without a string operator is a substring, `|all` requires each value somewhere in the event, and `|neq` holds when no value matches. Inside an array body it matches the member itself. The [keywords and conditions reference](https://rsigma.io/reference/conditions/) describes the semantics.
 3. **Value compilation** (`compile_value`): `|neq` wraps the combined item in `Not`, so `Field|neq: [a, b]` matches when the field is neither `a` nor `b`, including when it is missing or null. The other modifiers are handled in this order: `|expand` → timestamp part → `|fieldref` → `|re` → `|cidr` → numeric comparison → string modifiers. Encoding modifiers transform the value in a fixed order: `|windash` variants first, then `|wide`/`|utf16le`, `|utf16be`, or `|utf16`, then `|base64` or `|base64offset`, then the string match. `|fieldref` may be followed by one of `|contains`, `|startswith`, or `|endswith`; that modifier must come after `|fieldref`. An empty value list (`Field: []`) compiles to a null check. The [value modifiers reference](https://rsigma.io/reference/modifiers/) describes the matching semantics.
 
 ### Compiled Matcher Types
@@ -213,6 +214,8 @@ Contrasts false-positive events with required true-positive exemplars and emits 
 - `*_filter` — suffix match.
 - `exact` — exact match.
 - `them` — matches all names except those starting with `_`.
+- A pattern that does not start with `_` also skips names starting with `_`.
+- A selector that matches no name is a compile error.
 
 ## Event Model
 
@@ -221,7 +224,7 @@ The `Event` wrapper provides flexible field access over `serde_json::Value`:
 - **Flat-key precedence**: `"actor.user.name"` as a literal top-level key takes priority over nested traversal.
 - **Dot-notation**: if no flat key matches and the path contains `.`, split and traverse nested objects.
 - **Array traversal**: arrays are searched with OR semantics (first matching element wins).
-- **Keyword detection**: `matches_keyword` searches all string values across all fields recursively.
+- **Keyword detection**: `matches_keyword` searches all string values across all fields recursively, and numbers as their JSON text.
 - **Field enumeration**: `field_keys()` returns the leaf field paths in dot-notation (e.g. `actor.id`), with intermediate object names included so callers can inspect coverage at any nesting level. Used by the daemon's opt-in field observer; not on the detection hot path. Ships with a default impl that walks `to_json()`; `JsonEvent` overrides with a zero-copy recursive walk.
 - **Max nesting depth**: recursive traversal stops at depth **64** (`MAX_NESTING_DEPTH`).
 
