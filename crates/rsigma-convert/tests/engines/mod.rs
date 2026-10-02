@@ -16,6 +16,8 @@
 
 #![allow(dead_code)]
 
+pub mod corpus;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
