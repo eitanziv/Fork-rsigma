@@ -1,0 +1,23 @@
+description: A value list on one field is an OR of the values.
+rule:
+  title: value list
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith:
+        - '\a.exe'
+        - '\b.exe'
+    condition: selection
+events:
+  - {Image: 'C:\a.exe'}
+  - {Image: 'C:\B.EXE'}
+  - {Image: 'C:\c.exe'}
+  - {Image: 'C:\a.exe.c'}
+  - {CommandLine: 'a.exe'}
+matches: [0, 1]
+known_failures:
+  test-pysigma:
+    type: output-difference
+    reason: "backslashes in values are doubled; values of one field are not rendered as an in-list"
+    actual: ["Image endswith \"\\\\a.exe\" or Image endswith \"\\\\b.exe\""]
+    reference: ["Image in (\"*\\a.exe\", \"*\\b.exe\")"]

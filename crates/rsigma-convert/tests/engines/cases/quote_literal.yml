@@ -1,0 +1,22 @@
+description: Single and double quotes in values are literal.
+rule:
+  title: quote literal
+  logsource: {category: process_creation, product: windows}
+  detection:
+    sel_single:
+      CommandLine|contains: "it's"
+    sel_double:
+      CommandLine|contains: 'say "hi"'
+    condition: 1 of sel_*
+events:
+  - {CommandLine: "echo it's"}
+  - {CommandLine: 'echo its'}
+  - {CommandLine: 'echo say "hi" now'}
+  - {CommandLine: 'echo say hi'}
+matches: [0, 2]
+known_failures:
+  test-pysigma:
+    type: output-difference
+    reason: "values of one field are not rendered as an in-list"
+    actual: ["CommandLine contains \"say \\\"hi\\\"\" or CommandLine contains \"it's\""]
+    reference: ["CommandLine in (\"*it's*\", \"*say \\\"hi\\\"*\")"]

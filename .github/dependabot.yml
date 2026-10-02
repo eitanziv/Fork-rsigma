@@ -43,6 +43,31 @@ updates:
     cooldown:
       default-days: 7
 
+  # Base images, the pinned pySigma release, and the Fibratus module used by
+  # the backend engine tests.
+  - package-ecosystem: docker
+    directories:
+      - "/crates/rsigma-convert/tests/engines/lynxdb"
+      - "/crates/rsigma-convert/tests/engines/pysigma"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: pip
+    directory: "/crates/rsigma-convert/tests/engines/pysigma"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: gomod
+    directory: "/crates/rsigma-convert/tests/engines/fibratus"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
   # Track the VS Code extension's npm dependencies (TypeScript types,
   # @vscode/vsce, eslint, etc.).
   - package-ecosystem: npm

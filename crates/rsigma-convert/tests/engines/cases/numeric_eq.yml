@@ -1,0 +1,19 @@
+description: An integer value matches the number exactly.
+rule:
+  title: numeric eq
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      ProcessId: 4
+    condition: selection
+events:
+  - {ProcessId: 4}
+  - {ProcessId: 40}
+  - {ProcessId: 14}
+  - {Image: 'C:\x.exe'}
+matches: [0]
+known_failures:
+  postgres-jsonb:
+    type: engine-error
+    reason: "comparing the text from ->> with an integer is a SQL type error"
+    contains: "operator does not exist: text = integer"

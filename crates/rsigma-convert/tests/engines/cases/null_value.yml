@@ -1,0 +1,33 @@
+description: A null value matches a missing or null field.
+rule:
+  title: null value
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: '\cmd.exe'
+      User: null
+    condition: selection
+events:
+  - {Image: 'C:\cmd.exe'}
+  - {Image: 'C:\cmd.exe', User: null}
+  - {Image: 'C:\cmd.exe', User: 'admin'}
+  - {Image: 'C:\cmd.exe', User: ''}
+matches: [0, 1]
+known_failures:
+  lynxdb:
+    type: match-mismatch
+    reason: "NOT field=* does not match a field that is present with a null value"
+    actual: [0]
+  test-pysigma:
+    type: output-difference
+    reason: "backslashes in values are doubled"
+    actual: ["Image endswith \"\\\\cmd.exe\" and User is null"]
+    reference: ["Image endswith \"\\cmd.exe\" and User is null"]
+  fibratus:
+    type: match-mismatch
+    reason: "null renders as = '', which matches an empty string instead of an absent field"
+    actual: [3]
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "null renders as = '', which matches an empty string instead of an absent field"
+    actual: [3]

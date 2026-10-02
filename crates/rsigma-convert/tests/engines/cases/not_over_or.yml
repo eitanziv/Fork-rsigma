@@ -1,0 +1,36 @@
+description: not 1 of filter_* negates the whole OR of the filters.
+rule:
+  title: not over or
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: '\cmd.exe'
+    filter_a:
+      CommandLine|contains: 'shell32'
+    filter_b:
+      ParentImage|endswith: '\explorer.exe'
+    condition: selection and not 1 of filter_*
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'x', ParentImage: 'C:\services.exe'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'shell32', ParentImage: 'C:\services.exe'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'x', ParentImage: 'C:\explorer.exe'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'x', ParentImage: 'C:\explorer.exe'}
+matches: [0]
+known_failures:
+  postgres-jsonb:
+    type: match-mismatch
+    reason: "NOT is not parenthesized over the OR of the filters"
+    actual: [0, 2, 3]
+  postgres-columns:
+    type: match-mismatch
+    reason: "NOT is not parenthesized over the OR of the filters"
+    actual: [0, 2, 3]
+  lynxdb:
+    type: match-mismatch
+    reason: "NOT is not parenthesized over the OR of the filters"
+    actual: [0, 2]
+  test-pysigma:
+    type: output-difference
+    reason: "backslashes in values are doubled; NOT is not parenthesized over the OR of the filters"
+    actual: ["Image endswith \"\\\\cmd.exe\" and not CommandLine contains \"shell32\" or ParentImage endswith \"\\\\explorer.exe\""]
+    reference: ["Image endswith \"\\cmd.exe\" and not (CommandLine contains \"shell32\" or ParentImage endswith \"\\explorer.exe\")"]

@@ -1,0 +1,22 @@
+description: exists true matches events that have the field.
+rule:
+  title: exists true
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      User|exists: true
+    condition: selection
+events:
+  - {User: 'admin'}
+  - {Image: 'C:\x.exe'}
+  - {User: ''}
+matches: [0, 2]
+known_failures:
+  fibratus:
+    type: match-mismatch
+    reason: "exists renders as a comparison with false, which never matches a string field"
+    actual: []
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "exists renders as a comparison with false, which never matches a string field"
+    actual: []

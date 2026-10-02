@@ -1,0 +1,19 @@
+description: An anchored regex with no letters, so case sensitivity does not matter.
+rule:
+  title: regex anchored
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|re: '^[0-9]+ [0-9]+$'
+    condition: selection
+events:
+  - {CommandLine: '12 34'}
+  - {CommandLine: '12 x'}
+  - {CommandLine: 'x12 34'}
+  - {CommandLine: '12 34 '}
+matches: [0]
+known_failures:
+  lynxdb:
+    type: match-mismatch
+    reason: "the =~ operator matches nothing once events are flushed to segments, while match() does"
+    actual: []

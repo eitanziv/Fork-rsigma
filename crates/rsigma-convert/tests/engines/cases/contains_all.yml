@@ -1,0 +1,22 @@
+description: contains|all requires every value as a substring, in any order.
+rule:
+  title: contains all
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|contains|all:
+        - 'foo'
+        - 'bar'
+    condition: selection
+events:
+  - {CommandLine: 'foo bar'}
+  - {CommandLine: 'BAR FOO'}
+  - {CommandLine: 'foo'}
+  - {CommandLine: 'bar'}
+matches: [0, 1]
+known_failures:
+  test-pysigma:
+    type: output-difference
+    reason: "contains|all renders as ANDed contains instead of contains-all"
+    actual: ["CommandLine contains \"foo\" and CommandLine contains \"bar\""]
+    reference: ["CommandLine contains-all (\"*foo*\", \"*bar*\")"]

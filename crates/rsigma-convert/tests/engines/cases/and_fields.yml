@@ -1,0 +1,22 @@
+description: Fields in one selection map are ANDed.
+rule:
+  title: and fields
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: '\cmd.exe'
+      CommandLine|contains: 'whoami'
+    condition: selection
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'whoami'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'whoami'}
+  - {Image: 'C:\cmd.exe'}
+  - {CommandLine: 'whoami'}
+matches: [0]
+known_failures:
+  test-pysigma:
+    type: output-difference
+    reason: "backslashes in values are doubled"
+    actual: ["Image endswith \"\\\\cmd.exe\" and CommandLine contains \"whoami\""]
+    reference: ["Image endswith \"\\cmd.exe\" and CommandLine contains \"whoami\""]

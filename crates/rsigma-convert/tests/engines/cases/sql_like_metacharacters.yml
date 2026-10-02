@@ -1,0 +1,14 @@
+description: Percent and underscore are literal characters in Sigma values.
+rule:
+  title: like metacharacters
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|contains: '50%_'
+    condition: selection
+events:
+  - {CommandLine: 'x 50%_ y'}
+  - {CommandLine: 'x 500a y'}
+  - {CommandLine: 'x 50%a y'}
+  - {CommandLine: 'x 50%'}
+matches: [0]

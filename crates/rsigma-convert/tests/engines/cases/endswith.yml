@@ -1,0 +1,22 @@
+description: endswith anchors at the end of the value only.
+rule:
+  title: endswith
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: '\cmd.exe'
+    condition: selection
+events:
+  - {Image: 'C:\Windows\System32\cmd.exe'}
+  - {Image: 'C:\X\CMD.EXE'}
+  - {Image: 'C:\cmd.exe.bak'}
+  - {Image: 'cmd.exe'}
+  - {Image: 'C:\xcmd.exe'}
+  - {CommandLine: 'x'}
+matches: [0, 1]
+known_failures:
+  test-pysigma:
+    type: output-difference
+    reason: "backslashes in values are doubled"
+    actual: ["Image endswith \"\\\\cmd.exe\""]
+    reference: ["Image endswith \"\\cmd.exe\""]

@@ -52,7 +52,7 @@ transformations:
       Company: ps.pe.company
       Description: ps.pe.description
       Product: ps.pe.product
-      FileVersion: process.pe.file.version
+      FileVersion: ps.pe.file.version
     rule_conditions:
       - type: logsource
         category: process_creation
@@ -91,7 +91,7 @@ transformations:
       Company: ps.pe.company
       Description: ps.pe.description
       Product: ps.pe.product
-      FileVersion: process.pe.file.version
+      FileVersion: ps.pe.file.version
     rule_conditions:
       - type: logsource
         category: process_termination

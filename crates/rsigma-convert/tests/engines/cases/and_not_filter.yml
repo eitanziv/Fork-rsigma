@@ -1,0 +1,22 @@
+description: A single-item filter excluded with and not.
+rule:
+  title: and not filter
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: '\cmd.exe'
+    filter:
+      ParentImage|endswith: '\explorer.exe'
+    condition: selection and not filter
+events:
+  - {Image: 'C:\cmd.exe', ParentImage: 'C:\explorer.exe'}
+  - {Image: 'C:\cmd.exe', ParentImage: 'C:\services.exe'}
+  - {Image: 'C:\pwsh.exe', ParentImage: 'C:\services.exe'}
+  - {Image: 'C:\cmd.exe', ParentImage: 'C:\EXPLORER.EXE'}
+matches: [1]
+known_failures:
+  test-pysigma:
+    type: output-difference
+    reason: "backslashes in values are doubled"
+    actual: ["Image endswith \"\\\\cmd.exe\" and not ParentImage endswith \"\\\\explorer.exe\""]
+    reference: ["Image endswith \"\\cmd.exe\" and not ParentImage endswith \"\\explorer.exe\""]

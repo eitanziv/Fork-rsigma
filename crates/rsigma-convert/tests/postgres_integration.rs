@@ -3,7 +3,10 @@
 //!
 //! Uses the Okta detection scenario from the detection-layer-on-postgres
 //! companion project: JSONB schema, 6 sample Okta System Log events, and
-//! SigmaHQ rules for the cross-tenant impersonation attack chain.
+//! SigmaHQ rules for the cross-tenant impersonation attack chain. Run with
+//! `cargo test -p rsigma-convert --test postgres_integration -- --ignored`.
+
+mod engines;
 
 use std::collections::HashMap;
 
@@ -13,25 +16,6 @@ use rsigma_parser::parse_sigma_yaml;
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 use tokio_postgres::NoTls;
-
-fn can_run_linux_containers() -> bool {
-    let output = std::process::Command::new("docker")
-        .args(["info", "--format", "{{.OSType}}"])
-        .output();
-    match output {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim() == "linux",
-        _ => false,
-    }
-}
-
-macro_rules! skip_without_docker {
-    () => {
-        if !can_run_linux_containers() {
-            eprintln!("Skipping: Docker with Linux container support is not available");
-            return;
-        }
-    };
-}
 
 const SCHEMA: &str = r#"
 CREATE TABLE okta_events (
@@ -222,8 +206,9 @@ async fn convert_and_query(
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
 async fn proxy_session_default_format() {
-    skip_without_docker!();
+    engines::require_docker();
     let (_container, client) = setup_db().await;
     let results = convert_and_query(&client, RULE_PROXY_SESSION, "default").await;
     assert_eq!(results.len(), 1);
@@ -234,8 +219,9 @@ async fn proxy_session_default_format() {
 }
 
 #[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
 async fn mfa_deactivated_default_format() {
-    skip_without_docker!();
+    engines::require_docker();
     let (_container, client) = setup_db().await;
     let results = convert_and_query(&client, RULE_MFA_DEACTIVATED, "default").await;
     assert_eq!(results.len(), 1);
@@ -246,8 +232,9 @@ async fn mfa_deactivated_default_format() {
 }
 
 #[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
 async fn admin_role_default_format() {
-    skip_without_docker!();
+    engines::require_docker();
     let (_container, client) = setup_db().await;
     let results = convert_and_query(&client, RULE_ADMIN_ROLE, "default").await;
     assert_eq!(results.len(), 1);
@@ -258,8 +245,9 @@ async fn admin_role_default_format() {
 }
 
 #[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
 async fn idp_created_default_format() {
-    skip_without_docker!();
+    engines::require_docker();
     let (_container, client) = setup_db().await;
     let results = convert_and_query(&client, RULE_IDP_CREATED, "default").await;
     assert_eq!(results.len(), 1);
@@ -267,8 +255,9 @@ async fn idp_created_default_format() {
 }
 
 #[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
 async fn view_format_creates_queryable_view() {
-    skip_without_docker!();
+    engines::require_docker();
     let (_container, client) = setup_db().await;
     let collection = parse_sigma_yaml(RULE_PROXY_SESSION).expect("parse");
     let backend = okta_backend();
@@ -291,8 +280,9 @@ async fn view_format_creates_queryable_view() {
 }
 
 #[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
 async fn all_four_rules_together() {
-    skip_without_docker!();
+    engines::require_docker();
     let (_container, client) = setup_db().await;
 
     let combined = format!(
@@ -308,8 +298,9 @@ async fn all_four_rules_together() {
 }
 
 #[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
 async fn correlation_event_count_against_postgres() {
-    skip_without_docker!();
+    engines::require_docker();
     let (_container, client) = setup_db().await;
 
     let combined = format!("{RULE_PROXY_SESSION}\n---\n{CORRELATION_EVENT_COUNT}");
@@ -332,8 +323,9 @@ async fn correlation_event_count_against_postgres() {
 }
 
 #[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
 async fn no_match_returns_zero_rows() {
-    skip_without_docker!();
+    engines::require_docker();
     let (_container, client) = setup_db().await;
 
     let rule = r#"

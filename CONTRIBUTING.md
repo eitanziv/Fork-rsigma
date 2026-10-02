@@ -72,6 +72,39 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) style:
 - **Fuzz targets** live in `fuzz/fuzz_targets/`. Add a fuzz target for any new untrusted input surface.
 - **Benchmarks** use Criterion and live in `benches/`.
 
+### Backend engine tests
+
+Conversion backends are tested by running their queries in the real engines. Each case in `crates/rsigma-convert/tests/engines/cases/` is a Sigma rule with sample events and the indexes of the events it must match:
+
+```yaml
+description: What the case checks.
+rule: { ... }            # a Sigma rule
+events: [ ... ]          # one map per event
+matches: [0, 2]          # indexes of the events the rule must match
+unsupported: [lynxdb]    # optional: engines whose backend must reject the rule
+known_failures:          # optional: engine label to a confirmed defect
+  postgres-jsonb:
+    type: match-mismatch
+    reason: why the result is wrong
+    actual: [1]
+```
+
+The engine labels are `eval`, `postgres-jsonb`, `postgres-columns`, `lynxdb`, `fibratus`, `fibratus-nomacros`, and `test-pysigma`. Known failures use `type: match-mismatch` with the exact matched indexes, `type: engine-error` with a required error substring, or `type: output-difference` with the exact rsigma and reference queries. A failure that changes outcome or starts passing fails the test, so a fix must update or remove its entry. Prefer cases that probe edge behavior (missing fields, escapes, grouping, case) over happy paths.
+
+The `eval` run is part of `cargo test`. The engine runs are `#[ignore]`d and need extra tooling:
+
+```bash
+# Docker: PostgreSQL 18 (both modes), LynxDB built from its release, pySigma's test backend
+cargo test -p rsigma-convert --test engine_postgres -- --ignored
+cargo test -p rsigma-convert --test engine_lynxdb -- --ignored
+cargo test -p rsigma-convert --test engine_test_backend -- --ignored
+
+# Windows with Go: the Fibratus filter engine
+cargo test -p rsigma-convert --test engine_fibratus -- --ignored
+```
+
+In CI each engine has its own workflow (`.github/workflows/engine-*.yml`) that runs only when its backend, its harness, the shared cases, or the conversion core changes.
+
 ## Documentation
 
 Two surfaces must stay in sync with what each release ships:

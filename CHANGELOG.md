@@ -4,6 +4,14 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Backend queries are tested in the engines that run them (#528)
+
+The conversion backends now have tests that run the generated queries in the real engines instead of only comparing query text. A shared set of Sigma rules, each with sample events and the indexes of the events it must match, covers condition grouping, negation over missing fields, wildcards and escapes, case sensitivity, regular expression flags, numeric comparison, `null`, `exists`, and CIDR. Each case runs through `engine eval`, the PostgreSQL backend in PostgreSQL 18 (in both JSONB and typed-column mode), the LynxDB backend in a LynxDB v0.2.5 server, and the Fibratus backend in the Fibratus v3.1.1 filter engine (with and without macros, through the `fibratus_windows` pipeline). The `test` backend is compared textually with pySigma 1.5.1's `TextQueryTestBackend`. Confirmed defects record the exact mismatched indexes, engine error, or pair of differing outputs per case and engine. A defect that changes outcome or stops reproducing fails the test, so the fix must update or remove the record. Each engine has its own CI workflow that runs only when that backend, its harness, the shared cases, or shared parser, IR, pipeline, and conversion code changes. Contributors can run them locally as described in CONTRIBUTING.md.
+
+### `fibratus_windows` maps `FileVersion` to a field Fibratus defines (#528)
+
+The `fibratus_windows` pipeline mapped `FileVersion` to `process.pe.file.version` for `process_creation` and `process_termination`, a field that does not exist in Fibratus, so the Fibratus loader rejected any converted rule that used it. It now maps to `ps.pe.file.version`.
+
 ### Temporal correlations without a condition require every referenced rule (#524)
 
 A `temporal` correlation that omits `condition` now fires only when every referenced rule matches within the timespan, as the Sigma correlation specification and pySigma define it. The parser used to default the threshold to `gte: 1`, so the first match of any single referenced rule fired the correlation. The default is now `gte: <number of distinct rules>`, which applies to `engine eval`, the daemon, and the PostgreSQL `HAVING` clause that `backend convert` emits. `temporal_ordered` already behaved correctly because its window value is non-zero only once every rule has fired in order. A temporal correlation with neither a condition nor any `rules` is now a parse error instead of a correlation that can never fire.

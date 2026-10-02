@@ -1,0 +1,31 @@
+description: re|i matches case-insensitively.
+rule:
+  title: regex i flag
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|re|i: 'who.mi'
+    condition: selection
+events:
+  - {CommandLine: 'x whoami'}
+  - {CommandLine: 'x WHOAMI'}
+  - {CommandLine: 'x who'}
+matches: [0, 1]
+known_failures:
+  lynxdb:
+    type: match-mismatch
+    reason: "the i flag is dropped from the regex"
+    actual: []
+  test-pysigma:
+    type: output-difference
+    reason: "the i flag is dropped instead of rendered as (?i)"
+    actual: ["CommandLine=/who.mi/"]
+    reference: ["CommandLine=/(?i)who.mi/"]
+  fibratus:
+    type: match-mismatch
+    reason: "the i flag is dropped from the regex"
+    actual: [0]
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "the i flag is dropped from the regex"
+    actual: [0]

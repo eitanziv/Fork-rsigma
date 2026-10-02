@@ -1,0 +1,20 @@
+description: cidr matches addresses inside the network only.
+rule:
+  title: cidr
+  logsource: {category: network_connection, product: windows}
+  detection:
+    selection:
+      DestinationIp|cidr: '10.0.0.0/8'
+    condition: selection
+events:
+  - {DestinationIp: '10.1.2.3'}
+  - {DestinationIp: '11.0.0.1'}
+  - {DestinationIp: '192.168.1.1'}
+  - {DestinationIp: '10.255.255.255'}
+matches: [0, 3]
+known_failures:
+  test-pysigma:
+    type: output-difference
+    reason: "cidrmatch arguments are swapped and the field is not quoted"
+    actual: ["cidrmatch(\"10.0.0.0/8\", DestinationIp)"]
+    reference: ["cidrmatch('DestinationIp', \"10.0.0.0/8\")"]
