@@ -4,13 +4,13 @@ rule:
   logsource: {category: process_creation, product: windows}
   detection:
     selection:
-      User|fieldref|neq: TargetUser
+      Image|fieldref|neq: ParentImage
     condition: selection
 unsupported: [lynxdb]
 events:
-  - {User: 'alice', TargetUser: 'alice'}
-  - {User: 'alice', TargetUser: 'bob'}
-  - {User: 'alice'}
-  - {TargetUser: 'alice'}
-  - {Image: 'x'}
+  - {Image: 'a.exe', ParentImage: 'a.exe'}
+  - {Image: 'a.exe', ParentImage: 'b.exe'}
+  - {Image: 'a.exe'}
+  - {ParentImage: 'a.exe'}
+  - {CommandLine: 'x'}
 matches: [1, 2, 3, 4]
