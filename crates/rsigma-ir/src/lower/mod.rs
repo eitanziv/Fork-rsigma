@@ -270,6 +270,16 @@ pub fn lower_condition(expr: &ConditionExpr, detection_names: &[String]) -> Resu
             quantifier,
             pattern,
         } => {
+            // A selector over no identifiers has no defined result, and eval
+            // and conversion would disagree on it.
+            if !detection_names
+                .iter()
+                .any(|n| pattern.matches_detection_name(n))
+            {
+                return Err(IrError::NoSelectorMatches(format!(
+                    "{quantifier} of {pattern}"
+                )));
+            }
             // Preserve the selector so eval evaluates it natively (count-based,
             // reporting every matching detection) and convert can resolve it
             // like the parser path. Expanding here would change reported

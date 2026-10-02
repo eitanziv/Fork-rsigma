@@ -3,7 +3,7 @@
 //! These lock in the match/no-match behavior of rules compiled through the IR
 //! path (`compile_rule` = `lower_rule` → `compile_to_compiled`) against
 //! representative events. They cover the Sigma corners the IR layer had to get
-//! right: vacuous `all of <pattern>`, `them` skipping `_`-prefixed names,
+//! right: selectors over zero names, `them` skipping `_`-prefixed names,
 //! modifier resolution, CIDR, keywords, `rsigma.include_event`, and modifier
 //! contradictions. (These previously ran as a differential against the removed
 //! `compile_rule_legacy`; they now assert the expected result directly.)
@@ -45,10 +45,10 @@ detection:
 }
 
 #[test]
-fn vacuous_all_of_zero_matches_is_true() {
-    // `all of selection_*` matches zero detection names here, which is
-    // vacuously true, so every event matches regardless of its content.
-    assert_matches(
+fn all_of_zero_matches_does_not_compile() {
+    // `all of selection_*` matches zero detection names here, which has no
+    // defined result.
+    let rule = rule_from(
         r#"
 title: Vacuous All Of Zero
 logsource: { category: test }
@@ -57,11 +57,8 @@ detection:
         Image: 'notepad.exe'
     condition: all of selection_*
 "#,
-        &[
-            (json!({"Image": "notepad.exe"}), true),
-            (json!({"Image": "other.exe"}), true),
-        ],
     );
+    assert!(compile_rule(&rule).is_err());
 }
 
 #[test]

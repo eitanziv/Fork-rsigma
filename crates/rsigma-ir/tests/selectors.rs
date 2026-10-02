@@ -1,28 +1,23 @@
 //! Mandatory selector fixtures.
 //!
 //! Common Sigma regression points:
-//! - vacuous `all of <pattern>` over zero matching detection names → true
-//! - `them` skips `_`-prefixed detection names
-//! - glob/prefix patterns still match `_`-prefixed names when selected explicitly
-//!
-//! Vacuous cases use [`common::compiled_from`] + [`common::rule_matches`] so
-//! unused detections cannot be dropped by the engine rule index.
+//! - a selector over zero matching detection names is a compile error
+//! - `them` and patterns not starting with `_` skip `_`-prefixed names
+//! - patterns starting with `_` match `_`-prefixed names
 
 mod common;
 
-use common::{compiled_from, engine_from, matches, rule_matches, titles_for};
+use common::{compiled_from, engine_from, matches, rule_matches, titles_for, try_compile};
 use serde_json::json;
 
 // =============================================================================
-// Vacuous `all of`
+// Selectors over zero detection names
 // =============================================================================
 
 #[test]
-fn vacuous_all_of_zero_matches_is_true() {
+fn all_of_zero_matches_is_rejected() {
     // Pattern `selection_*` matches zero detection names (`filter_main` does not).
-    // Legacy eval: Quantifier::All over an empty name set → 0 == 0 → true.
-    // HIR lowering must emit vacuous `IrCondition::And([])` with the same meaning.
-    let rule = compiled_from(
+    let err = try_compile(
         r#"
 title: Vacuous All Of Zero
 id: vacuous-all-of-zero
@@ -34,15 +29,18 @@ detection:
     condition: all of selection_*
 level: low
 "#,
+    )
+    .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("selector 'all of selection_*' matches no detection identifier"),
+        "{err}"
     );
-    assert!(rule_matches(&rule, &json!({"Image": "evil.exe"})));
-    assert!(rule_matches(&rule, &json!({"CommandLine": "whoami"})));
-    assert!(rule_matches(&rule, &json!({})));
 }
 
 #[test]
-fn vacuous_all_of_multiple_patterns_is_true() {
-    let rule = compiled_from(
+fn all_of_zero_matches_under_and_is_rejected() {
+    let err = try_compile(
         r#"
 title: Vacuous All Of Multiple
 id: vacuous-all-of-multi
@@ -51,12 +49,12 @@ logsource:
 detection:
     filter_main:
         Image: 'notepad.exe'
-    condition: all of selection_a* and all of selection_b*
+    condition: filter_main and all of selection_b*
 level: low
 "#,
-    );
-    assert!(rule_matches(&rule, &json!({"Image": "evil.exe"})));
-    assert!(rule_matches(&rule, &json!({})));
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("'all of selection_b*'"), "{err}");
 }
 
 #[test]
@@ -158,12 +156,12 @@ level: low
 }
 
 // =============================================================================
-// Glob/prefix patterns match `_`-prefixed names (unlike `them`)
+// Patterns starting with `_` match `_`-prefixed names
 // =============================================================================
 
 #[test]
 fn glob_pattern_matches_underscore_prefixed_detection_name() {
-    // The `_` convention applies only to `them`, not to explicit patterns.
+    // A pattern that itself starts with `_` selects `_`-prefixed names.
     let engine = engine_from(
         r#"
 title: Glob Matches Underscore
@@ -220,6 +218,8 @@ logsource:
 detection:
     selection:
         Image: 'notepad.exe'
+    selection_other:
+        Image: 'evil.exe'
     condition: 1 of selection_*
 level: low
 "#,
@@ -228,4 +228,26 @@ level: low
         !rule_matches(&rule, &json!({"Image": "notepad.exe"})),
         "`selection` must not match pattern `selection_*`"
     );
+    assert!(rule_matches(&rule, &json!({"Image": "evil.exe"})));
+}
+
+#[test]
+fn star_pattern_skips_underscore_prefixed_detection_names() {
+    let rule = compiled_from(
+        r#"
+title: Star Skip Prefix
+id: star-skip-prefix
+logsource:
+    category: test
+detection:
+    selection:
+        Image: 'notepad.exe'
+    _internal:
+        Image: 'evil.exe'
+    condition: all of *
+level: low
+"#,
+    );
+    assert!(rule_matches(&rule, &json!({"Image": "notepad.exe"})));
+    assert!(!rule_matches(&rule, &json!({"Image": "evil.exe"})));
 }

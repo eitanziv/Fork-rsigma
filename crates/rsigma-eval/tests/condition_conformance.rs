@@ -120,6 +120,30 @@ fn selector_patterns_skip_underscore_identifiers_unless_they_start_with_one() {
 }
 
 #[test]
+fn selectors_that_match_no_identifier_are_rejected() {
+    for condition in [
+        "all of zzz*",
+        "_sel and all of zzz*",
+        "1 of zzz*",
+        "1 of *",
+        "all of them",
+    ] {
+        let detection = format!("_sel:\n  A: 1\ncondition: {condition}");
+        let err = match try_engine(&rule_yaml("", &detection)) {
+            Ok(_) => panic!("condition should be rejected: {condition}"),
+            Err(e) => e,
+        };
+        assert!(
+            err.contains("matches no detection identifier"),
+            "{condition}: {err}"
+        );
+    }
+
+    let detection = "_sel:\n  A: 1\ncondition: 1 of _*";
+    assert_eq!(matching(detection, &[json!({"A": 1})]), vec![0]);
+}
+
+#[test]
 fn field_less_values_in_an_array_body_match_the_member_itself() {
     let yaml = rule_yaml(
         "sigma-version: 3\n",
