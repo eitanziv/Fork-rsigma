@@ -37,6 +37,8 @@ use crate::pipeline::{Pipeline, apply_pipelines, apply_pipelines_to_correlation}
 use crate::result::{CorrelationBody, EvaluationResult, ResultBody, RuleHeader};
 use crate::rule_metadata::{RuleBundleMetadata, RuleMetadataLookup};
 
+type RuleIdentity = (Option<String>, Option<String>);
+
 // =============================================================================
 // Correlation Engine
 // =============================================================================
@@ -499,7 +501,7 @@ impl CorrelationEngine {
         &mut self,
         event: &impl Event,
         all_detections: Vec<EvaluationResult>,
-        identities: Vec<(Option<String>, Option<String>)>,
+        identities: Vec<RuleIdentity>,
     ) -> ProcessResult {
         let ts = match self.extract_event_timestamp(event) {
             Some(ts) => ts,
@@ -546,7 +548,7 @@ impl CorrelationEngine {
         &mut self,
         event: &impl Event,
         all_detections: Vec<EvaluationResult>,
-        identities: Vec<(Option<String>, Option<String>)>,
+        identities: Vec<RuleIdentity>,
         timestamp_secs: i64,
     ) -> ProcessResult {
         let timestamp_secs = timestamp_secs.clamp(0, i64::MAX / 2);
@@ -660,7 +662,7 @@ impl CorrelationEngine {
     fn filter_detections(
         &self,
         all_detections: Vec<EvaluationResult>,
-        identities: Vec<(Option<String>, Option<String>)>,
+        identities: Vec<RuleIdentity>,
     ) -> Vec<EvaluationResult> {
         if !self.config.emit_detections && !self.correlation_only_rules.is_empty() {
             all_detections
@@ -685,7 +687,7 @@ impl CorrelationEngine {
     fn feed_detections(
         &mut self,
         event: &impl Event,
-        identities: &[(Option<String>, Option<String>)],
+        identities: &[RuleIdentity],
         ts: i64,
         out: &mut Vec<EvaluationResult>,
         fired_indices: &mut Vec<usize>,
@@ -726,7 +728,7 @@ impl CorrelationEngine {
     }
 
     /// Find the (id, name) for a detection match by searching our rule_ids table.
-    fn find_rule_identity(&self, det: &EvaluationResult) -> (Option<String>, Option<String>) {
+    fn find_rule_identity(&self, det: &EvaluationResult) -> RuleIdentity {
         // Prefer the stable ID carried by the result.
         if let Some(ref match_id) = det.header.rule_id {
             for (id, name, _) in &self.rule_ids {
@@ -1495,7 +1497,7 @@ impl Default for CorrelationEngine {
 
 fn split_identified(
     identified: Vec<IdentifiedEvaluation>,
-) -> (Vec<EvaluationResult>, Vec<(Option<String>, Option<String>)>) {
+) -> (Vec<EvaluationResult>, Vec<RuleIdentity>) {
     identified
         .into_iter()
         .map(|identified| {
