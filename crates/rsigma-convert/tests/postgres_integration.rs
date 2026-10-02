@@ -306,16 +306,26 @@ async fn correlation_event_count_against_postgres() {
     let combined = format!("{RULE_PROXY_SESSION}\n---\n{CORRELATION_EVENT_COUNT}");
     let results = convert_and_query(&client, &combined, "default").await;
 
-    // First result is the detection rule, second is the correlation
-    assert_eq!(
-        results.len(),
-        2,
-        "should have detection + correlation queries"
-    );
+    assert_eq!(results.len(), 1, "only the correlation query is standalone");
     assert_eq!(
         results[0].1, 1,
-        "detection rule should match 1 proxy session"
+        "correlation should find the group meeting its threshold"
     );
+}
+
+#[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
+async fn correlation_generate_true_keeps_a_standalone_detection_query() {
+    engines::require_docker();
+    let (_container, client) = setup_db().await;
+
+    let generated =
+        CORRELATION_EVENT_COUNT.replacen("correlation:", "generate: true\ncorrelation:", 1);
+    let combined = format!("{RULE_PROXY_SESSION}\n---\n{generated}");
+    let results = convert_and_query(&client, &combined, "default").await;
+
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0].1, 1, "standalone detection should match");
     assert!(
         results[1].1 >= 1,
         "correlation should find at least 1 group meeting threshold (gte: 1)"

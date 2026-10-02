@@ -76,9 +76,12 @@ pub(crate) struct EvalArgs {
     #[arg(long = "action", value_parser = ["alert", "reset"])]
     pub action: Option<String>,
 
-    /// Suppress detection-level output for rules that are only
-    /// referenced by correlations (where generate=false).
-    #[arg(long = "no-detections")]
+    /// Emit detection-level output for rules referenced by correlations.
+    #[arg(long = "emit-detections")]
+    pub emit_detections: bool,
+
+    /// Deprecated: correlation-only detection output is suppressed by default.
+    #[arg(long = "no-detections", conflicts_with = "emit_detections")]
     pub no_detections: bool,
 
     /// Include the full event JSON in each detection match output.
@@ -421,6 +424,7 @@ pub(crate) fn cmd_eval(args: EvalArgs, ctx: OutputCtx) -> bool {
         jsonpath,
         suppress,
         action,
+        emit_detections,
         no_detections,
         include_event,
         match_detail,
@@ -509,10 +513,15 @@ pub(crate) fn cmd_eval(args: EvalArgs, ctx: OutputCtx) -> bool {
         }
     };
 
+    if no_detections {
+        eprintln!(
+            "warning: --no-detections is deprecated; correlation-only detections are suppressed by default"
+        );
+    }
     let corr_config = crate::build_correlation_config(
         suppress,
         action,
-        no_detections,
+        emit_detections,
         correlation_event_mode,
         max_correlation_events,
         max_state_entries,

@@ -822,7 +822,7 @@ pub(crate) fn build_event_filter(jq: Option<String>, jsonpath: Option<String>) -
 pub(crate) fn build_correlation_config(
     suppress: Option<String>,
     action: Option<String>,
-    no_detections: bool,
+    emit_detections: bool,
     correlation_event_mode: String,
     max_correlation_events: usize,
     max_state_entries: usize,
@@ -862,7 +862,7 @@ pub(crate) fn build_correlation_config(
     let mut config = CorrelationConfig {
         suppress: suppress_secs,
         action_on_match,
-        emit_detections: !no_detections,
+        emit_detections,
         correlation_event_mode: event_mode,
         max_correlation_events,
         max_state_entries,

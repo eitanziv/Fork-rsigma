@@ -539,6 +539,22 @@ fn eval_correlation_action_reset() {
 }
 
 #[test]
+fn eval_suppresses_referenced_rule_output_by_default() {
+    let rule = temp_file(".yml", CORRELATION_RULES);
+    let events = r#"{"EventType": "login_failure", "User": "admin", "@timestamp": "2025-01-01T00:00:01Z"}
+{"EventType": "login_failure", "User": "admin", "@timestamp": "2025-01-01T00:00:02Z"}
+{"EventType": "login_failure", "User": "admin", "@timestamp": "2025-01-01T00:00:03Z"}
+"#;
+    rsigma()
+        .args(["engine", "eval", "--rules", rule.path().to_str().unwrap()])
+        .write_stdin(events)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Brute Force"))
+        .stdout(predicate::str::contains("\"rule_title\":\"Detection\"").not());
+}
+
+#[test]
 fn eval_no_detections_flag() {
     let rule = temp_file(".yml", CORRELATION_RULES);
     let events = r#"{"EventType": "login_failure", "User": "admin", "@timestamp": "2025-01-01T00:00:01Z"}
@@ -556,6 +572,7 @@ fn eval_no_detections_flag() {
         .write_stdin(events)
         .assert()
         .success()
+        .stderr(predicate::str::contains("--no-detections is deprecated"))
         .get_output()
         .stdout
         .clone();
@@ -569,6 +586,25 @@ fn eval_no_detections_flag() {
         !stdout_str.contains("\"rule_title\":\"Detection\""),
         "detection-level output should be suppressed"
     );
+}
+
+#[test]
+fn eval_emit_detections_flag_restores_referenced_rule_output() {
+    let rule = temp_file(".yml", CORRELATION_RULES);
+    let events = r#"{"EventType": "login_failure", "User": "admin", "@timestamp": "2025-01-01T00:00:01Z"}
+"#;
+    rsigma()
+        .args([
+            "engine",
+            "eval",
+            "--rules",
+            rule.path().to_str().unwrap(),
+            "--emit-detections",
+        ])
+        .write_stdin(events)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"rule_title\":\"Detection\""));
 }
 
 // ---------------------------------------------------------------------------

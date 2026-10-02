@@ -149,8 +149,8 @@ daemon:
     # timestamp_fields: ["@timestamp"]
     # Behavior when no timestamp field is found: wallclock | skip
     timestamp_fallback: wallclock
-    # Suppress detection output for correlation-only rules.
-    no_detections: false
+    # Emit detection output for rules referenced by correlations.
+    emit_detections: false
 
   state:
     # SQLite database for persisting correlation state across restarts.

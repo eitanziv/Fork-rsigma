@@ -151,8 +151,8 @@ pub struct CorrelationConfig {
     /// Whether to emit detection-level matches for rules that are only
     /// referenced by correlations (where `generate: false`).
     ///
-    /// Default: `true` (emit all detection matches).
-    /// Set to `false` to suppress detection output for correlation-only rules.
+    /// Default: `false`, following Sigma's correlation-only output semantics.
+    /// Set to `true` to emit every detection match.
     pub emit_detections: bool,
 
     /// How to include contributing events in correlation results.
@@ -187,7 +187,7 @@ impl Default for CorrelationConfig {
             max_group_entries: None,
             suppress: None,
             action_on_match: CorrelationAction::default(),
-            emit_detections: true,
+            emit_detections: false,
             correlation_event_mode: CorrelationEventMode::default(),
             max_correlation_events: 10,
         }

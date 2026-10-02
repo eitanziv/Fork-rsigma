@@ -509,7 +509,7 @@ mod tests {
                 .any(|m| m["name"] == "contains")
         );
         let cat = to_value(&catalogue());
-        assert_eq!(cat.as_array().unwrap().len(), 88);
+        assert_eq!(cat.as_array().unwrap().len(), 89);
     }
 
     #[test]

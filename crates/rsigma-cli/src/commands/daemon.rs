@@ -77,8 +77,12 @@ pub(crate) struct DaemonArgs {
     #[arg(long = "action", value_parser = ["alert", "reset"])]
     pub action: Option<String>,
 
-    /// Suppress detection output for correlation-only rules
-    #[arg(long = "no-detections")]
+    /// Emit detection output for rules referenced by correlations
+    #[arg(long = "emit-detections")]
+    pub emit_detections: bool,
+
+    /// Deprecated: correlation-only detection output is suppressed by default
+    #[arg(long = "no-detections", conflicts_with = "emit_detections")]
     pub no_detections: bool,
 
     /// Correlation event mode: none, full, or refs
@@ -699,6 +703,7 @@ pub(crate) fn cmd_daemon(
         api_token_env: _,
         suppress,
         action,
+        emit_detections,
         no_detections,
         correlation_event_mode,
         max_correlation_events,
@@ -868,6 +873,7 @@ pub(crate) fn cmd_daemon(
         api_addr,
         suppress,
         action,
+        emit_detections,
         no_detections,
         correlation_event_mode,
         max_correlation_events,
@@ -1480,10 +1486,12 @@ fn apply_daemon_config(
         {
             args.timestamp_fallback = v;
         }
-        if !explicit("no_detections")
-            && let Some(v) = correlation.no_detections
-        {
-            args.no_detections = v;
+        if !explicit("emit_detections") && !explicit("no_detections") {
+            if let Some(v) = correlation.emit_detections {
+                args.emit_detections = v;
+            } else if let Some(v) = correlation.no_detections {
+                args.emit_detections = !v;
+            }
         }
     }
 
@@ -1637,6 +1645,7 @@ fn run_daemon(
     api_addr: String,
     suppress: Option<String>,
     action: Option<String>,
+    emit_detections: bool,
     no_detections: bool,
     correlation_event_mode: String,
     max_correlation_events: usize,
@@ -1726,10 +1735,15 @@ fn run_daemon(
     let event_filter = std::sync::Arc::new(crate::build_event_filter(jq, jsonpath));
     let parsed_input_format = parse_input_format(&input_format, &syslog_tz, syslog_strip_bom);
 
+    if no_detections {
+        eprintln!(
+            "warning: --no-detections is deprecated; correlation-only detections are suppressed by default"
+        );
+    }
     let corr_config = crate::build_correlation_config(
         suppress,
         action,
-        no_detections,
+        emit_detections,
         correlation_event_mode,
         max_correlation_events,
         max_state_entries,
@@ -2047,6 +2061,25 @@ mod tests {
         let base = partial("daemon:\n  rules: /file/rules\n");
         apply_daemon_config(&mut args, &matches, base);
         assert_eq!(args.rules.as_deref(), Some(Path::new("/file/rules")));
+    }
+
+    #[test]
+    fn correlation_output_config_and_cli_precedence() {
+        let (mut args, matches) = parse(&["daemon"]);
+        let base = partial("daemon:\n  correlation:\n    emit_detections: true\n");
+        apply_daemon_config(&mut args, &matches, base);
+        assert!(args.emit_detections);
+
+        let (mut args, matches) = parse(&["daemon"]);
+        let base = partial("daemon:\n  correlation:\n    no_detections: false\n");
+        apply_daemon_config(&mut args, &matches, base);
+        assert!(args.emit_detections);
+
+        let (mut args, matches) = parse(&["daemon", "--no-detections"]);
+        let base = partial("daemon:\n  correlation:\n    emit_detections: true\n");
+        apply_daemon_config(&mut args, &matches, base);
+        assert!(!args.emit_detections);
+        assert!(args.no_detections);
     }
 
     #[test]

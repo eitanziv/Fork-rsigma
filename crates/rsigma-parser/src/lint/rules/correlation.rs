@@ -1,4 +1,4 @@
-use super::super::{LintRule, LintWarning, err, get_str, key};
+use super::super::{LintRule, LintWarning, err, get_str, info, key};
 
 /// Valid correlation types.
 const VALID_CORRELATION_TYPES: &[&str] = &[
@@ -260,6 +260,15 @@ pub(crate) fn lint_correlation_rule(m: &yaml_serde::Mapping, warnings: &mut Vec<
             ));
         }
     }
+
+    let generate = m.get(key("generate")).or_else(|| corr.get(key("generate")));
+    if generate.is_none_or(|value| value.as_bool() == Some(false)) {
+        warnings.push(info(
+            LintRule::CorrelationOnlyReferences,
+            "referenced rules produce no standalone output; set 'generate: true' to emit them",
+            "/generate",
+        ));
+    }
 }
 
 fn lint_correlation_condition(
@@ -464,6 +473,41 @@ correlation:
 "#,
         );
         assert!(has_rule(&w, LintRule::GenerateNotBoolean));
+    }
+
+    #[test]
+    fn absent_generate_reports_correlation_only_output() {
+        let w = lint(
+            r#"
+title: Test
+correlation:
+    type: event_count
+    rules: [some-rule]
+    group-by: [User]
+    timespan: 1h
+    condition:
+        gte: 10
+"#,
+        );
+        assert!(has_rule(&w, LintRule::CorrelationOnlyReferences));
+    }
+
+    #[test]
+    fn generate_true_has_no_correlation_only_hint() {
+        let w = lint(
+            r#"
+title: Test
+generate: true
+correlation:
+    type: event_count
+    rules: [some-rule]
+    group-by: [User]
+    timespan: 1h
+    condition:
+        gte: 10
+"#,
+        );
+        assert!(!has_rule(&w, LintRule::CorrelationOnlyReferences));
     }
 
     #[test]
