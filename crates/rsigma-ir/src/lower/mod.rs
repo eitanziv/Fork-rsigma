@@ -186,6 +186,25 @@ pub fn lower_detection_item(item: &DetectionItem, opts: &LowerOptions) -> Result
         ));
     }
 
+    // An empty value list is a null check, as in pySigma.
+    if item.values.is_empty() {
+        if item.field.name.is_none() {
+            return Err(IrError::IncompatibleValue(
+                "an empty value list must be bound to a field".into(),
+            ));
+        }
+        let matcher = if ctx.has_neq() {
+            IrMatcher::Not(Box::new(IrMatcher::Null))
+        } else {
+            IrMatcher::Null
+        };
+        return Ok(IrDetectionItem {
+            field: item.field.name.clone(),
+            matcher,
+            exists: None,
+        });
+    }
+
     // `|neq` negates the whole item, so `Field|neq: [a, b]` means neither a nor b.
     let mut value_ctx = ctx;
     value_ctx.neq = false;

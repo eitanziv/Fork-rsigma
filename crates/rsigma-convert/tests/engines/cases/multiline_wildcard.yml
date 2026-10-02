@@ -12,10 +12,6 @@ events:
   - {CommandLine: "ab"}
 matches: [0, 1]
 known_failures:
-  eval:
-    type: match-mismatch
-    reason: "wildcards compile to a regex without (?s), so they stop at newlines"
-    actual: [1]
   test-pysigma:
     type: output-difference
     reason: "match values are not quoted"

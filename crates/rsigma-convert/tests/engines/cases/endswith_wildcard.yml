@@ -1,0 +1,30 @@
+description: endswith with an inner wildcard anchors at the end of the value only.
+rule:
+  title: endswith wildcard
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: 'sys*.exe'
+    condition: selection
+events:
+  - {Image: 'sys.exe'}
+  - {Image: 'C:\Tools\sysmon64.exe'}
+  - {Image: 'C:\TOOLS\SYSMON.EXE'}
+  - {Image: 'sysmon.exe.bak'}
+  - {Image: 'C:\Tools\mon.exe'}
+  - {CommandLine: 'x'}
+matches: [0, 1, 2]
+known_failures:
+  fibratus:
+    type: match-mismatch
+    reason: "iendswith treats an inner * as a literal character"
+    actual: []
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "iendswith treats an inner * as a literal character"
+    actual: []
+  test-pysigma:
+    type: output-difference
+    reason: "endswith with a wildcard is not rendered as a match with a leading wildcard"
+    actual: ["Image endswith sys*.exe"]
+    reference: ["Image match \"*sys*.exe\""]

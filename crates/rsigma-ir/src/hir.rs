@@ -201,13 +201,14 @@ pub enum IrMatcher {
         case_insensitive: bool,
     },
     /// Encoding-transformed string match (`base64`, `base64offset`, `wide`,
-    /// `utf16`, `utf16be`, `windash`). `value` is the untransformed plain
-    /// string. Eval replays `encodings` (in order) to build the concrete
-    /// matcher; convert backends that cannot express the transform reject it.
+    /// `utf16`, `utf16be`, `windash`). `pattern` is the untransformed value;
+    /// it has wildcards only when no base64 encoding applies. Eval replays
+    /// `encodings` to build the concrete matcher; convert backends that cannot
+    /// express the transform reject it.
     Encoded {
         encodings: Vec<IrEncoding>,
         op: IrStrOp,
-        value: String,
+        pattern: IrPattern,
         case_insensitive: bool,
     },
     /// Explicit regex (`|re`) with raw pattern and flags kept separate so eval
@@ -242,8 +243,12 @@ pub enum IrMatcher {
     },
     Null,
     BoolEq(bool),
+    /// `expand` value whose `%name%` placeholders no pipeline resolved; they
+    /// are filled from the event field of the same name at match time and
+    /// the result is compared with `op`.
     Expand {
         template: Vec<IrExpandPart>,
+        op: IrStrOp,
         case_insensitive: bool,
     },
     TimestampPart {
@@ -258,7 +263,7 @@ pub enum IrMatcher {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum IrExpandPart {
     Literal(String),
-    /// Deferred `${source.*}` token awaiting specialization.
+    /// `%name%` placeholder.
     Placeholder(String),
 }
 

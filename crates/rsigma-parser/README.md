@@ -212,6 +212,8 @@ The parser recognizes 30 modifier variants, some with aliases:
 | Regex flags | `i`, `m`, `s` | `ignorecase` → `i`, `multiline` → `m`, `dotall` → `s` |
 | Timestamp parts | `minute`, `hour`, `day`, `week`, `month`, `year` | — |
 
+Each modifier may appear once per key; a repeated modifier such as `field|neq|neq` is a `DuplicateModifier` error.
+
 When the `re` modifier is present, string values are parsed with `SigmaValue::from_raw_string` (no wildcard interpretation).
 
 ## Correlation Rules (8 types)
@@ -447,6 +449,7 @@ The `schema_violation` lint rule optionally validates rules against a JSON schem
 | `Yaml` | yaml_serde parse failure |
 | `Condition` | Condition expression parse failure (PEG/Pratt); carries optional `SourceLocation` with line/column |
 | `UnknownModifier` | Unknown modifier in field spec |
+| `DuplicateModifier` | The same modifier appears more than once in a field spec |
 | `NotIsNotAModifier` | The literal string `\|not` was used as a modifier; Sigma expresses negation at the condition level (`condition: not selection`) or via `\|neq` for inequality. Surfaced with guidance on how to rewrite the rule |
 | `InvalidFieldSpec` | Invalid field specification |
 | `InvalidRule` | Document not a mapping, or invalid structure |

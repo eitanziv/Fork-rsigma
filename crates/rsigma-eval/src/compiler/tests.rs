@@ -1,7 +1,20 @@
+use super::helpers::{base64_offset_patterns, windash_variants};
 use super::*;
 use crate::event::JsonEvent;
-use rsigma_parser::FieldSpec;
+use rsigma_ir::{IrPattern, IrPatternPart};
+use rsigma_parser::{FieldSpec, Modifier, SigmaString, SigmaValue};
 use serde_json::json;
+
+/// Windash variants of a plain value.
+fn expand_windash(input: &str) -> Result<Vec<String>> {
+    let pattern = IrPattern {
+        parts: vec![IrPatternPart::Literal(input.to_string())],
+    };
+    Ok(windash_variants(&pattern)?
+        .into_iter()
+        .filter_map(|p| p.as_plain())
+        .collect())
+}
 
 fn make_field_spec(name: &str, modifiers: &[Modifier]) -> FieldSpec {
     FieldSpec::new(Some(name.to_string()), modifiers.to_vec())
@@ -238,6 +251,45 @@ fn test_compile_wildcard() {
     assert!(!eval_detection_item(&compiled, &event2));
 }
 
+fn wildcard_item_matches(modifiers: &[Modifier], value: &str, field_value: &str) -> bool {
+    let item = make_item(
+        "F",
+        modifiers,
+        vec![SigmaValue::String(SigmaString::new(value))],
+    );
+    let compiled = compile_detection_item(&item).unwrap();
+    let ev = json!({ "F": field_value });
+    eval_detection_item(&compiled, &JsonEvent::borrow(&ev))
+}
+
+#[test]
+fn test_startswith_wildcard_anchors_at_start_only() {
+    let m = &[Modifier::StartsWith];
+    assert!(wildcard_item_matches(m, "a?c", "abc"));
+    assert!(wildcard_item_matches(m, "a?c", "abcdef"));
+    assert!(!wildcard_item_matches(m, "a?c", "xabc"));
+}
+
+#[test]
+fn test_endswith_wildcard_anchors_at_end_only() {
+    let m = &[Modifier::EndsWith];
+    assert!(wildcard_item_matches(m, "a?c", "abc"));
+    assert!(wildcard_item_matches(m, "a?c", "xyzabc"));
+    assert!(!wildcard_item_matches(m, "a?c", "abcx"));
+}
+
+#[test]
+fn test_wildcards_match_newlines() {
+    assert!(wildcard_item_matches(&[], "a*c", "a\nb\nc"));
+    assert!(wildcard_item_matches(&[], "a?c", "a\nc"));
+    assert!(wildcard_item_matches(
+        &[Modifier::Contains],
+        "a*c",
+        "x\na\n\nc"
+    ));
+    assert!(wildcard_item_matches(&[Modifier::Cased], "a*c", "a\nc"));
+}
+
 #[test]
 fn test_compile_numeric_comparison() {
     let item = make_item("EventID", &[Modifier::Gte], vec![SigmaValue::Integer(4688)]);
@@ -292,15 +344,70 @@ fn test_windash_single_dash() {
 }
 
 #[test]
+fn test_windash_expands_every_dash_character_in_the_value() {
+    for input in ["/f", "\u{2013}f", "\u{2014}f", "\u{2015}f"] {
+        let variants = expand_windash(input).unwrap();
+        assert_eq!(variants.len(), 5, "{input:?}");
+        assert!(variants.contains(&"-f".to_string()), "{input:?}");
+        assert!(variants.contains(&"/f".to_string()), "{input:?}");
+    }
+    assert_eq!(expand_windash("a/b-c").unwrap().len(), 25);
+}
+
+#[test]
+fn test_windash_keeps_wildcards() {
+    let pattern = IrPattern {
+        parts: vec![
+            IrPatternPart::Literal("dir".into()),
+            IrPatternPart::WildcardMulti,
+            IrPatternPart::Literal("-s".into()),
+        ],
+    };
+    let variants = windash_variants(&pattern).unwrap();
+    assert_eq!(variants.len(), 5);
+    for v in &variants {
+        assert_eq!(v.parts[1], IrPatternPart::WildcardMulti);
+    }
+    assert!(wildcard_item_matches(
+        &[Modifier::Contains, Modifier::WindAsh],
+        "dir*-s",
+        "cmd /c dir C:\\ /s"
+    ));
+    assert!(!wildcard_item_matches(
+        &[Modifier::Contains, Modifier::WindAsh],
+        "dir*-s",
+        "cmd /c dir* -x"
+    ));
+}
+
+#[test]
+fn test_windash_rejects_too_many_positions() {
+    assert_eq!(expand_windash("a/b/c/d").unwrap().len(), 125);
+    assert!(expand_windash("a/b/c/d/e/f/g/h/i/j").is_err());
+}
+
+#[test]
 fn test_base64_offset_patterns() {
-    let patterns = base64_offset_patterns(b"Test");
-    assert!(!patterns.is_empty());
-    // The first pattern should be the normal base64 encoding of "Test"
-    assert!(
-        patterns
-            .iter()
-            .any(|p| p.contains("VGVzdA") || p.contains("Rlc3"))
-    );
+    // Reference values from pySigma's base64offset modifier.
+    let cases: &[(&[u8], [&str; 3])] = &[
+        (b"Test", ["VGVzd", "Rlc3", "UZXN0"]),
+        (b"ab", ["YW", "Fi", "hY"]),
+        (b"abc", ["YWJj", "FiY", "hYm"]),
+        (b"abcd", ["YWJjZ", "FiY2", "hYmNk"]),
+        (b"/bin/sh", ["L2Jpbi9za", "9iaW4vc2", "vYmluL3No"]),
+        (
+            b"powershell -enc",
+            [
+                "cG93ZXJzaGVsbCAtZW5j",
+                "Bvd2Vyc2hlbGwgLWVuY",
+                "wb3dlcnNoZWxsIC1lbm",
+            ],
+        ),
+        (b"p\0i\0n\0g\0", ["cABpAG4AZw", "AAaQBuAGcA", "wAGkAbgBnA"]),
+    ];
+    for (value, expected) in cases {
+        assert_eq!(base64_offset_patterns(value), expected, "{value:?}");
+    }
 }
 
 #[test]
@@ -402,7 +509,7 @@ fn test_compile_expand_modifier() {
         "path",
         &[Modifier::Expand],
         vec![SigmaValue::String(SigmaString::new(
-            "C:\\Users\\%username%\\Downloads",
+            "C:\\Users\\\\%username%\\Downloads",
         ))],
     )];
     let detection = compile_detection(&Detection::AllOf(items)).unwrap();

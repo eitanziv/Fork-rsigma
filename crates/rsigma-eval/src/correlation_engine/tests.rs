@@ -1976,7 +1976,7 @@ logsource:
     category: file_access
 detection:
     selection:
-        FilePath|expand: 'C:\Users\%User%\Temp'
+        FilePath|expand: 'C:\Users\\%User%\Temp'
     condition: selection
 ---
 title: Excessive Temp Access

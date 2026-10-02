@@ -171,7 +171,7 @@ Contrasts false-positive events with required true-positive exemplars and emits 
    - `AllOf` → compile each item, reject empty.
    - `AnyOf` → recursively compile each sub-detection, reject empty.
    - `Keywords` → compile each value as case-insensitive contains, combine with `AnyOf`.
-3. **Value compilation** (`compile_value`): `|neq` wraps the combined item in `Not`, so `Field|neq: [a, b]` matches when the field is neither `a` nor `b`. The other modifiers are handled in this order: `|expand` → timestamp part → `|fieldref` → `|re` → `|cidr` → numeric comparison → string modifiers. String modifiers: `|wide`/`|utf16le` → `|utf16be` → `|utf16` → `|base64` → `|base64offset` → `|windash` → string match. `|fieldref` may be followed by one of `|contains`, `|startswith`, or `|endswith`; that modifier must come after `|fieldref`.
+3. **Value compilation** (`compile_value`): `|neq` wraps the combined item in `Not`, so `Field|neq: [a, b]` matches when the field is neither `a` nor `b`, including when it is missing or null. The other modifiers are handled in this order: `|expand` → timestamp part → `|fieldref` → `|re` → `|cidr` → numeric comparison → string modifiers. Encoding modifiers transform the value in a fixed order: `|windash` variants first, then `|wide`/`|utf16le`, `|utf16be`, or `|utf16`, then `|base64` or `|base64offset`, then the string match. `|fieldref` may be followed by one of `|contains`, `|startswith`, or `|endswith`; that modifier must come after `|fieldref`. An empty value list (`Field: []`) compiles to a null check. The [value modifiers reference](https://rsigma.io/reference/modifiers/) describes the matching semantics.
 
 ### Compiled Matcher Types
 
@@ -184,13 +184,13 @@ Contrasts false-positive events with required true-positive exemplars and emits 
 | `Regex` | `\|re` | `\|i` adds `(?i)`, `\|m` adds multiline, `\|s` adds dotall |
 | `Cidr` | `\|cidr` | IP network matching via `IpNet` |
 | `NumericEq/Gt/Gte/Lt/Lte` | `\|gt`, `\|gte`, etc. | f64 comparison |
-| `Exists` | `\|exists` | Accepts `true`/`yes`/`false`/`no` as values |
+| `Exists` | `\|exists` | Field presence; a field set to null is present. Accepts `true`/`yes`/`false`/`no` as values |
 | `FieldRef` | `\|fieldref` | Compares against another field. Optional `\|contains`, `\|startswith`, or `\|endswith` after `\|fieldref`. Case-insensitive unless `\|cased`. |
 | `Null` | — | Matches null or missing values |
 | `BoolEq` | — | Boolean equality |
-| `Expand` | `\|expand` | Placeholder template expansion |
+| `Expand` | `\|expand` | Placeholders left unresolved by the pipeline, filled from event fields at match time; honors `\|contains`, `\|startswith`, and `\|endswith` |
 | `TimestampPart` | `\|minute`, `\|hour`, `\|day`, `\|week`, `\|month`, `\|year` | Extract timestamp component, match inner value |
-| `Not` | `\|neq` | Wraps inner matcher with negation |
+| `Not` | `\|neq` | Wraps inner matcher with negation; matches a missing field unless the inner matcher does |
 | `AnyOf` / `AllOf` | — | Multiple values combined (OR / AND with `\|all`) |
 
 ### Value Coercion

@@ -308,14 +308,20 @@ fn emit_item(out: &mut String, item: &DetectionItem, indent: &str) {
         .modifiers
         .iter()
         .any(|m| matches!(m, Modifier::Re | Modifier::Cidr | Modifier::FieldRef));
+    let expand = item.field.modifiers.contains(&Modifier::Expand);
+    let token = |value: &SigmaValue| match value {
+        // Placeholder escapes are only unambiguous in the source text.
+        SigmaValue::String(s) if expand => scalar(&s.original),
+        _ => value_token_ctx(value, raw),
+    };
     match item.values.as_slice() {
         [single] => {
-            let _ = writeln!(out, "{indent}{key}: {}", value_token_ctx(single, raw));
+            let _ = writeln!(out, "{indent}{key}: {}", token(single));
         }
         values => {
             let _ = writeln!(out, "{indent}{key}:");
             for value in values {
-                let _ = writeln!(out, "{indent}{STEP}- {}", value_token_ctx(value, raw));
+                let _ = writeln!(out, "{indent}{STEP}- {}", token(value));
             }
         }
     }

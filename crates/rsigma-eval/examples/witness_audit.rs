@@ -290,9 +290,12 @@ fn analyze_matcher(matcher: &IrMatcher, field: Option<&str>) -> Analysis {
         IrMatcher::Encoded {
             encodings,
             op: _,
-            value,
+            pattern,
             ..
-        } => encoded_witness(encodings, value, field),
+        } => match pattern.as_plain() {
+            Some(value) => encoded_witness(encodings, &value, field),
+            None => Open("encoded-wildcard"),
+        },
         IrMatcher::Regex { pattern, .. } => match regex_mandatory_literals(pattern) {
             Some(lits) => Witnesses(
                 lits.into_iter()
@@ -401,7 +404,7 @@ fn encoded_witness(encodings: &[IrEncoding], value: &str, field: Option<&str>) -
         // Windash varies dash characters; the longest dash-free segment is
         // invariant across all variants.
         let seg = value
-            .split(['-', '/'])
+            .split(['-', '/', '\u{2013}', '\u{2014}', '\u{2015}'])
             .max_by_key(|s| s.len())
             .unwrap_or("");
         if seg.len() < 3 {

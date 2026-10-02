@@ -24,18 +24,18 @@ fn regex_set_matches(set: &RegexSet, mode: GroupMode, s: &str) -> bool {
     }
 }
 
-/// Substring, prefix, or suffix comparison of two runtime strings.
-fn fieldref_substr(op: IrStrOp, haystack: &str, needle: &str, case_insensitive: bool) -> bool {
+/// Compare two runtime strings with `op`.
+fn runtime_str_match(op: IrStrOp, haystack: &str, needle: &str, case_insensitive: bool) -> bool {
     if case_insensitive {
         let haystack = haystack.to_lowercase();
         let needle = needle.to_lowercase();
-        fieldref_substr_cmp(op, &haystack, &needle)
+        runtime_str_cmp(op, &haystack, &needle)
     } else {
-        fieldref_substr_cmp(op, haystack, needle)
+        runtime_str_cmp(op, haystack, needle)
     }
 }
 
-fn fieldref_substr_cmp(op: IrStrOp, haystack: &str, needle: &str) -> bool {
+fn runtime_str_cmp(op: IrStrOp, haystack: &str, needle: &str) -> bool {
     match op {
         IrStrOp::Contains => haystack.contains(needle),
         IrStrOp::StartsWith => haystack.starts_with(needle),
@@ -45,6 +45,21 @@ fn fieldref_substr_cmp(op: IrStrOp, haystack: &str, needle: &str) -> bool {
 }
 
 impl CompiledMatcher {
+    /// Whether this matcher holds for a field that is absent from the event.
+    ///
+    /// Only `null` matches an absent field; negation inverts that, so a
+    /// negated item such as `|neq` matches when the field is missing.
+    pub fn matches_absent(&self) -> bool {
+        match self {
+            CompiledMatcher::Null => true,
+            CompiledMatcher::Exists(expect) => !expect,
+            CompiledMatcher::Not(inner) => !inner.matches_absent(),
+            CompiledMatcher::AnyOf(matchers) => matchers.iter().any(Self::matches_absent),
+            CompiledMatcher::AllOf(matchers) => matchers.iter().all(Self::matches_absent),
+            _ => false,
+        }
+    }
+
     /// Check if this matcher matches an [`EventValue`] from an event.
     ///
     /// The `event` parameter is needed for `FieldRef` to access other fields.
@@ -127,10 +142,8 @@ impl CompiledMatcher {
             CompiledMatcher::NumericLte(n) => match_numeric_value(value, |v| v <= *n),
 
             // -- Special --
-            CompiledMatcher::Exists(expect) => {
-                let exists = !value.is_null();
-                exists == *expect
-            }
+            // A value is present even when it is null.
+            CompiledMatcher::Exists(expect) => *expect,
 
             CompiledMatcher::FieldRef {
                 field: ref_field,
@@ -156,7 +169,7 @@ impl CompiledMatcher {
                             return false;
                         };
                         match_str_value(value, |s| {
-                            fieldref_substr(*op, s, needle.as_ref(), *case_insensitive)
+                            runtime_str_match(*op, s, needle.as_ref(), *case_insensitive)
                         })
                     }
                 }
@@ -178,15 +191,12 @@ impl CompiledMatcher {
             // -- Expand --
             CompiledMatcher::Expand {
                 template,
+                op,
                 case_insensitive,
             } => {
                 let expanded = expand_template(template, event);
                 match_str_value(value, |s| {
-                    if *case_insensitive {
-                        s.to_lowercase() == expanded.to_lowercase()
-                    } else {
-                        s == expanded
-                    }
+                    runtime_str_match(*op, s, &expanded, *case_insensitive)
                 })
             }
 
@@ -681,7 +691,7 @@ mod tests {
 
     #[test]
     fn test_parse_expand_template() {
-        let parts = parse_expand_template("C:\\Users\\%user%\\AppData");
+        let parts = parse_expand_template("C:\\Users\\\\%user%\\AppData");
         assert_eq!(parts.len(), 3);
         assert!(matches!(&parts[0], ExpandPart::Literal(s) if s == "C:\\Users\\"));
         assert!(matches!(&parts[1], ExpandPart::Placeholder(s) if s == "user"));
@@ -696,6 +706,25 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_expand_template_escaped_percent() {
+        let parts = parse_expand_template("100\\%: %a%\\%b%");
+        assert_eq!(parts.len(), 3);
+        assert!(matches!(&parts[0], ExpandPart::Literal(s) if s == "100%: "));
+        assert!(matches!(&parts[1], ExpandPart::Placeholder(s) if s == "a"));
+        assert!(matches!(&parts[2], ExpandPart::Literal(s) if s == "%b%"));
+
+        let parts = parse_expand_template("\\%plain%name%");
+        assert_eq!(parts.len(), 2);
+        assert!(matches!(&parts[0], ExpandPart::Literal(s) if s == "%plain"));
+        assert!(matches!(&parts[1], ExpandPart::Placeholder(s) if s == "name"));
+
+        let parts = parse_expand_template("%%x%");
+        assert_eq!(parts.len(), 2);
+        assert!(matches!(&parts[0], ExpandPart::Literal(s) if s == "%"));
+        assert!(matches!(&parts[1], ExpandPart::Placeholder(s) if s == "x"));
+    }
+
+    #[test]
     fn test_parse_expand_template_multiple_placeholders() {
         let parts = parse_expand_template("%a%:%b%");
         assert_eq!(parts.len(), 3);
@@ -706,9 +735,10 @@ mod tests {
 
     #[test]
     fn test_expand_matcher() {
-        let template = parse_expand_template("C:\\Users\\%user%\\Downloads");
+        let template = parse_expand_template("C:\\Users\\\\%user%\\Downloads");
         let m = CompiledMatcher::Expand {
             template,
+            op: IrStrOp::Exact,
             case_insensitive: true,
         };
         let e = json!({"user": "admin", "path": "C:\\Users\\admin\\Downloads"});
@@ -728,6 +758,7 @@ mod tests {
         let template = parse_expand_template("%user%@%domain%");
         let m = CompiledMatcher::Expand {
             template,
+            op: IrStrOp::Exact,
             case_insensitive: false,
         };
         let e = json!({"user": "admin"});

@@ -579,8 +579,19 @@ fn test_parse_contains_re_combination() {
 
 #[test]
 fn test_parse_duplicate_modifiers() {
-    let spec = parse_field_spec("Field|contains|contains").unwrap();
-    assert_eq!(spec.modifiers, vec![Modifier::Contains, Modifier::Contains]);
+    for key in [
+        "Field|contains|contains",
+        "Field|neq|neq",
+        "Field|base64|contains|base64",
+    ] {
+        assert!(
+            matches!(
+                parse_field_spec(key),
+                Err(crate::error::SigmaParserError::DuplicateModifier(_))
+            ),
+            "{key} should be rejected"
+        );
+    }
 }
 
 #[test]

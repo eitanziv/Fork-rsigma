@@ -1,4 +1,4 @@
-description: exists false matches events that lack the field.
+description: exists false matches events that lack the field, but not a field whose value is null.
 rule:
   title: exists false
   logsource: {category: process_creation, product: windows}
@@ -9,4 +9,22 @@ rule:
 events:
   - {User: 'admin'}
   - {Image: 'C:\x.exe'}
+  - {User: null}
 matches: [1]
+known_failures:
+  postgres-jsonb:
+    type: match-mismatch
+    reason: "exists renders as IS NULL on the extracted value, which treats a JSON null as absent"
+    actual: [1, 2]
+  postgres-columns:
+    type: match-mismatch
+    reason: "a typed column stores an absent field and a null value as the same SQL NULL"
+    actual: [1, 2]
+  fibratus:
+    type: match-mismatch
+    reason: "the comparison with false treats a null value as absent"
+    actual: [1, 2]
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "the comparison with false treats a null value as absent"
+    actual: [1, 2]

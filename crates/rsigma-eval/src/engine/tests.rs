@@ -694,7 +694,7 @@ logsource:
     product: windows
 detection:
     selection:
-        TargetFilename|expand: 'C:\Users\%username%\AppData\sensitive.dat'
+        TargetFilename|expand: 'C:\Users\\%username%\AppData\sensitive.dat'
     condition: selection
 level: high
 "#;
@@ -723,7 +723,7 @@ logsource:
     product: windows
 detection:
     selection:
-        RegistryKey|expand: 'HKLM\SOFTWARE\%vendor%\%product%'
+        RegistryKey|expand: 'HKLM\SOFTWARE\\%vendor%\\%product%'
     condition: selection
 level: medium
 "#;

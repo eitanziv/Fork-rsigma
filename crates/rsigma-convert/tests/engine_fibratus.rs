@@ -116,13 +116,15 @@ fn fibratus_events(doc: &yaml_serde::Value, case: &Case) -> Vec<Value> {
         .collect()
 }
 
-fn build_harness() -> (std::path::PathBuf, String) {
+fn build_harness(name: &str) -> (std::path::PathBuf, String) {
     if !cfg!(windows) {
         panic!("Fibratus filter packages only build for Windows; run this test on a Windows host");
     }
     let dir = engines::engines_dir().join("fibratus");
-    let exe =
-        std::env::temp_dir().join(format!("rsigma-engine-fibratus-{}.exe", std::process::id()));
+    let exe = std::env::temp_dir().join(format!(
+        "rsigma-engine-fibratus-{}-{name}.exe",
+        std::process::id()
+    ));
     engines::run_ok(
         Command::new("go")
             .args(["build", "-o"])
@@ -176,7 +178,7 @@ fn run_harness(exe: &std::path::Path, request: &Value) -> Value {
 #[test]
 #[ignore = "engine test: needs Windows and Go; run by the Fibratus engine workflow"]
 fn fibratus_evaluates_cases() {
-    let (exe, macros) = build_harness();
+    let (exe, macros) = build_harness("cases");
     let doc = pipeline_doc();
     let pipeline = resolve_builtin("fibratus_windows").unwrap().unwrap();
     let cases = engines::load_cases();
@@ -242,7 +244,7 @@ fn fibratus_evaluates_cases() {
 #[test]
 #[ignore = "engine test: needs Windows and Go; run by the Fibratus engine workflow"]
 fn fibratus_pipeline_fields_exist() {
-    let (exe, macros) = build_harness();
+    let (exe, macros) = build_harness("fields");
     let fields: Vec<String> = pipeline_fields(&pipeline_doc()).into_iter().collect();
     let response = run_harness(
         &exe,

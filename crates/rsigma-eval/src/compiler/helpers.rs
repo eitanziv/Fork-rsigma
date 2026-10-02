@@ -2,7 +2,7 @@ use base64::Engine as Base64Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use regex::Regex;
 
-use rsigma_parser::SigmaValue;
+use rsigma_ir::{IrEncoding, IrPattern, IrPatternPart};
 
 use crate::error::{EvalError, Result};
 
@@ -49,40 +49,6 @@ pub(crate) fn yaml_to_json_map(
         .collect()
 }
 
-/// Extract a plain string from a SigmaValue.
-pub(super) fn value_to_plain_string(value: &SigmaValue) -> Result<String> {
-    match value {
-        SigmaValue::String(s) => Ok(s.as_plain().unwrap_or_else(|| s.original.clone())),
-        SigmaValue::Integer(n) => Ok(n.to_string()),
-        SigmaValue::Float(n) => Ok(n.to_string()),
-        SigmaValue::Bool(b) => Ok(b.to_string()),
-        SigmaValue::Null => Err(EvalError::IncompatibleValue(
-            "null value for string modifier".into(),
-        )),
-    }
-}
-
-/// Extract a numeric f64 from a SigmaValue.
-pub(super) fn value_to_f64(value: &SigmaValue) -> Result<f64> {
-    match value {
-        SigmaValue::Integer(n) => Ok(*n as f64),
-        SigmaValue::Float(n) => Ok(*n),
-        SigmaValue::String(s) => {
-            let plain = s.as_plain().unwrap_or_else(|| s.original.clone());
-            plain
-                .parse::<f64>()
-                .map_err(|_| EvalError::ExpectedNumeric(plain))
-        }
-        _ => Err(EvalError::ExpectedNumeric(format!("{value:?}"))),
-    }
-}
-
-/// Convert a SigmaString into raw bytes (UTF-8).
-pub(super) fn sigma_string_to_bytes(s: &rsigma_parser::SigmaString) -> Vec<u8> {
-    let plain = s.as_plain().unwrap_or_else(|| s.original.clone());
-    plain.into_bytes()
-}
-
 /// Convert bytes to UTF-16LE representation (wide string / utf16le).
 pub(super) fn to_utf16le_bytes(bytes: &[u8]) -> Vec<u8> {
     let s = String::from_utf8_lossy(bytes);
@@ -122,27 +88,22 @@ pub(super) fn to_utf16_bom_bytes(bytes: &[u8]) -> Vec<u8> {
 ///
 /// Produces up to 3 patterns for byte offsets 0, 1, and 2 within a
 /// base64 3-byte alignment group. Each pattern is the stable middle
-/// portion of the encoding that doesn't depend on alignment padding.
+/// portion of the encoding: characters that depend on the bytes before or
+/// after the value are dropped at both ends.
 pub(super) fn base64_offset_patterns(value: &[u8]) -> Vec<String> {
-    let mut patterns = Vec::with_capacity(3);
+    const START: [usize; 3] = [0, 2, 3];
+    const END_TRIM: [usize; 3] = [0, 3, 2];
 
+    let mut patterns = Vec::with_capacity(3);
     for offset in 0..3usize {
         let mut padded = vec![0u8; offset];
         padded.extend_from_slice(value);
-
         let encoded = BASE64_STANDARD.encode(&padded);
-
-        // Skip leading chars influenced by padding bytes
-        let start = (offset * 4).div_ceil(3);
-        // Trim trailing '=' padding
-        let trimmed = encoded.trim_end_matches('=');
-        let end = trimmed.len();
-
-        if start < end {
-            patterns.push(trimmed[start..end].to_string());
+        let end = encoded.len() - END_TRIM[(value.len() + offset) % 3];
+        if START[offset] < end {
+            patterns.push(encoded[START[offset]..end].to_string());
         }
     }
-
     patterns
 }
 
@@ -177,48 +138,86 @@ pub(super) fn build_regex(
 /// `-`, `/`, `–` (en dash U+2013), `—` (em dash U+2014), `―` (horizontal bar U+2015).
 const WINDASH_CHARS: [char; 5] = ['-', '/', '\u{2013}', '\u{2014}', '\u{2015}'];
 
-/// Maximum number of dashes allowed in windash expansion.
+/// Maximum number of dash positions allowed in windash expansion.
 /// 5^8 = 390,625 variants — beyond this the expansion is too large.
 const MAX_WINDASH_DASHES: usize = 8;
 
-/// Expand windash variants: for each `-` in the string, generate all
-/// permutations by substituting with `-`, `/`, `–`, `—`, and `―`.
-pub(super) fn expand_windash(input: &str) -> Result<Vec<String>> {
-    // Find byte positions of '-' characters
-    let dash_positions: Vec<usize> = input
-        .char_indices()
-        .filter(|(_, c)| *c == '-')
-        .map(|(i, _)| i)
+/// Expand windash variants: every `-`, `/`, `–`, `—`, or `―` in a literal
+/// part of `pattern` is a position, and each variant substitutes one of those
+/// five characters at every position. Wildcards are kept as they are.
+pub(super) fn windash_variants(pattern: &IrPattern) -> Result<Vec<IrPattern>> {
+    let positions: Vec<(usize, usize)> = pattern
+        .parts
+        .iter()
+        .enumerate()
+        .filter_map(|(i, part)| match part {
+            IrPatternPart::Literal(text) => Some((i, text)),
+            _ => None,
+        })
+        .flat_map(|(i, text)| {
+            text.char_indices()
+                .filter(|(_, c)| WINDASH_CHARS.contains(c))
+                .map(move |(byte, _)| (i, byte))
+        })
         .collect();
 
-    if dash_positions.is_empty() {
-        return Ok(vec![input.to_string()]);
+    if positions.is_empty() {
+        return Ok(vec![pattern.clone()]);
     }
 
-    let n = dash_positions.len();
+    let n = positions.len();
     if n > MAX_WINDASH_DASHES {
         return Err(EvalError::InvalidModifiers(format!(
-            "windash modifier: value contains {n} dashes, max is {MAX_WINDASH_DASHES} \
-             (would generate {} variants)",
+            "windash modifier: value contains {n} dash or slash characters, max is \
+             {MAX_WINDASH_DASHES} (would generate {} variants)",
             5u64.saturating_pow(n as u32)
         )));
     }
 
-    // Generate all 5^n combinations
     let total = WINDASH_CHARS.len().pow(n as u32);
     let mut variants = Vec::with_capacity(total);
-
     for combo in 0..total {
-        let mut variant = input.to_string();
+        let mut parts = pattern.parts.clone();
         let mut idx = combo;
-        // Replace from back to front to preserve byte positions
-        for &pos in dash_positions.iter().rev() {
-            let replacement = WINDASH_CHARS[idx % WINDASH_CHARS.len()];
-            variant.replace_range(pos..pos + 1, &replacement.to_string());
+        // Replace from back to front to preserve byte positions.
+        for &(part, byte) in positions.iter().rev() {
+            if let IrPatternPart::Literal(text) = &mut parts[part] {
+                let width = text[byte..].chars().next().map_or(1, char::len_utf8);
+                let replacement = WINDASH_CHARS[idx % WINDASH_CHARS.len()];
+                text.replace_range(byte..byte + width, replacement.encode_utf8(&mut [0; 4]));
+            }
             idx /= WINDASH_CHARS.len();
         }
-        variants.push(variant);
+        variants.push(IrPattern { parts });
     }
 
     Ok(variants)
+}
+
+/// Encode the literal parts of an ASCII `pattern` as UTF-16 code units, one
+/// character per code unit, keeping wildcards. `utf16` adds a byte order mark.
+pub(super) fn utf16_pattern(encoding: IrEncoding, pattern: &IrPattern) -> IrPattern {
+    let mut parts = Vec::with_capacity(pattern.parts.len() + 1);
+    if encoding == IrEncoding::Utf16 {
+        parts.push(IrPatternPart::Literal("\u{feff}".to_string()));
+    }
+    for part in &pattern.parts {
+        parts.push(match part {
+            IrPatternPart::Literal(text) => {
+                let mut wide = String::with_capacity(text.len() * 2);
+                for c in text.chars() {
+                    if encoding == IrEncoding::Utf16Be {
+                        wide.push('\0');
+                        wide.push(c);
+                    } else {
+                        wide.push(c);
+                        wide.push('\0');
+                    }
+                }
+                IrPatternPart::Literal(wide)
+            }
+            other => other.clone(),
+        });
+    }
+    IrPattern { parts }
 }
