@@ -64,6 +64,7 @@ daemon:
     max_events: 10
     max_state_entries: 100000   # hard cap across all correlations and groups
     # max_group_entries: 10000  # per-group window-state cap; unset = unbounded
+    emit_detections: false      # include detection matches that only feed correlations
   state:
     save_interval: 30
   engine:
@@ -199,6 +200,8 @@ Run [`rsigma config init`](../cli/config/init.md) to scaffold a full, commented 
 | `doc` | `rule doc` | `fail_on_missing` (the CI gate). The ADS bar itself (enforced statuses and required sections) lives in `.rsigma-lint.yml` under an `ads:` block, not here. See [Detection Strategy](../guide/detection-strategy.md). |
 | `hygiene` | `rule hygiene` | `rules`, the optional sources (`metrics`, `metrics_window`, `fields`), the thresholds (`silent_threshold`, `stale_threshold`, `noisy_threshold`), and `fail_on`. See [Rule Hygiene](../guide/rule-hygiene.md). |
 | `mcp` | `mcp serve` | `mcp.http_addr` (the `--http` bind address; unset means stdio), `mcp.lint_config`, `mcp.rules_dir`, `mcp.allow_sigma_cli` (let `convert_rules` delegate non-native targets to an installed sigma-cli; off by default), `mcp.daemon_url`, `mcp.daemon_ca`, and `mcp.allow_operate_writes`. The MCP HTTP auth token and the daemon token are secrets and stay flag/env-only. Inert unless built with the `mcp` feature. |
+
+`daemon.correlation.emit_detections` defaults to `false`, so detections referenced only by correlations do not produce standalone output unless the correlation has top-level `generate: true`. The inverse `daemon.correlation.no_detections` key remains accepted for compatibility but is deprecated. {{ added "unreleased" }}
 
 ### Secrets policy
 

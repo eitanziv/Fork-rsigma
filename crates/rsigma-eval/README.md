@@ -242,7 +242,7 @@ Stateful processing with sliding time windows, group-by aggregation, and all 8 c
 | `max_group_entries` | `Option<usize>` | `None` | Cap on retained entries within a single group's window state; `None` = unbounded. Oldest entries dropped on overflow (session windows keep their span anchor) |
 | `suppress` | `Option<u64>` | `None` | Default suppression window in seconds |
 | `action_on_match` | `CorrelationAction` | `Alert` | `Alert` (keep state) or `Reset` (clear window state) |
-| `emit_detections` | `bool` | `true` | Whether to emit detection-level matches for correlation-only rules |
+| `emit_detections` | `bool` | `false` | Whether to emit detection-level matches for correlation-only rules |
 | `correlation_event_mode` | `CorrelationEventMode` | `None` | `None`, `Full` (deflate-compressed), or `Refs` (timestamp + ID) |
 | `max_correlation_events` | `usize` | `10` | Max events stored per `(correlation, group_key)` window |
 
@@ -258,7 +258,7 @@ Stateful processing with sliding time windows, group-by aggregation, and all 8 c
 
 - **Suppression**: per-correlation or global suppression windows to prevent alert floods. After a `(correlation, group_key)` fires, suppress re-alerts for the configured duration
 - **Action-on-fire**: `Alert` (keep state, re-fire on next match) or `Reset` (clear window state, require fresh threshold)
-- **Generate flag**: Sigma-standard `generate` support — suppress detection output for correlation-only rules
+- **Generate flag**: referenced detection output is suppressed by default; top-level `generate: true` on a correlation emits its referenced rules, and `emit_detections: true` emits every detection match
 
 ### Event Inclusion
 

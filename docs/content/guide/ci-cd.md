@@ -106,10 +106,10 @@ if rsigma engine eval -r rules/ --fail-on-detection -e @ci/should-match.ndjson; 
 fi
 ```
 
-Because this check is corpus-global, prefer `rule backtest` once a fixture exercises more than one rule. Pair `--fail-on-detection` with `--no-detections` if you only care whether correlations fire:
+Because this check is corpus-global, prefer `rule backtest` once a fixture exercises more than one rule. Referenced correlation inputs are suppressed by default, so a collection containing only correlations and their inputs needs no output flag:
 
 ```bash
-rsigma engine eval -r rules/ --fail-on-detection --no-detections \
+rsigma engine eval -r rules/ --fail-on-detection \
     --correlation-event-mode none < events.ndjson
 ```
 
