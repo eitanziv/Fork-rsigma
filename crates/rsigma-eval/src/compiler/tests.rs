@@ -333,14 +333,26 @@ fn test_windash_single_dash() {
 
 #[test]
 fn test_base64_offset_patterns() {
-    let patterns = base64_offset_patterns(b"Test");
-    assert!(!patterns.is_empty());
-    // The first pattern should be the normal base64 encoding of "Test"
-    assert!(
-        patterns
-            .iter()
-            .any(|p| p.contains("VGVzdA") || p.contains("Rlc3"))
-    );
+    // Reference values from pySigma's base64offset modifier.
+    let cases: &[(&[u8], [&str; 3])] = &[
+        (b"Test", ["VGVzd", "Rlc3", "UZXN0"]),
+        (b"ab", ["YW", "Fi", "hY"]),
+        (b"abc", ["YWJj", "FiY", "hYm"]),
+        (b"abcd", ["YWJjZ", "FiY2", "hYmNk"]),
+        (b"/bin/sh", ["L2Jpbi9za", "9iaW4vc2", "vYmluL3No"]),
+        (
+            b"powershell -enc",
+            [
+                "cG93ZXJzaGVsbCAtZW5j",
+                "Bvd2Vyc2hlbGwgLWVuY",
+                "wb3dlcnNoZWxsIC1lbm",
+            ],
+        ),
+        (b"p\0i\0n\0g\0", ["cABpAG4AZw", "AAaQBuAGcA", "wAGkAbgBnA"]),
+    ];
+    for (value, expected) in cases {
+        assert_eq!(base64_offset_patterns(value), expected, "{value:?}");
+    }
 }
 
 #[test]

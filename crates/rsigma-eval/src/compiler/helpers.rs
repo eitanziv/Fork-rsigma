@@ -86,27 +86,22 @@ pub(super) fn to_utf16_bom_bytes(bytes: &[u8]) -> Vec<u8> {
 ///
 /// Produces up to 3 patterns for byte offsets 0, 1, and 2 within a
 /// base64 3-byte alignment group. Each pattern is the stable middle
-/// portion of the encoding that doesn't depend on alignment padding.
+/// portion of the encoding: characters that depend on the bytes before or
+/// after the value are dropped at both ends.
 pub(super) fn base64_offset_patterns(value: &[u8]) -> Vec<String> {
-    let mut patterns = Vec::with_capacity(3);
+    const START: [usize; 3] = [0, 2, 3];
+    const END_TRIM: [usize; 3] = [0, 3, 2];
 
+    let mut patterns = Vec::with_capacity(3);
     for offset in 0..3usize {
         let mut padded = vec![0u8; offset];
         padded.extend_from_slice(value);
-
         let encoded = BASE64_STANDARD.encode(&padded);
-
-        // Skip leading chars influenced by padding bytes
-        let start = (offset * 4).div_ceil(3);
-        // Trim trailing '=' padding
-        let trimmed = encoded.trim_end_matches('=');
-        let end = trimmed.len();
-
-        if start < end {
-            patterns.push(trimmed[start..end].to_string());
+        let end = encoded.len() - END_TRIM[(value.len() + offset) % 3];
+        if START[offset] < end {
+            patterns.push(encoded[START[offset]..end].to_string());
         }
     }
-
     patterns
 }
 
