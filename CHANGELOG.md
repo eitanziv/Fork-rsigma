@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Correlation rules follow Sigma identity, validation, grouping, and output semantics
+### Correlation rules follow Sigma identity, validation, grouping, and output semantics (#534)
 
 Correlation evaluation, conversion, validation, and linting now agree on Sigma correlation semantics:
 
