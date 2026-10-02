@@ -239,6 +239,45 @@ fn test_compile_wildcard() {
     assert!(!eval_detection_item(&compiled, &event2));
 }
 
+fn wildcard_item_matches(modifiers: &[Modifier], value: &str, field_value: &str) -> bool {
+    let item = make_item(
+        "F",
+        modifiers,
+        vec![SigmaValue::String(SigmaString::new(value))],
+    );
+    let compiled = compile_detection_item(&item).unwrap();
+    let ev = json!({ "F": field_value });
+    eval_detection_item(&compiled, &JsonEvent::borrow(&ev))
+}
+
+#[test]
+fn test_startswith_wildcard_anchors_at_start_only() {
+    let m = &[Modifier::StartsWith];
+    assert!(wildcard_item_matches(m, "a?c", "abc"));
+    assert!(wildcard_item_matches(m, "a?c", "abcdef"));
+    assert!(!wildcard_item_matches(m, "a?c", "xabc"));
+}
+
+#[test]
+fn test_endswith_wildcard_anchors_at_end_only() {
+    let m = &[Modifier::EndsWith];
+    assert!(wildcard_item_matches(m, "a?c", "abc"));
+    assert!(wildcard_item_matches(m, "a?c", "xyzabc"));
+    assert!(!wildcard_item_matches(m, "a?c", "abcx"));
+}
+
+#[test]
+fn test_wildcards_match_newlines() {
+    assert!(wildcard_item_matches(&[], "a*c", "a\nb\nc"));
+    assert!(wildcard_item_matches(&[], "a?c", "a\nc"));
+    assert!(wildcard_item_matches(
+        &[Modifier::Contains],
+        "a*c",
+        "x\na\n\nc"
+    ));
+    assert!(wildcard_item_matches(&[Modifier::Cased], "a*c", "a\nc"));
+}
+
 #[test]
 fn test_compile_numeric_comparison() {
     let item = make_item("EventID", &[Modifier::Gte], vec![SigmaValue::Integer(4688)]);

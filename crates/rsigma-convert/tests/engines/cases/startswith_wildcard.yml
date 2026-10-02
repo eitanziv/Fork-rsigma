@@ -1,0 +1,26 @@
+description: startswith with an inner wildcard anchors at the beginning of the value only.
+rule:
+  title: startswith wildcard
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|startswith: 'net*user'
+    condition: selection
+events:
+  - {CommandLine: 'net user'}
+  - {CommandLine: 'net localuser admin /add'}
+  - {CommandLine: 'NET USER'}
+  - {CommandLine: 'cmd /c net user'}
+  - {CommandLine: 'net group'}
+  - {Image: 'x'}
+matches: [0, 1, 2]
+known_failures:
+  lynxdb:
+    type: match-mismatch
+    reason: "a wildcard between literals does not match values that contain a slash"
+    actual: [0, 2]
+  test-pysigma:
+    type: output-difference
+    reason: "startswith with a wildcard is not rendered as a match with a trailing wildcard"
+    actual: ["CommandLine startswith net*user"]
+    reference: ["CommandLine match \"net*user*\""]

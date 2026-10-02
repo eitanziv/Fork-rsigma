@@ -68,18 +68,15 @@ fn match_numeric_value_ref(value: &EventValue, pred: &dyn Fn(f64) -> bool) -> bo
 
 /// Convert a [`SigmaString`](rsigma_parser::SigmaString) to a regex pattern string.
 ///
-/// Wildcards are converted: `*` → `.*`, `?` → `.`
-/// Plain text is regex-escaped.
+/// Wildcards are converted: `*` → `.*`, `?` → `.`, and both match newlines.
+/// Plain text is regex-escaped and the pattern is anchored at both ends.
 pub fn sigma_string_to_regex(
     parts: &[rsigma_parser::value::StringPart],
     case_insensitive: bool,
 ) -> String {
     use rsigma_parser::value::{SpecialChar, StringPart};
 
-    let mut pattern = String::new();
-    if case_insensitive {
-        pattern.push_str("(?i)");
-    }
+    let mut pattern = String::from(if case_insensitive { "(?is)" } else { "(?s)" });
     pattern.push('^');
     for part in parts {
         match part {

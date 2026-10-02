@@ -50,11 +50,8 @@ pub(super) fn compile_plain(op: IrStrOp, plain: &str, ci: bool) -> CompiledMatch
 
 /// Compile a pattern with wildcards into a regex, anchored as `op` requires.
 fn compile_wildcard(op: IrStrOp, pattern: &IrPattern, ci: bool) -> Result<CompiledMatcher> {
-    let mut re = String::new();
-    if ci {
-        re.push_str("(?i)");
-    }
-    if !matches!(op, IrStrOp::Contains | IrStrOp::StartsWith) {
+    let mut re = String::from(if ci { "(?is)" } else { "(?s)" });
+    if !matches!(op, IrStrOp::Contains | IrStrOp::EndsWith) {
         re.push('^');
     }
     for part in &pattern.parts {
@@ -64,7 +61,7 @@ fn compile_wildcard(op: IrStrOp, pattern: &IrPattern, ci: bool) -> Result<Compil
             IrPatternPart::WildcardSingle => re.push('.'),
         }
     }
-    if !matches!(op, IrStrOp::Contains | IrStrOp::EndsWith) {
+    if !matches!(op, IrStrOp::Contains | IrStrOp::StartsWith) {
         re.push('$');
     }
     let regex = Regex::new(&re).map_err(EvalError::InvalidRegex)?;
