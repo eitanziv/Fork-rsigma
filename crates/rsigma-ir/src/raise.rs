@@ -332,6 +332,9 @@ fn raise_matcher(matcher: &IrMatcher) -> Result<(Vec<Modifier>, Vec<SigmaValue>)
             Ok((modifiers, values))
         }
         IrMatcher::Not(inner) => {
+            if let IrMatcher::Not(positive) = inner.as_ref() {
+                return raise_matcher(positive);
+            }
             let (mut modifiers, values) = raise_matcher(inner)?;
             modifiers.push(Modifier::Neq);
             Ok((modifiers, values))
@@ -508,6 +511,16 @@ mod tests {
         let reparsed = parse_sigma_yaml(&emitted).expect("emitted YAML parses");
         let relowered = lower_rule(&reparsed.rules[0], &LowerOptions::default()).unwrap();
         assert_eq!(hir, relowered, "HIR changed across emit:\n{emitted}");
+    }
+
+    #[test]
+    fn double_negation_raises_without_a_repeated_neq() {
+        let positive = IrMatcher::Null;
+        let doubled = IrMatcher::Not(Box::new(IrMatcher::Not(Box::new(positive.clone()))));
+        assert_eq!(
+            raise_matcher(&doubled).unwrap(),
+            raise_matcher(&positive).unwrap()
+        );
     }
 
     #[test]

@@ -31,6 +31,9 @@ pub enum SigmaParserError {
     #[error("Unknown modifier '{0}'")]
     UnknownModifier(String),
 
+    #[error("Modifier '{0}' is applied more than once")]
+    DuplicateModifier(String),
+
     /// Reserved when a user writes `field|not: value` or
     /// `field|contains|not: value` as if `not` were a value modifier.
     /// Sigma does not support a `|not` modifier; negation is expressed at

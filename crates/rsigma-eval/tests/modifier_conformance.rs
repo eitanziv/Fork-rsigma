@@ -23,6 +23,9 @@ fn try_engine_with(detection: &str, pipeline: Option<&str>) -> Result<Engine, St
         "title: t\nlogsource: {{category: test}}\ndetection:\n{detection}\n  condition: selection\n"
     );
     let collection = parse_sigma_yaml(&yaml).map_err(|e| e.to_string())?;
+    if let Some(error) = collection.errors.first() {
+        return Err(error.clone());
+    }
     let mut engine = Engine::new();
     if let Some(pipeline) = pipeline {
         engine.add_pipeline(parse_pipeline(pipeline).map_err(|e| e.to_string())?);
@@ -404,4 +407,16 @@ fn empty_value_list_is_a_null_check() {
     assert_eq!(matching("selection:\n  User: []", &events), [0, 1]);
     assert_eq!(matching("selection:\n  User|contains: []", &events), [0, 1]);
     assert_eq!(matching("selection:\n  User|neq: []", &events), [2, 3]);
+}
+
+#[test]
+fn duplicate_modifiers_are_rejected() {
+    for key in [
+        "User|neq|neq",
+        "User|contains|contains",
+        "User|base64|base64",
+    ] {
+        let error = rejection(&format!("selection:\n  {key}: x"));
+        assert!(error.contains("more than once"), "{key}: {error}");
+    }
 }

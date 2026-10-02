@@ -571,12 +571,18 @@ fn parse_modifiers(modifier_part: Option<&str>) -> Result<Vec<Modifier>> {
     let mut modifiers = Vec::new();
     if let Some(part) = modifier_part {
         for mod_str in part.split('|') {
+            // Sigma reserves `not` for condition expressions; it is not a value
+            // modifier. Catch this idiom up front so the diagnostic explains
+            // the workaround instead of just saying "unknown modifier".
             if mod_str == "not" {
                 return Err(SigmaParserError::NotIsNotAModifier);
             }
             let m = mod_str
                 .parse::<Modifier>()
                 .map_err(|_| SigmaParserError::UnknownModifier(mod_str.to_string()))?;
+            if modifiers.contains(&m) {
+                return Err(SigmaParserError::DuplicateModifier(mod_str.to_string()));
+            }
             modifiers.push(m);
         }
     }
@@ -620,8 +626,10 @@ pub fn parse_field_spec(key: &str) -> Result<FieldSpec> {
         return Ok(FieldSpec::new(None, Vec::new()));
     }
 
-    let parts: Vec<&str> = key.split('|').collect();
-    let field_name = parts[0];
+    let (field_name, modifier_part) = match key.split_once('|') {
+        Some((f, m)) => (f, Some(m)),
+        None => (key, None),
+    };
     // A standalone `.` is the array-element reference inside an object-scope
     // block body (the current scalar member); it lowers to a field-less item,
     // which the evaluator matches against the member value itself. Outside a
@@ -633,19 +641,5 @@ pub fn parse_field_spec(key: &str) -> Result<FieldSpec> {
         Some(field_name.to_string())
     };
 
-    let mut modifiers = Vec::new();
-    for &mod_str in &parts[1..] {
-        // Sigma reserves `not` for condition expressions; it is not a value
-        // modifier. Catch this idiom up front so the diagnostic explains
-        // the workaround instead of just saying "unknown modifier".
-        if mod_str == "not" {
-            return Err(SigmaParserError::NotIsNotAModifier);
-        }
-        let m = mod_str
-            .parse::<Modifier>()
-            .map_err(|_| SigmaParserError::UnknownModifier(mod_str.to_string()))?;
-        modifiers.push(m);
-    }
-
-    Ok(FieldSpec::new(field, modifiers))
+    Ok(FieldSpec::new(field, parse_modifiers(modifier_part)?))
 }
