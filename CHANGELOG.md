@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Converted conditions are grouped by operator precedence
+### Converted conditions are grouped by operator precedence (#530)
 
 `backend convert` now parenthesizes nested conditions from the structure of the rule instead of from the rendered text, the way pySigma does. The PostgreSQL backend left an `OR` under an `AND` bare, so a selection with a value list and another field, such as `Image|endswith: [a, b]` with `CommandLine|contains: x`, rendered as `"Image" ILIKE '%a' OR "Image" ILIKE '%b' AND "CommandLine" ILIKE '%x%'` and matched any event with the first value. The same happened to `1 of selection_*` under `and` and to `add_condition` pipeline transformations on rules with an `or` condition, while `not 1 of filter_*` and `not` over a selection with several fields negated only the first operand. The `test` backend had the same defects. The LynxDB backend, where `OR` binds tighter than `AND`, parenthesized every `AND` and left `not 1 of filter_*` and `not (a or b)` bare, so `NOT` applied to the first operand only. `NOT` is now parenthesized only over compound operands in every backend.
 
