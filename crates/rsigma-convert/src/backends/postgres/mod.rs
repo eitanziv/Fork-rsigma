@@ -23,6 +23,10 @@ use crate::condition_ir::convert_rule_via_ir;
 use crate::error::{ConvertError, Result};
 use crate::state::{ConversionState, ConvertResult};
 
+/// Conversion state key holding the unqualified table name of the rule, which
+/// a keyword search over flat columns uses to reference the whole row.
+const ROW_RELATION_STATE: &str = "_postgres_row_relation";
+
 fn validate_sql_identifier(s: &str) -> Result<()> {
     static RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_$]*$").unwrap());
@@ -289,12 +293,7 @@ impl PostgresBackend {
         custom_attrs: &HashMap<String, yaml_serde::Value>,
         state: &HashMap<String, serde_json::Value>,
     ) -> Result<String> {
-        let table = custom_attrs
-            .get("postgres.table")
-            .and_then(|v| v.as_str())
-            .or(state.get("table").and_then(|v| v.as_str()))
-            .unwrap_or(&self.table);
-        validate_sql_identifier(table)?;
+        let table = self.resolve_table_name(custom_attrs, state)?;
 
         let schema = custom_attrs
             .get("postgres.schema")
@@ -308,6 +307,36 @@ impl PostgresBackend {
             Ok(format!("{s}.{table}"))
         } else {
             Ok(table.to_string())
+        }
+    }
+
+    /// The unqualified table name, with the same precedence as
+    /// [`resolve_table`](Self::resolve_table).
+    fn resolve_table_name<'a>(
+        &'a self,
+        custom_attrs: &'a HashMap<String, yaml_serde::Value>,
+        state: &'a HashMap<String, serde_json::Value>,
+    ) -> Result<&'a str> {
+        let table = custom_attrs
+            .get("postgres.table")
+            .and_then(|v| v.as_str())
+            .or(state.get("table").and_then(|v| v.as_str()))
+            .unwrap_or(&self.table);
+        validate_sql_identifier(table)?;
+        Ok(table)
+    }
+
+    /// Text of the whole event for a keyword search: the JSONB column, or the
+    /// table row referenced by its unqualified name.
+    fn keyword_search_target(&self, state: &ConversionState) -> String {
+        match &self.json_field {
+            Some(json_col) => format!("{json_col}::text"),
+            None => format!(
+                "{}::text",
+                state
+                    .get_state_str(ROW_RELATION_STATE)
+                    .unwrap_or(&self.table)
+            ),
         }
     }
 
@@ -627,7 +656,12 @@ impl Backend for PostgresBackend {
         output_format: &str,
         pipeline_state: &PipelineState,
     ) -> Result<Vec<String>> {
-        convert_rule_via_ir(self, rule, output_format, pipeline_state)
+        let table = self
+            .resolve_table_name(&rule.custom_attributes, &pipeline_state.state)?
+            .to_string();
+        let mut state = pipeline_state.clone();
+        state.set_state(ROW_RELATION_STATE.to_string(), table.into());
+        convert_rule_via_ir(self, rule, output_format, &state)
     }
 
     // --- Condition combinators ---
@@ -855,12 +889,9 @@ impl Backend for PostgresBackend {
     fn convert_keyword_str(
         &self,
         pattern: &IrPattern,
-        _state: &mut ConversionState,
+        state: &mut ConversionState,
     ) -> Result<String> {
-        let search_target = match &self.json_field {
-            Some(json_col) => format!("{json_col}::text"),
-            None => "ROW(*)::text".to_string(),
-        };
+        let search_target = self.keyword_search_target(state);
         let plain = keyword_pattern_text(pattern);
         if plain.is_empty() {
             return Err(ConvertError::UnsupportedKeyword);
@@ -871,11 +902,8 @@ impl Backend for PostgresBackend {
         ))
     }
 
-    fn convert_keyword_num(&self, value: f64, _state: &mut ConversionState) -> Result<String> {
-        let search_target = match &self.json_field {
-            Some(json_col) => format!("{json_col}::text"),
-            None => "ROW(*)::text".to_string(),
-        };
+    fn convert_keyword_num(&self, value: f64, state: &mut ConversionState) -> Result<String> {
+        let search_target = self.keyword_search_target(state);
         let v = if value.fract() == 0.0 && (i64::MIN as f64..=i64::MAX as f64).contains(&value) {
             (value as i64).to_string()
         } else {

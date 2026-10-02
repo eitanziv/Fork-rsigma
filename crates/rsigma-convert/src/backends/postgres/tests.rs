@@ -496,8 +496,37 @@ detection:
         queries,
         vec![
             "SELECT * FROM security_events WHERE \
-             to_tsvector('simple', ROW(*)::text) @@ plainto_tsquery('simple', 'whoami') OR \
-             to_tsvector('simple', ROW(*)::text) @@ plainto_tsquery('simple', 'ipconfig')"
+             to_tsvector('simple', security_events::text) @@ plainto_tsquery('simple', 'whoami') OR \
+             to_tsvector('simple', security_events::text) @@ plainto_tsquery('simple', 'ipconfig')"
+        ]
+    );
+}
+
+#[test]
+fn test_keywords_reference_the_row_of_the_rule_table() {
+    let collection = parse_sigma_yaml(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    keywords:
+        - whoami
+    condition: keywords
+custom_attributes:
+    postgres.table: auth_events
+    postgres.schema: siem
+"#,
+    )
+    .unwrap();
+    let queries = PostgresBackend::new()
+        .convert_rule(&collection.rules[0], "default", &PipelineState::default())
+        .unwrap();
+    assert_eq!(
+        queries,
+        vec![
+            "SELECT * FROM siem.auth_events WHERE \
+             to_tsvector('simple', auth_events::text) @@ plainto_tsquery('simple', 'whoami')"
         ]
     );
 }

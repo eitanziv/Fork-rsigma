@@ -42,9 +42,9 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 | `neq` | `NOT "field" = 'value'`. A list negates the whole item: `NOT ("field" = 'a' OR "field" = 'b')`. |
 | `fieldref` with `neq` | `(lower(("field")::text) = lower(("other")::text)) IS NOT TRUE AND "field" IS NOT NULL`. A missing referenced field still matches when the left field is present. {{ added "0.23.0" }} |
 | `null` value | `"field" IS NULL` |
-| keywords | `to_tsvector('simple', ROW(*)::text) @@ plainto_tsquery('simple', 'value')` |
+| keywords | `to_tsvector('simple', security_events::text) @@ plainto_tsquery('simple', 'value')` |
 
-Keyword matching uses the `'simple'` text-search configuration (no language stemming) over `ROW(*)::text`, so the query matches the token against every column concatenated. This is intentionally broader than per-field FTS: keyword detections in Sigma are unbound, "search this string anywhere in the event".
+Keyword matching uses the `'simple'` text-search configuration (no language stemming) over the whole event: the JSONB column as text with `-O json_field=...`, or the table row as text otherwise, referenced by the unqualified table name. The query matches the token against every column concatenated. This is intentionally broader than per-field FTS: keyword detections in Sigma are unbound, "search this string anywhere in the event". Full-text search matches whole tokens, not substrings, and the parser keeps file paths and host names such as `/dev/tcp/10.0.0.1/4444` and `mimikatz.exe` as single tokens, so a keyword that is only part of such a token does not match.
 
 Nested conditions are parenthesized by SQL precedence (`NOT` > `AND` > `OR`): an `OR` under an `AND`, such as a value list in a selection that also tests another field, becomes `("Image" ILIKE '%\\a.exe' OR "Image" ILIKE '%\\b.exe') AND "CommandLine" ILIKE '%x%'`, and a compound operand of `NOT`, such as `not 1 of filter_*`, becomes `NOT (... OR ...)`. {{ added "unreleased" }}
 
