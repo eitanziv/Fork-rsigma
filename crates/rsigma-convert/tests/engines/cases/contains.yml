@@ -1,0 +1,16 @@
+description: contains matches a case-insensitive substring anywhere in the value.
+rule:
+  title: contains
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|contains: 'whoami'
+    condition: selection
+events:
+  - {CommandLine: 'cmd /c whoami /all'}
+  - {CommandLine: 'CMD /C WHOAMI'}
+  - {CommandLine: 'whoami'}
+  - {CommandLine: 'who ami'}
+  - {CommandLine: ''}
+  - {Image: 'C:\x.exe'}
+matches: [0, 1, 2]

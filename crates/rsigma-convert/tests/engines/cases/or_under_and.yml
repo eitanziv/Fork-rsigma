@@ -1,0 +1,21 @@
+description: A value list ANDed with another field keeps the OR grouped.
+rule:
+  title: or under and
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith:
+        - '\a.exe'
+        - '\b.exe'
+      CommandLine|contains: 'x'
+    condition: selection
+events:
+  - {Image: 'C:\a.exe', CommandLine: 'zxz'}
+  - {Image: 'C:\b.exe', CommandLine: 'zxz'}
+  - {Image: 'C:\a.exe', CommandLine: 'zzz'}
+  - {Image: 'C:\c.exe', CommandLine: 'zxz'}
+matches: [0, 1]
+known_failures:
+  postgres-jsonb: the value-list OR is not parenthesized under AND
+  postgres-columns: the value-list OR is not parenthesized under AND
+  test-pysigma: backslashes in values are doubled; the OR is neither grouped nor rendered as an in-list

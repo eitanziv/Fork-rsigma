@@ -1,0 +1,19 @@
+description: 1 of a selector pattern is an OR of the matching selections.
+rule:
+  title: one of pattern
+  logsource: {category: process_creation, product: windows}
+  detection:
+    sel_a:
+      Image|endswith: '\cmd.exe'
+    sel_b:
+      CommandLine|contains: 'whoami'
+    other:
+      User: 'admin'
+    condition: 1 of sel_*
+events:
+  - {Image: 'C:\cmd.exe'}
+  - {CommandLine: 'whoami'}
+  - {User: 'admin'}
+matches: [0, 1]
+known_failures:
+  test-pysigma: backslashes in values are doubled

@@ -1,0 +1,16 @@
+description: gt compares numerically, not lexically.
+rule:
+  title: numeric gt
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      ProcessId|gt: 1000
+    condition: selection
+events:
+  - {ProcessId: 1001}
+  - {ProcessId: 1000}
+  - {ProcessId: 5}
+  - {ProcessId: 20000}
+matches: [0, 3]
+known_failures:
+  postgres-jsonb: comparing the text from ->> with an integer is a SQL type error

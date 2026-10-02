@@ -1,0 +1,18 @@
+description: Two single-item selections joined with or.
+rule:
+  title: or selections
+  logsource: {category: process_creation, product: windows}
+  detection:
+    sel_a:
+      Image|endswith: '\cmd.exe'
+    sel_b:
+      CommandLine|contains: 'whoami'
+    condition: sel_a or sel_b
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'whoami'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'dir'}
+  - {User: 'x'}
+matches: [0, 1]
+known_failures:
+  test-pysigma: backslashes in values are doubled

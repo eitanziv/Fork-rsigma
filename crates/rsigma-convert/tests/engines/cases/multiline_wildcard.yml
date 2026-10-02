@@ -1,0 +1,16 @@
+description: Wildcards match across newlines.
+rule:
+  title: multiline wildcard
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine: 'a*c'
+    condition: selection
+events:
+  - {CommandLine: "a\nc"}
+  - {CommandLine: "abc"}
+  - {CommandLine: "ab"}
+matches: [0, 1]
+known_failures:
+  eval: wildcards compile to a regex without (?s), so they stop at newlines
+  test-pysigma: match values are not quoted

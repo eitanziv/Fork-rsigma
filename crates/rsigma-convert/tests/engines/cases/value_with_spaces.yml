@@ -1,0 +1,18 @@
+description: Values with spaces match as a whole.
+rule:
+  title: value with spaces
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image: 'C:\Program Files\x.exe'
+    condition: selection
+events:
+  - {Image: 'C:\Program Files\x.exe'}
+  - {Image: 'C:\PROGRAM FILES\X.EXE'}
+  - {Image: 'C:\ProgramFiles\x.exe'}
+  - {Image: 'C:\Program Files\x.exe.bak'}
+matches: [0, 1]
+known_failures:
+  postgres-jsonb: plain equality renders as the case-sensitive = operator
+  postgres-columns: plain equality renders as the case-sensitive = operator
+  test-pysigma: backslashes in values are doubled

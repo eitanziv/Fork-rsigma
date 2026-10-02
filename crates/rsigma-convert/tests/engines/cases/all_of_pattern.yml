@@ -1,0 +1,17 @@
+description: all of a selector pattern is an AND of the matching selections.
+rule:
+  title: all of pattern
+  logsource: {category: process_creation, product: windows}
+  detection:
+    sel_a:
+      Image|endswith: '\cmd.exe'
+    sel_b:
+      CommandLine|contains: 'whoami'
+    condition: all of sel_*
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'whoami'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir'}
+  - {CommandLine: 'whoami'}
+matches: [0]
+known_failures:
+  test-pysigma: backslashes in values are doubled

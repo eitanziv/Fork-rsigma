@@ -1,0 +1,13 @@
+description: exists true matches events that have the field.
+rule:
+  title: exists true
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      User|exists: true
+    condition: selection
+events:
+  - {User: 'admin'}
+  - {Image: 'C:\x.exe'}
+  - {User: ''}
+matches: [0, 2]

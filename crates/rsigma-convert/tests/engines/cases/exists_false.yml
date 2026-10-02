@@ -1,0 +1,12 @@
+description: exists false matches events that lack the field.
+rule:
+  title: exists false
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      User|exists: false
+    condition: selection
+events:
+  - {User: 'admin'}
+  - {Image: 'C:\x.exe'}
+matches: [1]

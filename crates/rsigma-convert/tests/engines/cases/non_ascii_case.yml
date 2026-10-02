@@ -1,0 +1,16 @@
+description: Case-insensitive matching folds non-ASCII letters too.
+rule:
+  title: non ascii case
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      User: 'ÄRGER'
+    condition: selection
+events:
+  - {User: 'ärger'}
+  - {User: 'ÄRGER'}
+  - {User: 'arger'}
+matches: [0, 1]
+known_failures:
+  postgres-jsonb: plain equality renders as the case-sensitive = operator
+  postgres-columns: plain equality renders as the case-sensitive = operator

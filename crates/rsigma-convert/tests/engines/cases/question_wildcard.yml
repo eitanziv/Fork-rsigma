@@ -1,0 +1,18 @@
+description: A question mark is a wildcard for exactly one character.
+rule:
+  title: question wildcard
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine: 'ab?d'
+    condition: selection
+events:
+  - {CommandLine: 'abcd'}
+  - {CommandLine: 'ABXD'}
+  - {CommandLine: 'abd'}
+  - {CommandLine: 'abccd'}
+  - {CommandLine: 'ab?d'}
+matches: [0, 1, 4]
+known_failures:
+  lynxdb: the single-character wildcard is rewritten to *, which over-matches
+  test-pysigma: match values are not quoted

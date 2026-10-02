@@ -1,0 +1,13 @@
+description: An empty string value matches only an empty field, not a missing one.
+rule:
+  title: empty string
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine: ''
+    condition: selection
+events:
+  - {CommandLine: ''}
+  - {CommandLine: 'x'}
+  - {Image: 'C:\x.exe'}
+matches: [0]

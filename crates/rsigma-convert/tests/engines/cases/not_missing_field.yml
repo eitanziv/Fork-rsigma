@@ -1,0 +1,18 @@
+description: Negating a detection on a field the event lacks is true, because the detection itself is false.
+rule:
+  title: not missing field
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: '\cmd.exe'
+    filter:
+      ParentImage|endswith: '\explorer.exe'
+    condition: selection and not filter
+events:
+  - {Image: 'C:\cmd.exe'}
+  - {Image: 'C:\cmd.exe', ParentImage: 'C:\explorer.exe'}
+matches: [0]
+known_failures:
+  postgres-jsonb: NOT over a missing field evaluates to NULL, so the event is dropped
+  postgres-columns: NOT over a missing field evaluates to NULL, so the event is dropped
+  test-pysigma: backslashes in values are doubled

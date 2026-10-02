@@ -1,0 +1,15 @@
+description: re is case-sensitive by default.
+rule:
+  title: regex case sensitive
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|re: 'who.mi'
+    condition: selection
+events:
+  - {CommandLine: 'x whoami'}
+  - {CommandLine: 'x WHOAMI'}
+matches: [0]
+known_failures:
+  postgres-jsonb: re renders as the case-insensitive ~* operator
+  postgres-columns: re renders as the case-insensitive ~* operator

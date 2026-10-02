@@ -1,0 +1,18 @@
+description: startswith anchors at the beginning of the value only.
+rule:
+  title: startswith
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|startswith: 'C:\Windows\'
+    condition: selection
+events:
+  - {Image: 'C:\Windows\System32\cmd.exe'}
+  - {Image: 'c:\windows\x.exe'}
+  - {Image: 'D:\C:\Windows\x.exe'}
+  - {Image: 'C:\Windows'}
+  - {Image: 'C:\WindowsApps\x.exe'}
+  - {CommandLine: 'x'}
+matches: [0, 1]
+known_failures:
+  test-pysigma: backslashes in values are doubled

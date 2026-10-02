@@ -1,0 +1,20 @@
+description: Plain string equality is case-insensitive and matches the whole value.
+rule:
+  title: eq case insensitive
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      User: 'NT AUTHORITY\SYSTEM'
+    condition: selection
+events:
+  - {User: 'nt authority\system'}
+  - {User: 'NT AUTHORITY\SYSTEM'}
+  - {User: 'NT AUTHORITY\SYSTEM2'}
+  - {User: 'x NT AUTHORITY\SYSTEM'}
+  - {User: ''}
+  - {Image: 'C:\x.exe'}
+matches: [0, 1]
+known_failures:
+  postgres-jsonb: plain equality renders as the case-sensitive = operator
+  postgres-columns: plain equality renders as the case-sensitive = operator
+  test-pysigma: backslashes in values are doubled
