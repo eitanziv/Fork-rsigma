@@ -30,12 +30,14 @@ use crate::correlation::{
     CompiledCorrelation, EventBuffer, EventRefBuffer, GroupKey, WindowDecision, WindowState,
     apply_window_open, compile_correlation,
 };
-use crate::engine::Engine;
+use crate::engine::{Engine, IdentifiedEvaluation};
 use crate::error::{EvalError, Result};
 use crate::event::{Event, EventValue};
 use crate::pipeline::{Pipeline, apply_pipelines, apply_pipelines_to_correlation};
 use crate::result::{CorrelationBody, EvaluationResult, ResultBody, RuleHeader};
 use crate::rule_metadata::{RuleBundleMetadata, RuleMetadataLookup};
+
+type RuleIdentity = (Option<String>, Option<String>);
 
 // =============================================================================
 // Correlation Engine
@@ -63,9 +65,9 @@ pub struct CorrelationEngine {
     /// Maps rule ID/name -> indices into `correlations` that reference it.
     /// This allows quick lookup: "which correlations care about rule X?"
     rule_index: HashMap<String, Vec<usize>>,
-    /// Maps detection rule index -> (rule_id, rule_name) for reverse lookup.
+    /// Maps detection rule index -> (rule_id, rule_name, rule_title) for reverse lookup.
     /// Used to find which correlations a detection match triggers.
-    rule_ids: Vec<(Option<String>, Option<String>)>,
+    rule_ids: Vec<(Option<String>, Option<String>, String)>,
     /// Per-(correlation_index, group_key) window state.
     state: HashMap<(usize, GroupKey), WindowState>,
     /// Last alert timestamp per (correlation_index, group_key) for suppression.
@@ -78,6 +80,9 @@ pub struct CorrelationEngine {
     /// (referenced by correlations where `generate == false`).
     /// Used to filter detection output when `config.emit_detections == false`.
     correlation_only_rules: std::collections::HashSet<String>,
+    /// Rules referenced by at least one correlation with `generate: true`.
+    /// Such a reference wins over correlation-only references.
+    generated_rules: std::collections::HashSet<String>,
     /// Configuration.
     config: CorrelationConfig,
     /// Processing pipelines applied to rules during add_rule.
@@ -97,6 +102,7 @@ impl CorrelationEngine {
             event_buffers: HashMap::new(),
             event_ref_buffers: HashMap::new(),
             correlation_only_rules: std::collections::HashSet::new(),
+            generated_rules: std::collections::HashSet::new(),
             config,
             pipelines: Vec::new(),
         }
@@ -185,14 +191,18 @@ impl CorrelationEngine {
     pub fn add_rule(&mut self, rule: &SigmaRule) -> Result<()> {
         if self.pipelines.is_empty() {
             self.apply_custom_attributes(&rule.custom_attributes);
-            self.rule_ids.push((rule.id.clone(), rule.name.clone()));
+            self.rule_ids
+                .push((rule.id.clone(), rule.name.clone(), rule.title.clone()));
             self.engine.add_rule(rule)?;
         } else {
             let mut transformed = rule.clone();
             apply_pipelines(&self.pipelines, &mut transformed)?;
             self.apply_custom_attributes(&transformed.custom_attributes);
-            self.rule_ids
-                .push((transformed.id.clone(), transformed.name.clone()));
+            self.rule_ids.push((
+                transformed.id.clone(),
+                transformed.name.clone(),
+                transformed.title.clone(),
+            ));
             // Use compile_rule + add_compiled_rule to bypass inner engine's pipelines
             let compiled = crate::compiler::compile_rule(&transformed)?;
             self.engine.add_compiled_rule(compiled);
@@ -270,9 +280,13 @@ impl CorrelationEngine {
                 .push(idx);
         }
 
-        // Track correlation-only rules (generate == false is the default)
-        if !compiled.generate {
-            for rule_ref in &compiled.rule_refs {
+        // A rule is standalone when any referencing correlation requests it,
+        // regardless of the order in which correlations are loaded.
+        for rule_ref in &compiled.rule_refs {
+            if compiled.generate {
+                self.generated_rules.insert(rule_ref.clone());
+                self.correlation_only_rules.remove(rule_ref);
+            } else if !self.generated_rules.contains(rule_ref) {
                 self.correlation_only_rules.insert(rule_ref.clone());
             }
         }
@@ -294,7 +308,8 @@ impl CorrelationEngine {
         if self.pipelines.is_empty() {
             for rule in &collection.rules {
                 self.apply_custom_attributes(&rule.custom_attributes);
-                self.rule_ids.push((rule.id.clone(), rule.name.clone()));
+                self.rule_ids
+                    .push((rule.id.clone(), rule.name.clone(), rule.title.clone()));
                 compiled_batch.push(crate::compiler::compile_rule(rule)?);
             }
         } else {
@@ -302,8 +317,11 @@ impl CorrelationEngine {
                 let mut transformed = rule.clone();
                 apply_pipelines(&self.pipelines, &mut transformed)?;
                 self.apply_custom_attributes(&transformed.custom_attributes);
-                self.rule_ids
-                    .push((transformed.id.clone(), transformed.name.clone()));
+                self.rule_ids.push((
+                    transformed.id.clone(),
+                    transformed.name.clone(),
+                    transformed.title.clone(),
+                ));
                 // Bypass the inner engine's pipelines (would double-transform)
                 compiled_batch.push(crate::compiler::compile_rule(&transformed)?);
             }
@@ -326,7 +344,7 @@ impl CorrelationEngine {
     fn validate_rule_refs(&self) -> Result<()> {
         let mut known: std::collections::HashSet<&str> = std::collections::HashSet::new();
 
-        for (id, name) in &self.rule_ids {
+        for (id, name, _) in &self.rule_ids {
             if let Some(id) = id {
                 known.insert(id.as_str());
             }
@@ -446,8 +464,8 @@ impl CorrelationEngine {
     /// - `WallClock`: use `Utc::now()` (good for real-time streaming)
     /// - `Skip`: return detections only, skip correlation state updates
     pub fn process_event(&mut self, event: &impl Event) -> ProcessResult {
-        let all_detections = self.engine.evaluate(event);
-        self.correlate_detections(event, all_detections)
+        let detections = self.engine.evaluate_identified(event);
+        self.correlate_identified_detections(event, detections)
     }
 
     /// Run the correlation layer over externally-produced detections.
@@ -463,17 +481,39 @@ impl CorrelationEngine {
         event: &impl Event,
         all_detections: Vec<EvaluationResult>,
     ) -> ProcessResult {
+        let identities = all_detections
+            .iter()
+            .map(|detection| self.find_rule_identity(detection))
+            .collect();
+        self.correlate_with_identities(event, all_detections, identities)
+    }
+
+    pub(crate) fn correlate_identified_detections(
+        &mut self,
+        event: &impl Event,
+        detections: Vec<IdentifiedEvaluation>,
+    ) -> ProcessResult {
+        let (all_detections, identities) = split_identified(detections);
+        self.correlate_with_identities(event, all_detections, identities)
+    }
+
+    fn correlate_with_identities(
+        &mut self,
+        event: &impl Event,
+        all_detections: Vec<EvaluationResult>,
+        identities: Vec<RuleIdentity>,
+    ) -> ProcessResult {
         let ts = match self.extract_event_timestamp(event) {
             Some(ts) => ts,
             None => match self.config.timestamp_fallback {
                 TimestampFallback::WallClock => Utc::now().timestamp(),
                 TimestampFallback::Skip => {
                     // Still surface detections, but skip correlation state.
-                    return self.filter_detections(all_detections);
+                    return self.filter_detections(all_detections, identities);
                 }
             },
         };
-        self.process_with_detections(event, all_detections, ts)
+        self.process_with_detection_identities(event, all_detections, identities, ts)
     }
 
     /// Process an event with an explicit Unix epoch timestamp (seconds).
@@ -481,8 +521,9 @@ impl CorrelationEngine {
     /// The timestamp is clamped to `[0, i64::MAX / 2]` to prevent overflow
     /// when adding timespan durations internally.
     pub fn process_event_at(&mut self, event: &impl Event, timestamp_secs: i64) -> ProcessResult {
-        let all_detections = self.engine.evaluate(event);
-        self.process_with_detections(event, all_detections, timestamp_secs)
+        let detections = self.engine.evaluate_identified(event);
+        let (all_detections, identities) = split_identified(detections);
+        self.process_with_detection_identities(event, all_detections, identities, timestamp_secs)
     }
 
     /// Process an event with pre-computed detection results.
@@ -496,6 +537,20 @@ impl CorrelationEngine {
         all_detections: Vec<EvaluationResult>,
         timestamp_secs: i64,
     ) -> ProcessResult {
+        let identities = all_detections
+            .iter()
+            .map(|detection| self.find_rule_identity(detection))
+            .collect();
+        self.process_with_detection_identities(event, all_detections, identities, timestamp_secs)
+    }
+
+    fn process_with_detection_identities(
+        &mut self,
+        event: &impl Event,
+        all_detections: Vec<EvaluationResult>,
+        identities: Vec<RuleIdentity>,
+        timestamp_secs: i64,
+    ) -> ProcessResult {
         let timestamp_secs = timestamp_secs.clamp(0, i64::MAX / 2);
 
         // Memory management — evict before adding new state to enforce limit
@@ -505,16 +560,23 @@ impl CorrelationEngine {
 
         // Feed detection matches into correlations
         let mut correlations: Vec<EvaluationResult> = Vec::new();
-        self.feed_detections(event, &all_detections, timestamp_secs, &mut correlations);
+        let mut fired_indices = Vec::new();
+        self.feed_detections(
+            event,
+            &identities,
+            timestamp_secs,
+            &mut correlations,
+            &mut fired_indices,
+        );
 
         // Chain — parent firings go into a separate vec so we do not
         // alias `correlations` as both the input slice and the output.
         let mut chained = Vec::new();
-        self.chain_correlations(&correlations, timestamp_secs, &mut chained);
+        self.chain_correlations(&correlations, &fired_indices, timestamp_secs, &mut chained);
         correlations.extend(chained);
 
         // Filter detections by generate flag, then append the correlations.
-        let mut out = self.filter_detections(all_detections);
+        let mut out = self.filter_detections(all_detections, identities);
         out.extend(correlations);
         out
     }
@@ -542,14 +604,14 @@ impl CorrelationEngine {
         let engine = &self.engine;
         let ts_fields = &self.config.timestamp_fields;
 
-        let batch_results: Vec<(Vec<EvaluationResult>, Option<i64>)> = {
+        let batch_results: Vec<(Vec<IdentifiedEvaluation>, Option<i64>)> = {
             #[cfg(feature = "parallel")]
             {
                 use rayon::prelude::*;
                 events
                     .par_iter()
                     .map(|e| {
-                        let detections = engine.evaluate(e);
+                        let detections = engine.evaluate_identified(e);
                         let ts = extract_event_ts(e, ts_fields);
                         (detections, ts)
                     })
@@ -560,7 +622,7 @@ impl CorrelationEngine {
                 events
                     .iter()
                     .map(|e| {
-                        let detections = engine.evaluate(e);
+                        let detections = engine.evaluate_identified(e);
                         let ts = extract_event_ts(e, ts_fields);
                         (detections, ts)
                     })
@@ -570,10 +632,13 @@ impl CorrelationEngine {
 
         // Sequential correlation phase
         let mut results = Vec::with_capacity(events.len());
-        for ((detections, ts_opt), event) in batch_results.into_iter().zip(events) {
+        for ((identified, ts_opt), event) in batch_results.into_iter().zip(events) {
+            let (detections, identities) = split_identified(identified);
             match ts_opt {
                 Some(ts) => {
-                    results.push(self.process_with_detections(event, detections, ts));
+                    results.push(
+                        self.process_with_detection_identities(event, detections, identities, ts),
+                    );
                 }
                 None => match self.config.timestamp_fallback {
                     TimestampFallback::WallClock => {
@@ -582,7 +647,7 @@ impl CorrelationEngine {
                     }
                     TimestampFallback::Skip => {
                         // Still return detection results, but skip correlation
-                        results.push(self.filter_detections(detections));
+                        results.push(self.filter_detections(detections, identities));
                     }
                 },
             }
@@ -594,17 +659,23 @@ impl CorrelationEngine {
     ///
     /// If `emit_detections` is false and some rules are correlation-only,
     /// their detection output is suppressed.
-    fn filter_detections(&self, all_detections: Vec<EvaluationResult>) -> Vec<EvaluationResult> {
+    fn filter_detections(
+        &self,
+        all_detections: Vec<EvaluationResult>,
+        identities: Vec<RuleIdentity>,
+    ) -> Vec<EvaluationResult> {
         if !self.config.emit_detections && !self.correlation_only_rules.is_empty() {
             all_detections
                 .into_iter()
-                .filter(|m| {
-                    let id_match = m
-                        .header
-                        .rule_id
-                        .as_ref()
-                        .is_some_and(|id| self.correlation_only_rules.contains(id));
-                    !id_match
+                .zip(identities)
+                .filter_map(|(detection, (id, name))| {
+                    let mut identities = id.as_ref().into_iter().chain(name.as_ref());
+                    let generated = identities
+                        .clone()
+                        .any(|identity| self.generated_rules.contains(identity));
+                    let correlation_only =
+                        identities.any(|identity| self.correlation_only_rules.contains(identity));
+                    (generated || !correlation_only).then_some(detection)
                 })
                 .collect()
         } else {
@@ -616,27 +687,24 @@ impl CorrelationEngine {
     fn feed_detections(
         &mut self,
         event: &impl Event,
-        detections: &[EvaluationResult],
+        identities: &[RuleIdentity],
         ts: i64,
         out: &mut Vec<EvaluationResult>,
+        fired_indices: &mut Vec<usize>,
     ) {
         // Collect all (corr_idx, rule_id, rule_name) tuples upfront to avoid
         // borrow conflicts between self.rule_ids and self.update_correlation.
         let mut work: Vec<(usize, Option<String>, Option<String>)> = Vec::new();
 
-        for det in detections {
-            // Use the MatchResult's rule_id to find the original rule's ID/name.
-            // We also look up by rule_id in our rule_ids table for the name.
-            let (rule_id, rule_name) = self.find_rule_identity(det);
-
+        for (rule_id, rule_name) in identities {
             // Collect correlation indices that reference this rule
             let mut corr_indices = Vec::new();
-            if let Some(ref id) = rule_id
+            if let Some(id) = rule_id
                 && let Some(indices) = self.rule_index.get(id)
             {
                 corr_indices.extend(indices);
             }
-            if let Some(ref name) = rule_name
+            if let Some(name) = rule_name
                 && let Some(indices) = self.rule_index.get(name)
             {
                 corr_indices.extend(indices);
@@ -651,21 +719,38 @@ impl CorrelationEngine {
         }
 
         for (corr_idx, rule_id, rule_name) in work {
+            let before = out.len();
             self.update_correlation(corr_idx, event, ts, &rule_id, &rule_name, out);
+            if out.len() > before {
+                fired_indices.push(corr_idx);
+            }
         }
     }
 
     /// Find the (id, name) for a detection match by searching our rule_ids table.
-    fn find_rule_identity(&self, det: &EvaluationResult) -> (Option<String>, Option<String>) {
-        // First, try to find by matching rule_id in our table
+    fn find_rule_identity(&self, det: &EvaluationResult) -> RuleIdentity {
+        // Prefer the stable ID carried by the result.
         if let Some(ref match_id) = det.header.rule_id {
-            for (id, name) in &self.rule_ids {
+            for (id, name, _) in &self.rule_ids {
                 if id.as_deref() == Some(match_id.as_str()) {
                     return (id.clone(), name.clone());
                 }
             }
         }
-        // Fall back to using just the EvaluationResult's rule_id
+
+        // `process_with_detections` accepts the public EvaluationResult shape,
+        // which does not carry a rule name. Recover name-only rule identity
+        // from the title retained alongside the compiled rule.
+        let mut title_matches = self
+            .rule_ids
+            .iter()
+            .filter(|(_, _, title)| title == &det.header.rule_title);
+        if let Some((id, name, _)) = title_matches.next()
+            && title_matches.next().is_none()
+        {
+            return (id.clone(), name.clone());
+        }
+
         (det.header.rule_id.clone(), None)
     }
 
@@ -729,8 +814,11 @@ impl CorrelationEngine {
             .find(|identity| corr.rule_refs.iter().any(|rule_ref| rule_ref == identity))
             .unwrap_or("");
 
-        // Extract group key
-        let group_key = GroupKey::extract(event, &corr.group_by, &ref_strs);
+        // An event without every group-by value cannot be assigned to a
+        // correlation group.
+        let Some(group_key) = GroupKey::extract(event, &corr.group_by, &ref_strs) else {
+            return;
+        };
 
         // Get or create window state
         let state_key = (corr_idx, group_key.clone());
@@ -910,19 +998,12 @@ impl CorrelationEngine {
     /// Parents index `rule_refs` as written in YAML (id or name). The
     /// emitted result only carries `rule_id`, so name-based parents need
     /// this extra key or they never see the child.
-    fn chain_lookup_keys(&self, result: &EvaluationResult) -> Vec<String> {
-        let Some(id) = result.header.rule_id.as_deref() else {
-            return Vec::new();
-        };
-        let mut keys = vec![id.to_string()];
-        if let Some(name) = self
-            .correlations
-            .iter()
-            .find(|c| c.id.as_deref() == Some(id))
-            .and_then(|c| c.name.as_deref())
-            && name != id
-        {
-            keys.push(name.to_string());
+    fn chain_lookup_keys(&self, corr_idx: usize) -> Vec<String> {
+        let corr = &self.correlations[corr_idx];
+        let mut keys = Vec::with_capacity(2);
+        keys.extend(corr.id.iter().cloned());
+        if corr.name.as_ref() != corr.id.as_ref() {
+            keys.extend(corr.name.iter().cloned());
         }
         keys
     }
@@ -935,10 +1016,16 @@ impl CorrelationEngine {
     fn chain_correlations(
         &mut self,
         fired: &[EvaluationResult],
+        fired_indices: &[usize],
         ts: i64,
         out: &mut Vec<EvaluationResult>,
     ) {
-        let mut pending: Vec<EvaluationResult> = fired.to_vec();
+        debug_assert_eq!(fired.len(), fired_indices.len());
+        let mut pending: Vec<(usize, EvaluationResult)> = fired_indices
+            .iter()
+            .copied()
+            .zip(fired.iter().cloned())
+            .collect();
         let mut depth = 0;
 
         while !pending.is_empty() && depth < MAX_CHAIN_DEPTH {
@@ -948,12 +1035,12 @@ impl CorrelationEngine {
             #[allow(clippy::type_complexity)]
             let mut work: Vec<(usize, Vec<(String, String)>, String)> = Vec::new();
             let mut seen = std::collections::HashSet::<(usize, String)>::new();
-            for result in &pending {
+            for (source_idx, result) in &pending {
                 // Only correlation results chain. Detections never reach here.
                 let Some(body) = result.as_correlation() else {
                     continue;
                 };
-                for key in self.chain_lookup_keys(result) {
+                for key in self.chain_lookup_keys(*source_idx) {
                     if let Some(indices) = self.rule_index.get(&key) {
                         for &corr_idx in indices {
                             if seen.insert((corr_idx, key.clone())) {
@@ -975,7 +1062,9 @@ impl CorrelationEngine {
                 let suppress_secs = corr.suppress_secs.or(self.config.suppress);
                 let action = corr.action.unwrap_or(self.config.action_on_match);
 
-                let group_key = GroupKey::from_pairs(&group_key_pairs, &corr.group_by);
+                let Some(group_key) = GroupKey::from_pairs(&group_key_pairs, &corr.group_by) else {
+                    continue;
+                };
                 let state_key = (corr_idx, group_key.clone());
                 let state = self
                     .state
@@ -1051,7 +1140,7 @@ impl CorrelationEngine {
                             event_refs: None,
                         }),
                     };
-                    next_pending.push(result.clone());
+                    next_pending.push((corr_idx, result.clone()));
                     out.push(result);
                     self.last_alert.insert(alert_key.clone(), ts);
 
@@ -1404,6 +1493,20 @@ impl Default for CorrelationEngine {
     fn default() -> Self {
         Self::new(CorrelationConfig::default())
     }
+}
+
+fn split_identified(
+    identified: Vec<IdentifiedEvaluation>,
+) -> (Vec<EvaluationResult>, Vec<RuleIdentity>) {
+    identified
+        .into_iter()
+        .map(|identified| {
+            (
+                identified.result,
+                (identified.rule_id, identified.rule_name),
+            )
+        })
+        .unzip()
 }
 
 // =============================================================================

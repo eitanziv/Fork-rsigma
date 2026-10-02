@@ -74,6 +74,11 @@ pub(super) fn parse_correlation_rule(
         .or_else(|| get_str(corr, "timespan"))
         .ok_or_else(|| SigmaParserError::InvalidCorrelation("Missing timeframe".into()))?;
     let timespan = Timespan::parse(timespan_str)?;
+    if timespan.seconds == 0 {
+        return Err(SigmaParserError::InvalidCorrelation(
+            "Correlation timeframe must be greater than zero".into(),
+        ));
+    }
 
     // Window mode (optional, defaults to sliding) and the session `gap`.
     //
@@ -220,6 +225,19 @@ fn parse_correlation_condition(
         Some(Value::Mapping(cm)) => {
             // Threshold condition: { gte: 100 } or range { gt: 100, lte: 200, field: "username" }
             let operators = ["lt", "lte", "gt", "gte", "eq", "neq"];
+            let allowed_keys = ["lt", "lte", "gt", "gte", "eq", "neq", "field", "percentile"];
+            for key in cm.keys() {
+                let Some(key) = key.as_str() else {
+                    return Err(SigmaParserError::InvalidCorrelation(
+                        "Correlation condition keys must be strings".into(),
+                    ));
+                };
+                if !allowed_keys.contains(&key) {
+                    return Err(SigmaParserError::InvalidCorrelation(format!(
+                        "Unknown correlation condition key: {key}"
+                    )));
+                }
+            }
             let mut predicates = Vec::new();
 
             for &op_str in &operators {
@@ -262,6 +280,21 @@ fn parse_correlation_condition(
             };
 
             let percentile = cm.get(val_key("percentile")).and_then(|v| v.as_u64());
+
+            if matches!(
+                correlation_type,
+                CorrelationType::ValueCount
+                    | CorrelationType::ValueSum
+                    | CorrelationType::ValueAvg
+                    | CorrelationType::ValuePercentile
+                    | CorrelationType::ValueMedian
+            ) && field.is_none()
+            {
+                return Err(SigmaParserError::InvalidCorrelation(format!(
+                    "{} correlation condition requires 'field'",
+                    correlation_type.as_str()
+                )));
+            }
 
             Ok(CorrelationCondition::Threshold {
                 predicates,

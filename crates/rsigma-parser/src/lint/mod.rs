@@ -127,6 +127,7 @@ pub enum LintRule {
     InvalidConditionOperator,
     ConditionValueNotNumeric,
     GenerateNotBoolean,
+    CorrelationOnlyReferences,
 
     // ── Filter rules ─────────────────────────────────────────────────────
     MissingFilter,
@@ -228,6 +229,7 @@ impl fmt::Display for LintRule {
             LintRule::InvalidConditionOperator => "invalid_condition_operator",
             LintRule::ConditionValueNotNumeric => "condition_value_not_numeric",
             LintRule::GenerateNotBoolean => "generate_not_boolean",
+            LintRule::CorrelationOnlyReferences => "correlation_only_references",
             LintRule::MissingFilter => "missing_filter",
             LintRule::MissingFilterRules => "missing_filter_rules",
             LintRule::EmptyFilterRules => "empty_filter_rules",

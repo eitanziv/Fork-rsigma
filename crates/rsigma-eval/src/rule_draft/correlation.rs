@@ -1177,7 +1177,10 @@ fn verify_identity(
                 .iter()
                 .position(|member| *member == (group_index, event_index))
                 .expect("slot member exists");
-            let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+            let mut engine = CorrelationEngine::new(CorrelationConfig {
+                emit_detections: true,
+                ..Default::default()
+            });
             engine
                 .add_collection(collection)
                 .map_err(|error| CorrelationDraftError::Internal {
@@ -1246,7 +1249,10 @@ fn verify_groups(
     let mut rows = Vec::with_capacity(groups.len());
     let mut failed_negatives = Vec::new();
     for group in groups {
-        let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+        let mut engine = CorrelationEngine::new(CorrelationConfig {
+            emit_detections: true,
+            ..Default::default()
+        });
         engine
             .add_collection(collection)
             .map_err(|error| CorrelationDraftError::Internal {

@@ -124,6 +124,7 @@ level: high
     let collection = parse_sigma_yaml(yaml).unwrap();
     let mut engine = CorrelationEngine::new(CorrelationConfig {
         timestamp_fallback: TimestampFallback::Skip,
+        emit_detections: true,
         ..Default::default()
     });
     engine.add_collection(&collection).unwrap();
@@ -240,8 +241,8 @@ level: high
         let event = JsonEvent::borrow(&v);
         let result = engine.process_event_at(&event, base_ts + i * 10);
 
-        // Each event should match the detection rule
-        assert_eq!(result.detection_count(), 1);
+        // The referenced detection feeds correlation state but is not emitted.
+        assert_eq!(result.detection_count(), 0);
 
         if i < 2 {
             // Not enough events yet
@@ -1349,12 +1350,11 @@ level: high
     let mut engine = CorrelationEngine::new(CorrelationConfig::default());
     engine.add_collection(&collection).unwrap();
 
-    // generate defaults to false — detection matches are still returned
-    // (filtering by generate flag is a backend concern, not eval)
+    // generate defaults to false, so only the correlation is emitted.
     let v = json!({"action": "test", "User": "alice"});
     let event = JsonEvent::borrow(&v);
     let r = engine.process_event_at(&event, 1000);
-    assert_eq!(r.detection_count(), 1);
+    assert_eq!(r.detection_count(), 0);
     assert_eq!(r.correlation_count(), 1);
 }
 
@@ -1520,12 +1520,8 @@ level: critical
     let event = JsonEvent::borrow(&v);
     let r = engine.process_event_at(&event, ts + 30);
 
-    // The detection should match
-    assert_eq!(r.detection_count(), 1);
-    assert_eq!(
-        r.detections().next().unwrap().header.rule_title,
-        "Successful login"
-    );
+    // The referenced detection is suppressed but still feeds the parent.
+    assert_eq!(r.detection_count(), 0);
     assert!(
         r.correlations()
             .any(|c| c.header.rule_title == "Brute Force Followed by Login"),
@@ -1591,7 +1587,7 @@ level: high
     });
     let ev1 = JsonEvent::borrow(&v1);
     let r1 = engine.process_event_at(&ev1, ts);
-    assert_eq!(r1.detection_count(), 1);
+    assert_eq!(r1.detection_count(), 0);
     assert!(r1.correlation_count() == 0);
 
     // New connection with source.ip = 10.0.0.5 (same IP, aliased)
@@ -1601,7 +1597,7 @@ level: high
     });
     let ev2 = JsonEvent::borrow(&v2);
     let r2 = engine.process_event_at(&ev2, ts + 5);
-    assert_eq!(r2.detection_count(), 1);
+    assert_eq!(r2.detection_count(), 0);
     // Both rules fired for the same internal_ip group → temporal should fire
     assert_eq!(r2.correlation_count(), 1);
     assert_eq!(
@@ -2054,7 +2050,7 @@ level: high
     // Login at 3AM
     let ev1 = json!({"EventType": "login", "User": "alice", "Timestamp": "2024-01-15T03:10:00Z"});
     let r1 = engine.process_event_at(&JsonEvent::borrow(&ev1), ts);
-    assert_eq!(r1.detection_count(), 1);
+    assert_eq!(r1.detection_count(), 0);
     assert!(r1.correlation_count() == 0);
 
     let ev2 = json!({"EventType": "login", "User": "alice", "Timestamp": "2024-01-15T03:45:00Z"});
@@ -2289,21 +2285,25 @@ fn test_action_reset() {
 // =========================================================================
 
 #[test]
-fn test_emit_detections_true_by_default() {
+fn test_emit_detections_false_by_default() {
     let collection = parse_sigma_yaml(suppression_yaml()).unwrap();
     let mut engine = CorrelationEngine::new(CorrelationConfig::default());
     engine.add_collection(&collection).unwrap();
 
     let ev = json!({"EventType": "login", "User": "alice"});
     let r = engine.process_event_at(&JsonEvent::borrow(&ev), 1000);
-    assert_eq!(r.detection_count(), 1, "by default detections are emitted");
+    assert_eq!(
+        r.detection_count(),
+        0,
+        "detections are suppressed by default"
+    );
 }
 
 #[test]
-fn test_emit_detections_false_suppresses() {
+fn test_emit_detections_true_emits_all_detections() {
     let collection = parse_sigma_yaml(suppression_yaml()).unwrap();
     let config = CorrelationConfig {
-        emit_detections: false,
+        emit_detections: true,
         ..Default::default()
     };
     let mut engine = CorrelationEngine::new(config);
@@ -2311,10 +2311,7 @@ fn test_emit_detections_false_suppresses() {
 
     let ev = json!({"EventType": "login", "User": "alice"});
     let r = engine.process_event_at(&JsonEvent::borrow(&ev), 1000);
-    assert!(
-        r.detection_count() == 0,
-        "detection matches should be suppressed when emit_detections=false"
-    );
+    assert_eq!(r.detection_count(), 1);
 }
 
 #[test]
@@ -2322,7 +2319,7 @@ fn test_generate_true_keeps_detections() {
     // When generate: true, detections should be emitted even with emit_detections=false
     let yaml = r#"
 title: Login
-id: login-gen
+name: login_gen
 logsource:
     category: auth
 detection:
@@ -2331,16 +2328,16 @@ detection:
     condition: selection
 ---
 title: Many Logins
+generate: true
 correlation:
     type: event_count
     rules:
-        - login-gen
+        - login_gen
     group-by:
         - User
     timeframe: 60s
     condition:
         gte: 3
-    generate: true
 level: high
 "#;
     let collection = parse_sigma_yaml(yaml).unwrap();
@@ -2359,6 +2356,47 @@ level: high
         1,
         "generate:true keeps detection output"
     );
+}
+
+#[test]
+fn test_generate_true_wins_across_id_and_name_references() {
+    let yaml = r#"
+title: Login
+id: 00000000-0000-4000-8000-000000000001
+name: login
+logsource:
+    category: auth
+detection:
+    selection:
+        EventType: login
+    condition: selection
+---
+title: Count by ID
+correlation:
+    type: event_count
+    rules: [00000000-0000-4000-8000-000000000001]
+    group-by: [User]
+    timespan: 60s
+    condition:
+        gte: 3
+---
+title: Count by Name
+generate: true
+correlation:
+    type: event_count
+    rules: [login]
+    group-by: [User]
+    timespan: 60s
+    condition:
+        gte: 3
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    engine.add_collection(&collection).unwrap();
+
+    let ev = json!({"EventType": "login", "User": "alice"});
+    let result = engine.process_event_at(&JsonEvent::borrow(&ev), 1000);
+    assert_eq!(result.detection_count(), 1);
 }
 
 // =========================================================================

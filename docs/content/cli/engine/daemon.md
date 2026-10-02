@@ -148,7 +148,8 @@ See [TLS deployment](../../reference/security.md#tls-termination-for-the-api-lis
 |------|---------|-------------|
 | `--suppress <DURATION>` | unset | Suppress duplicate correlation alerts within the window (`5m`, `1h`, `30s`). |
 | `--action <ACTION>` | `alert` | Post-fire action: `alert` (keep state, re-alert on next match) or `reset` (clear window state). |
-| `--no-detections` | off | Suppress detection output for correlation-only base rules. |
+| `--emit-detections` | off | Emit detection output for rules that only feed correlations. By default, referenced detections are emitted only when the correlation has top-level `generate: true`. {{ added "unreleased" }} |
+| `--no-detections` | off | Deprecated compatibility flag. Correlation-only detections are suppressed by default. |
 | `--correlation-event-mode <MODE>` | `none` | `none`, `full` (deflate-compressed full bodies), `refs` (timestamp + ID only). |
 | `--max-correlation-events <N>` | `10` | Cap on stored events per correlation window. |
 | `--max-state-entries <N>` | `100000` | Hard cap on correlation state entries across all correlations and group keys. When reached, the stalest entries are evicted to 90% capacity and a warning is logged. |

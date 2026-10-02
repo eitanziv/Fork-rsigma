@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use rsigma_eval::pipeline::{Pipeline, apply_pipelines_to_correlation, apply_pipelines_with_state};
-use rsigma_parser::SigmaCollection;
+use rsigma_parser::{CorrelationRule, SigmaCollection, SigmaRule};
 
 use crate::backend::Backend;
 use crate::error::{ConvertError, Result};
@@ -34,6 +34,8 @@ pub fn convert_collection(
     let mut rule_query_map: HashMap<String, String> = HashMap::new();
 
     for rule in &collection.rules {
+        let emit_standalone = !backend.supports_correlation()
+            || should_emit_standalone(rule, &collection.correlations);
         let mut rule = rule.clone();
         let pipeline_state = if !pipelines.is_empty() {
             apply_pipelines_with_state(pipelines, &mut rule)?
@@ -53,6 +55,9 @@ pub fn convert_collection(
             if let Some(id) = &rule.id {
                 rule_table_map.insert(id.clone(), table.to_string());
             }
+            if let Some(name) = &rule.name {
+                rule_table_map.insert(name.clone(), table.to_string());
+            }
             rule_table_map.insert(rule.title.clone(), table.to_string());
         }
 
@@ -66,6 +71,9 @@ pub fn convert_collection(
             if let Some(id) = &rule.id {
                 rule_schema_map.insert(id.clone(), schema.to_string());
             }
+            if let Some(name) = &rule.name {
+                rule_schema_map.insert(name.clone(), schema.to_string());
+            }
             rule_schema_map.insert(rule.title.clone(), schema.to_string());
         }
 
@@ -75,14 +83,19 @@ pub fn convert_collection(
                     if let Some(id) = &rule.id {
                         rule_query_map.insert(id.clone(), q.clone());
                     }
+                    if let Some(name) = &rule.name {
+                        rule_query_map.insert(name.clone(), q.clone());
+                    }
                     rule_query_map.insert(rule.title.clone(), q.clone());
                 }
-                output.queries.push(ConversionResult {
-                    rule_title: rule.title.clone(),
-                    rule_id: rule.id.clone(),
-                    queries,
-                    warnings: Vec::new(),
-                });
+                if emit_standalone {
+                    output.queries.push(ConversionResult {
+                        rule_title: rule.title.clone(),
+                        rule_id: rule.id.clone(),
+                        queries,
+                        warnings: Vec::new(),
+                    });
+                }
             }
             Err(e) => {
                 output.errors.push((rule.title.clone(), e));
@@ -140,6 +153,22 @@ pub fn convert_collection(
     Ok(output)
 }
 
+fn should_emit_standalone(rule: &SigmaRule, correlations: &[CorrelationRule]) -> bool {
+    let mut referenced = false;
+    for correlation in correlations {
+        let matches = correlation.rules.iter().any(|rule_ref| {
+            rule.id.as_deref() == Some(rule_ref) || rule.name.as_deref() == Some(rule_ref)
+        });
+        if matches {
+            referenced = true;
+            if correlation.generate {
+                return true;
+            }
+        }
+    }
+    !referenced
+}
+
 /// True if any dot-segment of a field path is a positional array index
 /// (`name[N]`, including a negative `name[-N]`). The quantifier selectors never
 /// reach field names (the parser desugars them into `Detection::ArrayMatch`),
@@ -162,7 +191,9 @@ pub(crate) fn field_has_positional_index(field: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::field_has_positional_index;
+    use super::{convert_collection, field_has_positional_index, should_emit_standalone};
+    use crate::backends::postgres::PostgresBackend;
+    use rsigma_parser::parse_sigma_yaml;
 
     #[test]
     fn positional_index_detection_respects_escaping() {
@@ -175,5 +206,80 @@ mod tests {
         // Quantifier selectors never reach field names, and plain fields have
         // no index.
         assert!(!field_has_positional_index("process.args"));
+    }
+
+    #[test]
+    fn referenced_rules_are_standalone_only_when_generate_is_true() {
+        let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Count
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [User]
+    timespan: 1m
+    condition:
+        gte: 2
+"#;
+        let collection = parse_sigma_yaml(yaml).unwrap();
+        assert!(!should_emit_standalone(
+            &collection.rules[0],
+            &collection.correlations
+        ));
+
+        let mut generated = collection.correlations.clone();
+        generated[0].generate = true;
+        assert!(should_emit_standalone(&collection.rules[0], &generated));
+    }
+
+    #[test]
+    fn collection_conversion_omits_referenced_rule_by_default() {
+        let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Count
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [User]
+    timespan: 1m
+    condition:
+        gte: 2
+"#;
+        let collection = parse_sigma_yaml(yaml).unwrap();
+        let output =
+            convert_collection(&PostgresBackend::new(), &collection, &[], "default").unwrap();
+        let titles: Vec<_> = output
+            .queries
+            .iter()
+            .map(|result| result.rule_title.as_str())
+            .collect();
+        assert_eq!(titles, ["Count"]);
+
+        let mut generated = collection;
+        generated.correlations[0].generate = true;
+        let output =
+            convert_collection(&PostgresBackend::new(), &generated, &[], "default").unwrap();
+        let titles: Vec<_> = output
+            .queries
+            .iter()
+            .map(|result| result.rule_title.as_str())
+            .collect();
+        assert_eq!(titles, ["Base", "Count"]);
     }
 }

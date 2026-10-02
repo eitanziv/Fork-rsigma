@@ -1037,6 +1037,79 @@ fn test_temporal_without_condition_or_rules_is_error() {
 }
 
 #[test]
+fn test_correlation_timespan_must_be_positive() {
+    let yaml = r#"
+title: Zero Window
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 0s
+    condition:
+        gte: 1
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    assert!(collection.correlations.is_empty());
+    assert!(
+        collection
+            .errors
+            .iter()
+            .any(|e| e.contains("must be greater than zero")),
+        "{:?}",
+        collection.errors
+    );
+}
+
+#[test]
+fn test_correlation_condition_rejects_unknown_keys() {
+    let yaml = r#"
+title: Unknown Condition Key
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 1m
+    condition:
+        gte: 1
+        bogus: 2
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    assert!(collection.correlations.is_empty());
+    assert!(
+        collection
+            .errors
+            .iter()
+            .any(|e| e.contains("Unknown correlation condition key: bogus")),
+        "{:?}",
+        collection.errors
+    );
+}
+
+#[test]
+fn test_value_count_requires_a_field() {
+    let yaml = r#"
+title: Missing Value Field
+correlation:
+    type: value_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 1m
+    condition:
+        gte: 1
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    assert!(collection.correlations.is_empty());
+    assert!(
+        collection
+            .errors
+            .iter()
+            .any(|e| e.contains("value_count correlation condition requires 'field'")),
+        "{:?}",
+        collection.errors
+    );
+}
+
+#[test]
 fn test_parse_neq_modifier() {
     let yaml = r#"
 title: Neq Modifier

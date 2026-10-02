@@ -182,7 +182,8 @@ pub(crate) fn defaults_partial() -> RsigmaConfigPartial {
                 max_group_entries: None,
                 timestamp_fields: None,
                 timestamp_fallback: Some(TIMESTAMP_FALLBACK.to_string()),
-                no_detections: Some(false),
+                emit_detections: Some(false),
+                no_detections: None,
             }),
             state: Some(StatePartial {
                 db: None,

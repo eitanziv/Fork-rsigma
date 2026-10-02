@@ -11,29 +11,39 @@ use super::types::GroupByField;
 /// Composite key for group-by partitioning.
 ///
 /// Each element corresponds to a `GroupByField` value extracted from an event.
-/// `None` means the field was absent from the event.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, serde::Deserialize)]
 pub struct GroupKey(pub Vec<Option<String>>);
 
 impl GroupKey {
     /// Extract a group key from an event given the group-by fields and the
     /// rule reference identifiers (ID, name, etc.) that produced the detection match.
-    pub fn extract(event: &impl Event, group_by: &[GroupByField], rule_refs: &[&str]) -> Self {
-        let values = group_by
+    ///
+    /// Returns `None` when any group-by field is absent, null, or cannot be
+    /// represented as a scalar string.
+    pub fn extract(
+        event: &impl Event,
+        group_by: &[GroupByField],
+        rule_refs: &[&str],
+    ) -> Option<Self> {
+        let values: Option<Vec<_>> = group_by
             .iter()
             .map(|field| {
                 let field_name = field.resolve(rule_refs);
                 event
                     .get_field(field_name)
                     .and_then(|v| value_to_string(&v))
+                    .map(Some)
             })
             .collect();
-        GroupKey(values)
+        values.map(GroupKey)
     }
 
     /// Build a group key from explicit field-value pairs (for chaining).
-    pub fn from_pairs(pairs: &[(String, String)], group_by: &[GroupByField]) -> Self {
-        let values = group_by
+    ///
+    /// Returns `None` when the child correlation did not provide every field
+    /// required by the parent.
+    pub fn from_pairs(pairs: &[(String, String)], group_by: &[GroupByField]) -> Option<Self> {
+        let values: Option<Vec<_>> = group_by
             .iter()
             .map(|field| {
                 let name = field.name();
@@ -41,9 +51,10 @@ impl GroupKey {
                     .iter()
                     .find(|(k, _)| k == name)
                     .map(|(_, v)| v.clone())
+                    .map(Some)
             })
             .collect();
-        GroupKey(values)
+        values.map(GroupKey)
     }
 
     /// Convert to field-name/value pairs for output.

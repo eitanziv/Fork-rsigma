@@ -86,23 +86,20 @@ fn exact_window_boundary() {
 }
 
 #[test]
-fn missing_group_by_field_does_not_panic() {
+fn missing_group_by_field_skips_correlation() {
     let mut engine = corr_engine(EVENT_COUNT_YAML);
     let base = 1000;
 
-    // Events without the "User" field that group-by expects
+    // Events without the "User" field that group-by expects cannot be
+    // assigned to a group.
     for i in 0..5 {
         let r = process(&mut engine, json!({"EventType": "login"}), base + i);
-        // Should not panic; events land in a "null/empty" group
-        if i >= 2 {
-            // May or may not fire depending on whether null group keys accumulate
-            let _ = r;
-        }
+        assert_eq!(r.correlation_count(), 0);
     }
 }
 
 #[test]
-fn group_by_with_object_value() {
+fn group_by_with_object_value_skips_correlation() {
     let mut engine = corr_engine(EVENT_COUNT_YAML);
     let base = 1000;
 
@@ -113,9 +110,109 @@ fn group_by_with_object_value() {
             json!({"EventType": "login", "User": {"name": "admin"}}),
             base + i,
         );
-        let _ = r;
+        assert_eq!(r.correlation_count(), 0);
     }
-    // Should not panic; exercises GroupKey::extract with non-stringifiable values
+}
+
+#[test]
+fn detection_name_without_id_feeds_correlation() {
+    let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Count by Name
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 10s
+    condition:
+        gte: 2
+"#;
+    let mut engine = corr_engine(yaml);
+    let event = json!({"EventID": 1, "Host": "h1"});
+    assert_eq!(
+        process(&mut engine, event.clone(), 1000).correlation_count(),
+        0
+    );
+    assert_eq!(process(&mut engine, event, 1001).correlation_count(), 1);
+}
+
+#[test]
+fn precomputed_detection_retains_name_only_identity() {
+    let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Count by Name
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 10s
+    condition:
+        gte: 1
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    engine.add_collection(&collection).unwrap();
+    let value = json!({"EventID": 1, "Host": "h1"});
+    let event = JsonEvent::borrow(&value);
+    let detections = engine.evaluate(&event);
+    let result = engine.process_with_detections(&event, detections, 1000);
+    assert_eq!(result.correlation_count(), 1);
+}
+
+#[test]
+fn correlation_name_without_id_feeds_parent() {
+    let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Child
+name: child
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 10s
+    condition:
+        gte: 1
+---
+title: Parent
+correlation:
+    type: event_count
+    rules: [child]
+    group-by: [Host]
+    timespan: 10s
+    condition:
+        gte: 1
+"#;
+    let mut engine = corr_engine(yaml);
+    let result = process(&mut engine, json!({"EventID": 1, "Host": "h1"}), 1000);
+    let titles: Vec<_> = result
+        .correlations()
+        .map(|result| result.header.rule_title.as_str())
+        .collect();
+    assert_eq!(titles, ["Child", "Parent"]);
 }
 
 #[test]
@@ -285,6 +382,7 @@ fn reset_action_clears_window_after_firing() {
 fn timestamp_fallback_skip_runs_detection_but_skips_correlation() {
     let config = CorrelationConfig {
         timestamp_fallback: TimestampFallback::Skip,
+        emit_detections: true,
         ..Default::default()
     };
 

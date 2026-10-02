@@ -460,7 +460,10 @@ pub(crate) struct CorrelationPartial {
     /// Behavior when no timestamp is found: `wallclock` or `skip`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timestamp_fallback: Option<String>,
-    /// Suppress detection output for correlation-only rules.
+    /// Emit detection output for rules referenced by correlations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emit_detections: Option<bool>,
+    /// Deprecated inverse of `emit_detections`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub no_detections: Option<bool>,
 }
@@ -476,6 +479,7 @@ impl Merge for CorrelationPartial {
             max_group_entries: over.max_group_entries.or(self.max_group_entries),
             timestamp_fields: over.timestamp_fields.or(self.timestamp_fields),
             timestamp_fallback: over.timestamp_fallback.or(self.timestamp_fallback),
+            emit_detections: over.emit_detections.or(self.emit_detections),
             no_detections: over.no_detections.or(self.no_detections),
         }
     }
@@ -1192,6 +1196,21 @@ mod tests {
         assert_eq!(mcp.allow_sigma_cli, Some(true));
         assert_eq!(mcp.daemon_url.as_deref(), Some("http://127.0.0.1:9090"));
         assert_eq!(mcp.allow_operate_writes, Some(true));
+    }
+
+    #[test]
+    fn correlation_output_settings_parse() {
+        let current: RsigmaConfigPartial =
+            yaml_serde::from_str("daemon:\n  correlation:\n    emit_detections: true\n").unwrap();
+        let correlation = current.daemon.unwrap().correlation.unwrap();
+        assert_eq!(correlation.emit_detections, Some(true));
+        assert_eq!(correlation.no_detections, None);
+
+        let legacy: RsigmaConfigPartial =
+            yaml_serde::from_str("daemon:\n  correlation:\n    no_detections: true\n").unwrap();
+        let correlation = legacy.daemon.unwrap().correlation.unwrap();
+        assert_eq!(correlation.emit_detections, None);
+        assert_eq!(correlation.no_detections, Some(true));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use super::super::{LintRule, LintWarning, err, get_str, key};
+use super::super::{LintRule, LintWarning, err, get_str, info, key};
 
 /// Valid correlation types.
 const VALID_CORRELATION_TYPES: &[&str] = &[
@@ -28,8 +28,13 @@ const TYPES_REQUIRING_CONDITION: &[&str] = &[
 ];
 
 /// Correlation types that require condition.field.
-const TYPES_REQUIRING_FIELD: &[&str] =
-    &["value_count", "value_sum", "value_avg", "value_percentile"];
+const TYPES_REQUIRING_FIELD: &[&str] = &[
+    "value_count",
+    "value_sum",
+    "value_avg",
+    "value_percentile",
+    "value_median",
+];
 
 fn is_valid_timespan(s: &str) -> bool {
     if s.is_empty() {
@@ -40,7 +45,9 @@ fn is_valid_timespan(s: &str) -> bool {
         return false;
     }
     let num_part = &s[..s.len() - 1];
-    !num_part.is_empty() && num_part.chars().all(|c| c.is_ascii_digit())
+    !num_part.is_empty()
+        && num_part.chars().all(|c| c.is_ascii_digit())
+        && num_part.parse::<u64>().is_ok_and(|n| n > 0)
 }
 
 pub(crate) fn lint_correlation_rule(m: &yaml_serde::Mapping, warnings: &mut Vec<LintWarning>) {
@@ -253,6 +260,15 @@ pub(crate) fn lint_correlation_rule(m: &yaml_serde::Mapping, warnings: &mut Vec<
             ));
         }
     }
+
+    let generate = m.get(key("generate")).or_else(|| corr.get(key("generate")));
+    if generate.is_none_or(|value| value.as_bool() == Some(false)) {
+        warnings.push(info(
+            LintRule::CorrelationOnlyReferences,
+            "referenced rules produce no standalone output; set 'generate: true' to emit them",
+            "/generate",
+        ));
+    }
 }
 
 fn lint_correlation_condition(
@@ -270,7 +286,7 @@ fn lint_correlation_condition(
 
     for (k, v) in cond {
         let ks = k.as_str().unwrap_or("");
-        if ks == "field" {
+        if ks == "field" || ks == "percentile" {
             continue;
         }
         if !VALID_CONDITION_OPERATORS.contains(&ks) {
@@ -460,8 +476,43 @@ correlation:
     }
 
     #[test]
+    fn absent_generate_reports_correlation_only_output() {
+        let w = lint(
+            r#"
+title: Test
+correlation:
+    type: event_count
+    rules: [some-rule]
+    group-by: [User]
+    timespan: 1h
+    condition:
+        gte: 10
+"#,
+        );
+        assert!(has_rule(&w, LintRule::CorrelationOnlyReferences));
+    }
+
+    #[test]
+    fn generate_true_has_no_correlation_only_hint() {
+        let w = lint(
+            r#"
+title: Test
+generate: true
+correlation:
+    type: event_count
+    rules: [some-rule]
+    group-by: [User]
+    timespan: 1h
+    condition:
+        gte: 10
+"#,
+        );
+        assert!(!has_rule(&w, LintRule::CorrelationOnlyReferences));
+    }
+
+    #[test]
     fn timespan_zero_seconds() {
-        assert!(is_valid_timespan("0s"));
+        assert!(!is_valid_timespan("0s"));
     }
 
     #[test]

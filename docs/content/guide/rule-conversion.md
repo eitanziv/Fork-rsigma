@@ -193,6 +193,8 @@ This is the right format when you want per-event explanations of why a brute-for
 
 ### Correlation window modes
 
+A collection conversion emits the correlation query but omits detection rules referenced by that correlation unless the correlation has top-level `generate: true`. If several correlations reference one detection, any `generate: true` reference keeps the standalone detection query. The referenced detection logic is still embedded in the correlation query. {{ added "unreleased" }}
+
 A correlation rule can declare how its `timespan` is anchored to the event stream with the optional `window` attribute (`sliding`, `tumbling`, or `session`). The PostgreSQL backend renders the windowing strategy from this attribute, independent of the output format:
 
 - `window` absent or `sliding`: the SQL is unchanged from before this attribute existed (the per-format aggregate, or the window-function form under `sliding_window`), so existing rules and queries are unaffected.

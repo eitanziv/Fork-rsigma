@@ -41,6 +41,9 @@ pub struct EvaluateInput {
     /// Extra event field names to try for correlation timestamp extraction.
     #[serde(default)]
     pub timestamp_fields: Vec<String>,
+    /// Emit detection matches for rules referenced by correlations.
+    #[serde(default)]
+    pub emit_detections: bool,
     /// Inline enrichers config (YAML/JSON) applied to results before returning.
     /// Mutually exclusive with `enrichers_path`. Only `template` enrichers are
     /// supported here; use the daemon for `lookup`, `http`, `command`, and `stix`.
@@ -96,7 +99,10 @@ impl RsigmaMcp {
                 .map_err(|e| invalid(format!("rule compile error: {e}")))?;
             engine.evaluate_batch(&refs)
         } else {
-            let mut config = CorrelationConfig::default();
+            let mut config = CorrelationConfig {
+                emit_detections: input.emit_detections,
+                ..Default::default()
+            };
             if !input.timestamp_fields.is_empty() {
                 let mut fields = input.timestamp_fields.clone();
                 fields.extend(config.timestamp_fields);
@@ -207,6 +213,7 @@ mod tests {
                 pipelines: vec![],
                 match_detail: Some("summary".to_string()),
                 timestamp_fields: vec![],
+                emit_detections: false,
                 enrichers: None,
                 enrichers_path: None,
             })
@@ -228,12 +235,59 @@ mod tests {
                 pipelines: vec![],
                 match_detail: None,
                 timestamp_fields: vec![],
+                emit_detections: false,
                 enrichers: None,
                 enrichers_path: None,
             })
             .await
             .unwrap_err();
         assert!(format!("{err:?}").contains("events"));
+    }
+
+    #[tokio::test]
+    async fn evaluate_events_suppresses_correlation_inputs_unless_requested() {
+        let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Count
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 1m
+    condition:
+        gte: 2
+"#;
+        let input = |emit_detections| EvaluateInput {
+            yaml: Some(yaml.to_string()),
+            path: None,
+            events: Some(vec![
+                json!({"EventID": 1, "Host": "h1", "timestamp": "2025-01-01T00:00:00Z"}),
+                json!({"EventID": 1, "Host": "h1", "timestamp": "2025-01-01T00:00:01Z"}),
+            ]),
+            events_path: None,
+            pipelines: vec![],
+            match_detail: None,
+            timestamp_fields: vec![],
+            emit_detections,
+            enrichers: None,
+            enrichers_path: None,
+        };
+
+        let default = handler().run_evaluate_events(input(false)).await.unwrap();
+        assert_eq!(default["summary"]["detection_matches"], 0);
+        assert_eq!(default["summary"]["correlation_matches"], 1);
+
+        let emitted = handler().run_evaluate_events(input(true)).await.unwrap();
+        assert_eq!(emitted["summary"]["detection_matches"], 2);
+        assert_eq!(emitted["summary"]["correlation_matches"], 1);
     }
 
     #[tokio::test]
@@ -255,6 +309,7 @@ enrichers:
                 pipelines: vec![],
                 match_detail: None,
                 timestamp_fields: vec![],
+                emit_detections: false,
                 enrichers: Some(enrichers.to_string()),
                 enrichers_path: None,
             })
@@ -287,6 +342,7 @@ enrichers:
                 pipelines: vec![],
                 match_detail: None,
                 timestamp_fields: vec![],
+                emit_detections: false,
                 enrichers: Some(enrichers.to_string()),
                 enrichers_path: None,
             })
@@ -304,6 +360,7 @@ enrichers:
             pipelines: vec![],
             match_detail: None,
             timestamp_fields: vec![],
+            emit_detections: false,
             enrichers: Some(enrichers.to_string()),
             enrichers_path: None,
         }
@@ -358,6 +415,7 @@ enrichers:
                 pipelines: vec![],
                 match_detail: Some("summary".to_string()),
                 timestamp_fields: vec![],
+                emit_detections: false,
                 enrichers: None,
                 enrichers_path: None,
             })

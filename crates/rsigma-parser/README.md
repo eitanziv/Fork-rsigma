@@ -365,6 +365,7 @@ The linter operates on raw YAML values to catch issues the parser silently ignor
 | `invalid_condition_operator` | Error | | Operator not in `gt`/`gte`/`lt`/`lte`/`eq`/`neq` |
 | `condition_value_not_numeric` | Error | | Condition value not numeric |
 | `generate_not_boolean` | Error | | `generate` is not a boolean |
+| `correlation_only_references` | Info | | Referenced rules produce no standalone output unless `generate` is true |
 
 ### Filter Rules (8 IDs, 7 emitted)
 

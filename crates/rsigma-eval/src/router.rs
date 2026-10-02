@@ -29,13 +29,12 @@ use crate::correlation_engine::{
     CorrelationConfig, CorrelationEngine, CorrelationSnapshot, CorrelationStateSnapshot,
     ProcessResult,
 };
-use crate::engine::Engine;
+use crate::engine::{Engine, IdentifiedEvaluation};
 use crate::error::Result;
 use crate::event::{Event, MappedEvent};
 use crate::logsource::LogSourceExtractor;
 use crate::pipeline::Pipeline;
 use crate::pipeline::transformations::Transformation;
-use crate::result::EvaluationResult;
 use crate::result::MatchDetailLevel;
 use crate::rule_metadata::RuleMetadataLookup;
 use crate::schema::{OnUnknown, RouteDecision, RoutingPlan, SchemaClassifier};
@@ -102,7 +101,7 @@ enum Routed1 {
     /// Evaluate detections against the shared correlation store under set `set`.
     Eval {
         set: usize,
-        detections: Vec<EvaluationResult>,
+        detections: Vec<IdentifiedEvaluation>,
     },
 }
 
@@ -181,9 +180,9 @@ fn detect_one<E: Event>(
                 Some(ex) => {
                     let implied = schema.as_deref().and_then(|s| plan.schema_logsource(s));
                     let ls = resolve_event_logsource(ex, implied, event);
-                    engines[set].evaluate_pruned(event, &ls)
+                    engines[set].evaluate_pruned_identified(event, &ls)
                 }
-                None => engines[set].evaluate(event),
+                None => engines[set].evaluate_identified(event),
             };
             Routed1::Eval { set, detections }
         }
@@ -445,7 +444,10 @@ impl SchemaRouter {
             .into_iter()
             .map(|routed| match routed {
                 Routed1::Skip => Vec::new(),
-                Routed1::Eval { detections, .. } => detections,
+                Routed1::Eval { detections, .. } => detections
+                    .into_iter()
+                    .map(|identified| identified.result)
+                    .collect(),
             })
             .collect()
     }
@@ -499,7 +501,7 @@ impl SchemaRouter {
                 Routed1::Skip => Vec::new(),
                 Routed1::Eval { set, detections } => {
                     let mapped = MappedEvent::new(*event, &field_maps[set]);
-                    correlation.correlate_detections(&mapped, detections)
+                    correlation.correlate_identified_detections(&mapped, detections)
                 }
             })
             .collect()
@@ -526,16 +528,19 @@ impl SchemaRouter {
                             .as_deref()
                             .and_then(|s| self.plan.schema_logsource(s));
                         let ls = resolve_event_logsource(ex, implied, event);
-                        self.engines[set].evaluate_pruned(event, &ls)
+                        self.engines[set].evaluate_pruned_identified(event, &ls)
                     }
-                    None => self.engines[set].evaluate(event),
+                    None => self.engines[set].evaluate_identified(event),
                 };
                 let results = match &mut self.correlation {
                     Some(ce) => {
                         let mapped = MappedEvent::new(event, &self.field_maps[set]);
-                        ce.correlate_detections(&mapped, detections)
+                        ce.correlate_identified_detections(&mapped, detections)
                     }
-                    None => detections,
+                    None => detections
+                        .into_iter()
+                        .map(|identified| identified.result)
+                        .collect(),
                 };
                 RouteResult {
                     results,

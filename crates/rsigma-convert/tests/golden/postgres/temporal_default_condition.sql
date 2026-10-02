@@ -1,3 +1,1 @@
-SELECT * FROM security_events WHERE "CommandLine" ILIKE '%whoami%'
-SELECT * FROM security_events WHERE "CommandLine" ILIKE '%ipconfig%'
 WITH matched AS (SELECT *, rule_name FROM security_events WHERE rule_name IN ('recon-whoami', 'recon-ipconfig') AND time >= NOW() - INTERVAL '300 seconds') SELECT "User", COUNT(DISTINCT rule_name) AS distinct_rules, MIN(time) AS first_seen, MAX(time) AS last_seen FROM matched GROUP BY "User" HAVING COUNT(DISTINCT rule_name) >= 2

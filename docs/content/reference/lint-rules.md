@@ -107,7 +107,7 @@ Apply to detection rules (`detection:` block + `condition:`).
 | `deprecated_aggregation_syntax` | `warning` | none | The condition uses the deprecated aggregation pipe syntax (`condition: selection \| count() > 5`). Use the modern `correlation:` block instead. |
 | `flattened_array_correlation` | `warning` | none | Two or more sibling keys share a quantified array prefix (e.g. `connections[any].protocol` and `connections[any].ip`). Each opens an independent scope, so they do **not** correlate on the same array element. Use an object-scope block (`connections[any]:` with the fields nested) to require one element to satisfy all of them. See [Array Matching](../guide/array-matching.md). |
 
-## Correlation rules (17)
+## Correlation rules (18)
 
 Apply to correlation rules (`correlation:` block).
 
@@ -129,6 +129,7 @@ Apply to correlation rules (`correlation:` block).
 | `condition_value_not_numeric` | `error` | none | The numeric threshold in `correlation.condition` is not a number. |
 | `missing_group_by` | `error` | none | `correlation:` has no `group-by:` (required once `type:` is set). |
 | `generate_not_boolean` | `error` | none | The `generate:` field is not a boolean. |
+| `correlation_only_references` | `info` | none | The correlation omits `generate: true`, so referenced detections produce no standalone output. {{ added "unreleased" }} |
 | `invalid_condition_operator` | `error` | none | A key in `correlation.condition` is not one of `gt`, `gte`, `lt`, `lte`, `eq`, `neq` (the `field` key is exempt). |
 
 ## Filter rules (8 IDs, 7 emitted)

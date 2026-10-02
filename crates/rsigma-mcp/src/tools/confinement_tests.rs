@@ -81,6 +81,7 @@ fn evaluate() -> EvaluateInput {
         pipelines: vec![],
         match_detail: None,
         timestamp_fields: vec![],
+        emit_detections: false,
         enrichers: None,
         enrichers_path: None,
     }

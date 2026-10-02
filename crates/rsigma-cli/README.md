@@ -269,7 +269,8 @@ Unlike `engine eval`, the daemon stays alive after stdin reaches EOF and support
 | `--api-token-env` | string | none | Require bearer-token auth on the API; the named environment variable holds the single accepted token (full admin permissions). For per-token roles and granular `resource:action` permissions use the `daemon.api.auth` config block instead (mutually exclusive). `GET /healthz` and `GET /readyz` stay open. |
 | `--suppress` | string | none | Suppression window for correlation alerts (e.g. `5m`, `1h`) |
 | `--action` | string | none | `alert` or `reset`, the action taken after correlation fires |
-| `--no-detections` | flag | `false` | Suppress detection-level output (only show correlation alerts) |
+| `--emit-detections` | flag | `false` | Emit detection matches that only feed correlations |
+| `--no-detections` | flag | `false` | Deprecated compatibility flag; correlation-only detections are suppressed by default |
 | `--correlation-event-mode` | string | `"none"` | `none`, `full`, or `refs` |
 | `--max-correlation-events` | integer | **10** | Max events stored per correlation window |
 | `--timestamp-field` | repeatable | `[]` | Event field(s) for timestamp extraction |
@@ -606,7 +607,8 @@ Evaluate JSON events against Sigma detection and correlation rules.
 | `--jsonpath` | string | none | JSONPath (RFC 9535) query (conflicts with `--jq`) |
 | `--suppress` | string | none | Suppression window for correlation alerts (e.g. `5m`, `1h`, `30s`) |
 | `--action` | string | none | `alert` or `reset`, the action taken after correlation fires |
-| `--no-detections` | flag | `false` | Suppress detection-level output (only show correlation alerts) |
+| `--emit-detections` | flag | `false` | Emit detection matches that only feed correlations |
+| `--no-detections` | flag | `false` | Deprecated compatibility flag; correlation-only detections are suppressed by default |
 | `--include-event` | flag | `false` | Include full event JSON in each detection match |
 | `--correlation-event-mode` | string | `"none"` | `none`, `full`, or `refs` |
 | `--max-correlation-events` | integer | **10** | Max events stored per correlation window |
@@ -706,8 +708,8 @@ rsigma engine eval -r rules/ --correlation-event-mode refs < events.ndjson
 # Cap stored events per correlation window (default: 10)
 rsigma engine eval -r rules/ --correlation-event-mode full --max-correlation-events 20 < events.ndjson
 
-# Suppress detection output (only show correlation alerts)
-rsigma engine eval -r rules/ --no-detections < events.ndjson
+# Emit every detection match, including rules that only feed correlations
+rsigma engine eval -r rules/ --emit-detections < events.ndjson
 
 # Custom timestamp field for correlation windowing
 rsigma engine eval -r rules/ --timestamp-field time < events.ndjson

@@ -16,7 +16,7 @@
 //! use rsigma_parser::lint::catalogue::catalogue;
 //!
 //! let entries = catalogue();
-//! assert_eq!(entries.len(), 88);
+//! assert_eq!(entries.len(), 89);
 //! let invalid_status = entries.iter().find(|e| e.name == "invalid_status").unwrap();
 //! assert!(invalid_status.fix.is_some()); // has a safe auto-fix
 //! ```
@@ -124,6 +124,7 @@ lint_catalogue! {
     InvalidConditionOperator => (Severity::Error, NONE, "The correlation condition uses an invalid operator."),
     ConditionValueNotNumeric => (Severity::Error, NONE, "The correlation condition value must be numeric."),
     GenerateNotBoolean => (Severity::Error, NONE, "'generate' must be a boolean."),
+    CorrelationOnlyReferences => (Severity::Info, NONE, "Referenced rules produce no standalone output unless 'generate' is true."),
 
     // ── Filter rules ─────────────────────────────────────────────────────
     MissingFilter => (Severity::Error, NONE, "Filter rule is missing 'filter'."),
@@ -281,6 +282,10 @@ const LINT_RULE_NAMES: &[(LintRule, &str)] = &[
         "condition_value_not_numeric",
     ),
     (LintRule::GenerateNotBoolean, "generate_not_boolean"),
+    (
+        LintRule::CorrelationOnlyReferences,
+        "correlation_only_references",
+    ),
     (LintRule::MissingFilter, "missing_filter"),
     (LintRule::MissingFilterRules, "missing_filter_rules"),
     (LintRule::EmptyFilterRules, "empty_filter_rules"),
@@ -344,13 +349,13 @@ mod tests {
 
     #[test]
     fn catalogue_covers_every_rule() {
-        // 88 LintRule variants. The exhaustive `describe` match guarantees a
+        // 89 LintRule variants. The exhaustive `describe` match guarantees a
         // metadata entry per variant at compile time; this asserts the count
         // and the `ALL_LINT_RULES`/`LINT_RULE_NAMES` lists stay in sync.
         let entries = catalogue();
-        assert_eq!(entries.len(), 88, "expected 88 catalogue entries");
-        assert_eq!(ALL_LINT_RULES.len(), 88);
-        assert_eq!(LINT_RULE_NAMES.len(), 88);
+        assert_eq!(entries.len(), 89, "expected 89 catalogue entries");
+        assert_eq!(ALL_LINT_RULES.len(), 89);
+        assert_eq!(LINT_RULE_NAMES.len(), 89);
     }
 
     #[test]

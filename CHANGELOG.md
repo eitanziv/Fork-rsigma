@@ -4,6 +4,18 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Correlation rules follow Sigma identity, validation, grouping, and output semantics (#534)
+
+Correlation evaluation, conversion, validation, and linting now agree on Sigma correlation semantics:
+
+- Correlations can reference detection rules and earlier correlations by `name` even when they have no `id`, including through schema routing and chained correlations.
+- Events missing any `group-by` field, or carrying a non-scalar group value, do not enter correlation state.
+- Zero-length timeframes, unknown condition keys, and value aggregations without a condition field are rejected during parsing.
+- `rule validate` reports correlation references that resolve to no rule `id` or `name`.
+- Referenced detection matches are no longer standalone output by default. Top-level `generate: true` on a correlation emits its referenced detections, while `engine eval` and `engine daemon` accept `--emit-detections` to emit every detection match. The deprecated `--no-detections` flag remains accepted. Daemon configuration uses `correlation.emit_detections`, with the inverse `no_detections` key retained for compatibility. The MCP `evaluate_events` tool exposes the same opt-in behavior.
+- Correlation-capable conversion omits referenced standalone rules unless at least one referencing correlation has `generate: true`.
+- `rule lint` emits the informational `correlation_only_references` hint when a correlation omits `generate: true`.
+
 ### Performance regression checks run only for relevant changes (#533)
 
 The 20-minute coarse performance regression gate no longer runs for every change under `crates/`. Pull requests trigger it only when they change the evaluator hot path, dependencies, the Rust toolchain, or the performance harness. Changes limited to conversion backends, MCP, LSP, STIX, docs, integration tests, benchmarks, or unrelated CLI/daemon code no longer wait for the gate. Weekly and manually dispatched measurements still run the full performance matrix.

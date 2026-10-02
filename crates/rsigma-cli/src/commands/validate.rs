@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process;
 
@@ -110,7 +111,7 @@ pub(crate) fn cmd_validate(args: ValidateArgs, ctx: OutputCtx) {
             // into a multi-minute stall).
             let batch_errors = engine.add_rules(&collection.rules);
             let compile_ok = collection.rules.len() - batch_errors.len();
-            let compile_errors: Vec<String> = batch_errors
+            let mut compile_errors: Vec<String> = batch_errors
                 .into_iter()
                 .map(|(idx, e)| {
                     let rule = &collection.rules[idx];
@@ -118,6 +119,7 @@ pub(crate) fn cmd_validate(args: ValidateArgs, ctx: OutputCtx) {
                     format!("{id}: {e}")
                 })
                 .collect();
+            compile_errors.extend(validate_correlation_references(&collection));
 
             let parse_error_msgs: Vec<String> =
                 collection.errors.iter().map(|e| e.to_string()).collect();
@@ -219,6 +221,37 @@ pub(crate) fn cmd_validate(args: ValidateArgs, ctx: OutputCtx) {
             process::exit(crate::exit_code::RULE_ERROR);
         }
     }
+}
+
+fn validate_correlation_references(collection: &rsigma_parser::SigmaCollection) -> Vec<String> {
+    let mut known = HashSet::new();
+    for rule in &collection.rules {
+        known.extend(rule.id.iter().map(String::as_str));
+        known.extend(rule.name.iter().map(String::as_str));
+    }
+    for correlation in &collection.correlations {
+        known.extend(correlation.id.iter().map(String::as_str));
+        known.extend(correlation.name.iter().map(String::as_str));
+    }
+
+    collection
+        .correlations
+        .iter()
+        .flat_map(|correlation| {
+            correlation
+                .rules
+                .iter()
+                .filter(|rule_ref| !known.contains(rule_ref.as_str()))
+                .map(|rule_ref| {
+                    let identity = correlation
+                        .id
+                        .as_deref()
+                        .or(correlation.name.as_deref())
+                        .unwrap_or(&correlation.title);
+                    format!("{identity}: unknown rule reference: {rule_ref}")
+                })
+        })
+        .collect()
 }
 
 /// Load external sources and, when `--resolve-sources` is set, resolve every
