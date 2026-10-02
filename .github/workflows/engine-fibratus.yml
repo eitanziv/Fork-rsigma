@@ -1,0 +1,62 @@
+name: Engine (Fibratus)
+
+# Evaluates the Fibratus backend's filters with Fibratus's own filter parser
+# and evaluator, which only build for Windows. Triggered only by changes to
+# that backend, the fibratus_windows pipeline, its engine tests and harness,
+# the shared engine cases, or the shared conversion core.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - "crates/rsigma-convert/src/*.rs"
+      - "crates/rsigma-convert/src/backends/fibratus/**"
+      - "crates/rsigma-eval/pipelines/fibratus_windows.yml"
+      - "crates/rsigma-convert/tests/engines/mod.rs"
+      - "crates/rsigma-convert/tests/engines/cases/**"
+      - "crates/rsigma-convert/tests/engines/fibratus/**"
+      - "crates/rsigma-convert/tests/engine_fibratus.rs"
+      - ".github/workflows/engine-fibratus.yml"
+  pull_request:
+    branches: [main]
+    paths: *paths
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: engine-fibratus-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  fibratus:
+    name: Fibratus engine tests
+    runs-on: windows-latest
+    permissions:
+      contents: read # read repo for checkout
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      CARGO_INCREMENTAL: "0"
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: lld-link.exe
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust stable
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup override set stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: crates/rsigma-convert/tests/engines/fibratus/go.mod
+          cache-dependency-path: crates/rsigma-convert/tests/engines/fibratus/go.sum
+      - name: Evaluate the cases with Fibratus
+        run: cargo test -p rsigma-convert --locked --test engine_fibratus -- --ignored

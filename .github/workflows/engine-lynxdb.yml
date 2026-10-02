@@ -1,0 +1,50 @@
+name: Engine (LynxDB)
+
+# Runs the LynxDB backend's queries in a real LynxDB server. Triggered only by
+# changes to that backend, its engine tests and image, the shared engine
+# cases, or the shared conversion core.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - "crates/rsigma-convert/src/*.rs"
+      - "crates/rsigma-convert/src/backends/lynxdb/**"
+      - "crates/rsigma-convert/tests/engines/mod.rs"
+      - "crates/rsigma-convert/tests/engines/cases/**"
+      - "crates/rsigma-convert/tests/engines/lynxdb/**"
+      - "crates/rsigma-convert/tests/engine_lynxdb.rs"
+      - ".github/workflows/engine-lynxdb.yml"
+  pull_request:
+    branches: [main]
+    paths: *paths
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: engine-lynxdb-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  lynxdb:
+    name: LynxDB engine tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # read repo for checkout
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup override set stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Run the cases in LynxDB
+        run: cargo test -p rsigma-convert --locked --test engine_lynxdb -- --ignored
