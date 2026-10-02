@@ -63,9 +63,9 @@ pub struct CorrelationEngine {
     /// Maps rule ID/name -> indices into `correlations` that reference it.
     /// This allows quick lookup: "which correlations care about rule X?"
     rule_index: HashMap<String, Vec<usize>>,
-    /// Maps detection rule index -> (rule_id, rule_name) for reverse lookup.
+    /// Maps detection rule index -> (rule_id, rule_name, rule_title) for reverse lookup.
     /// Used to find which correlations a detection match triggers.
-    rule_ids: Vec<(Option<String>, Option<String>)>,
+    rule_ids: Vec<(Option<String>, Option<String>, String)>,
     /// Per-(correlation_index, group_key) window state.
     state: HashMap<(usize, GroupKey), WindowState>,
     /// Last alert timestamp per (correlation_index, group_key) for suppression.
@@ -189,14 +189,18 @@ impl CorrelationEngine {
     pub fn add_rule(&mut self, rule: &SigmaRule) -> Result<()> {
         if self.pipelines.is_empty() {
             self.apply_custom_attributes(&rule.custom_attributes);
-            self.rule_ids.push((rule.id.clone(), rule.name.clone()));
+            self.rule_ids
+                .push((rule.id.clone(), rule.name.clone(), rule.title.clone()));
             self.engine.add_rule(rule)?;
         } else {
             let mut transformed = rule.clone();
             apply_pipelines(&self.pipelines, &mut transformed)?;
             self.apply_custom_attributes(&transformed.custom_attributes);
-            self.rule_ids
-                .push((transformed.id.clone(), transformed.name.clone()));
+            self.rule_ids.push((
+                transformed.id.clone(),
+                transformed.name.clone(),
+                transformed.title.clone(),
+            ));
             // Use compile_rule + add_compiled_rule to bypass inner engine's pipelines
             let compiled = crate::compiler::compile_rule(&transformed)?;
             self.engine.add_compiled_rule(compiled);
@@ -302,7 +306,8 @@ impl CorrelationEngine {
         if self.pipelines.is_empty() {
             for rule in &collection.rules {
                 self.apply_custom_attributes(&rule.custom_attributes);
-                self.rule_ids.push((rule.id.clone(), rule.name.clone()));
+                self.rule_ids
+                    .push((rule.id.clone(), rule.name.clone(), rule.title.clone()));
                 compiled_batch.push(crate::compiler::compile_rule(rule)?);
             }
         } else {
@@ -310,8 +315,11 @@ impl CorrelationEngine {
                 let mut transformed = rule.clone();
                 apply_pipelines(&self.pipelines, &mut transformed)?;
                 self.apply_custom_attributes(&transformed.custom_attributes);
-                self.rule_ids
-                    .push((transformed.id.clone(), transformed.name.clone()));
+                self.rule_ids.push((
+                    transformed.id.clone(),
+                    transformed.name.clone(),
+                    transformed.title.clone(),
+                ));
                 // Bypass the inner engine's pipelines (would double-transform)
                 compiled_batch.push(crate::compiler::compile_rule(&transformed)?);
             }
@@ -334,7 +342,7 @@ impl CorrelationEngine {
     fn validate_rule_refs(&self) -> Result<()> {
         let mut known: std::collections::HashSet<&str> = std::collections::HashSet::new();
 
-        for (id, name) in &self.rule_ids {
+        for (id, name, _) in &self.rule_ids {
             if let Some(id) = id {
                 known.insert(id.as_str());
             }
@@ -718,15 +726,28 @@ impl CorrelationEngine {
 
     /// Find the (id, name) for a detection match by searching our rule_ids table.
     fn find_rule_identity(&self, det: &EvaluationResult) -> (Option<String>, Option<String>) {
-        // First, try to find by matching rule_id in our table
+        // Prefer the stable ID carried by the result.
         if let Some(ref match_id) = det.header.rule_id {
-            for (id, name) in &self.rule_ids {
+            for (id, name, _) in &self.rule_ids {
                 if id.as_deref() == Some(match_id.as_str()) {
                     return (id.clone(), name.clone());
                 }
             }
         }
-        // Fall back to using just the EvaluationResult's rule_id
+
+        // `process_with_detections` accepts the public EvaluationResult shape,
+        // which does not carry a rule name. Recover name-only rule identity
+        // from the title retained alongside the compiled rule.
+        let mut title_matches = self
+            .rule_ids
+            .iter()
+            .filter(|(_, _, title)| title == &det.header.rule_title);
+        if let Some((id, name, _)) = title_matches.next()
+            && title_matches.next().is_none()
+        {
+            return (id.clone(), name.clone());
+        }
+
         (det.header.rule_id.clone(), None)
     }
 

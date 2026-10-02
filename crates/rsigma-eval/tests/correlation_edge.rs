@@ -145,6 +145,37 @@ correlation:
 }
 
 #[test]
+fn precomputed_detection_retains_name_only_identity() {
+    let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Count by Name
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 10s
+    condition:
+        gte: 1
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    engine.add_collection(&collection).unwrap();
+    let value = json!({"EventID": 1, "Host": "h1"});
+    let event = JsonEvent::borrow(&value);
+    let detections = engine.evaluate(&event);
+    let result = engine.process_with_detections(&event, detections, 1000);
+    assert_eq!(result.correlation_count(), 1);
+}
+
+#[test]
 fn correlation_name_without_id_feeds_parent() {
     let yaml = r#"
 title: Base
