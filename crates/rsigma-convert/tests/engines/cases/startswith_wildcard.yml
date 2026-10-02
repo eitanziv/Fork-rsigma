@@ -15,6 +15,14 @@ events:
   - {Image: 'x'}
 matches: [0, 1, 2]
 known_failures:
+  fibratus:
+    type: match-mismatch
+    reason: "istartswith treats an inner * as a literal character"
+    actual: []
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "istartswith treats an inner * as a literal character"
+    actual: []
   lynxdb:
     type: match-mismatch
     reason: "a wildcard between literals does not match values that contain a slash"

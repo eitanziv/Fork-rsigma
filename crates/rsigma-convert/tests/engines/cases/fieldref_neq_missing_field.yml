@@ -14,3 +14,12 @@ events:
   - {ParentImage: 'a.exe'}
   - {CommandLine: 'x'}
 matches: [1, 2, 3, 4]
+known_failures:
+  fibratus:
+    type: engine-error
+    reason: "the pipeline maps the compared field name but leaves the fieldref value unmapped"
+    contains: "ps.exe ~= ParentImage"
+  fibratus-nomacros:
+    type: engine-error
+    reason: "the pipeline maps the compared field name but leaves the fieldref value unmapped"
+    contains: "ps.exe ~= ParentImage"

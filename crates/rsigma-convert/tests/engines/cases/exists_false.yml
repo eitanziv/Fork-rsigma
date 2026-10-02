@@ -20,3 +20,11 @@ known_failures:
     type: match-mismatch
     reason: "a typed column stores an absent field and a null value as the same SQL NULL"
     actual: [1, 2]
+  fibratus:
+    type: match-mismatch
+    reason: "the comparison with false treats a null value as absent"
+    actual: [1, 2]
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "the comparison with false treats a null value as absent"
+    actual: [1, 2]
