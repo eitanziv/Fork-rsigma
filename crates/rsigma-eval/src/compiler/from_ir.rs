@@ -39,6 +39,7 @@ pub fn compile_to_compiled(ir: &IrRule) -> Result<CompiledRule> {
     Ok(CompiledRule {
         title: ir.metadata.title.clone(),
         id: ir.metadata.id.clone(),
+        name: ir.metadata.name.clone(),
         level: ir.metadata.level,
         tags: ir.metadata.tags.clone(),
         description: ir.metadata.description.clone(),

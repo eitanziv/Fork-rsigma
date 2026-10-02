@@ -74,6 +74,13 @@ use filters::{
 /// assert_eq!(matches.len(), 1);
 /// assert_eq!(matches[0].header.rule_title, "Detect Whoami");
 /// ```
+#[derive(Debug)]
+pub(crate) struct IdentifiedEvaluation {
+    pub result: EvaluationResult,
+    pub rule_id: Option<String>,
+    pub rule_name: Option<String>,
+}
+
 pub struct Engine {
     rules: Vec<CompiledRule>,
     /// Post-pipeline, pre-filter HIR for rules added via the parsed-rule paths,
@@ -707,11 +714,18 @@ impl Engine {
     /// [`Engine::set_logsource_extractor`]) the event's logsource is derived
     /// from it and used for conflict-based pruning.
     pub fn evaluate<E: Event>(&self, event: &E) -> Vec<EvaluationResult> {
+        self.evaluate_identified(event)
+            .into_iter()
+            .map(|identified| identified.result)
+            .collect()
+    }
+
+    pub(crate) fn evaluate_identified<E: Event>(&self, event: &E) -> Vec<IdentifiedEvaluation> {
         let event_logsource = self
             .logsource_extractor
             .as_ref()
             .map(|ex| ex.extract(event));
-        self.evaluate_inner(event, event_logsource.as_ref())
+        self.evaluate_identified_inner(event, event_logsource.as_ref())
     }
 
     /// Evaluate an event with a caller-resolved event logsource for
@@ -728,14 +742,25 @@ impl Engine {
         event: &E,
         event_logsource: &LogSource,
     ) -> Vec<EvaluationResult> {
-        self.evaluate_inner(event, Some(event_logsource))
+        self.evaluate_pruned_identified(event, event_logsource)
+            .into_iter()
+            .map(|identified| identified.result)
+            .collect()
     }
 
-    fn evaluate_inner<E: Event>(
+    pub(crate) fn evaluate_pruned_identified<E: Event>(
+        &self,
+        event: &E,
+        event_logsource: &LogSource,
+    ) -> Vec<IdentifiedEvaluation> {
+        self.evaluate_identified_inner(event, Some(event_logsource))
+    }
+
+    fn evaluate_identified_inner<E: Event>(
         &self,
         event: &E,
         event_logsource: Option<&LogSource>,
-    ) -> Vec<EvaluationResult> {
+    ) -> Vec<IdentifiedEvaluation> {
         if self.bloom_prefilter {
             self.evaluate_with_bloom_path(event, event_logsource)
         } else {
@@ -811,7 +836,7 @@ impl Engine {
         &self,
         event: &E,
         event_logsource: Option<&LogSource>,
-    ) -> Vec<EvaluationResult> {
+    ) -> Vec<IdentifiedEvaluation> {
         // Pass the zero-sized `NoBloom` lookup so this monomorphizes to the
         // same straight-line code as the pre-bloom engine while still
         // threading the configured match-detail level.
@@ -843,7 +868,11 @@ impl Engine {
                 {
                     d.event = Some(event.to_json());
                 }
-                results.push(m);
+                results.push(IdentifiedEvaluation {
+                    result: m,
+                    rule_id: rule.id.clone(),
+                    rule_name: rule.name.clone(),
+                });
             }
         }
         self.record_logsource_pruned(pruned);
@@ -854,7 +883,7 @@ impl Engine {
         &self,
         event: &E,
         event_logsource: Option<&LogSource>,
-    ) -> Vec<EvaluationResult> {
+    ) -> Vec<IdentifiedEvaluation> {
         let bloom = BloomCache::new(&self.bloom_index, event);
         let keep = self.cross_rule_ac_keep_mask(event);
         // `event_logsource` is `None` (the default) unless pruning is enabled,
@@ -882,7 +911,11 @@ impl Engine {
                 {
                     d.event = Some(event.to_json());
                 }
-                results.push(m);
+                results.push(IdentifiedEvaluation {
+                    result: m,
+                    rule_id: rule.id.clone(),
+                    rule_name: rule.name.clone(),
+                });
             }
         }
         self.record_logsource_pruned(pruned);

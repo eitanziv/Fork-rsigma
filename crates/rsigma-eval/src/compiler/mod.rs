@@ -58,6 +58,7 @@ pub(crate) use helpers::{yaml_to_json, yaml_to_json_map};
 pub struct CompiledRule {
     pub title: String,
     pub id: Option<String>,
+    pub name: Option<String>,
     pub level: Option<Level>,
     pub tags: Vec<String>,
     /// The rule's `description`. Retained because it carries the ADS goal

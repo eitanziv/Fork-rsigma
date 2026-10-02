@@ -115,6 +115,76 @@ fn group_by_with_object_value_skips_correlation() {
 }
 
 #[test]
+fn detection_name_without_id_feeds_correlation() {
+    let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Count by Name
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 10s
+    condition:
+        gte: 2
+"#;
+    let mut engine = corr_engine(yaml);
+    let event = json!({"EventID": 1, "Host": "h1"});
+    assert_eq!(
+        process(&mut engine, event.clone(), 1000).correlation_count(),
+        0
+    );
+    assert_eq!(process(&mut engine, event, 1001).correlation_count(), 1);
+}
+
+#[test]
+fn correlation_name_without_id_feeds_parent() {
+    let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Child
+name: child
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [Host]
+    timespan: 10s
+    condition:
+        gte: 1
+---
+title: Parent
+correlation:
+    type: event_count
+    rules: [child]
+    group-by: [Host]
+    timespan: 10s
+    condition:
+        gte: 1
+"#;
+    let mut engine = corr_engine(yaml);
+    let result = process(&mut engine, json!({"EventID": 1, "Host": "h1"}), 1000);
+    let titles: Vec<_> = result
+        .correlations()
+        .map(|result| result.header.rule_title.as_str())
+        .collect();
+    assert_eq!(titles, ["Child", "Parent"]);
+}
+
+#[test]
 fn temporal_ordered_interleaved_only_correct_sequence_matches() {
     let yaml = r#"
 title: Rule A
@@ -281,6 +351,7 @@ fn reset_action_clears_window_after_firing() {
 fn timestamp_fallback_skip_runs_detection_but_skips_correlation() {
     let config = CorrelationConfig {
         timestamp_fallback: TimestampFallback::Skip,
+        emit_detections: true,
         ..Default::default()
     };
 
