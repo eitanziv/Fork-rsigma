@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Value modifiers follow the Sigma specification
+### Value modifiers follow the Sigma specification (#531)
 
 `engine eval`, the daemon, and filters now interpret value modifiers the way the Sigma specification and pySigma define them. Rules and filters share one interpretation, since filters are compiled through the IR like rules. The new [Value Modifiers](https://rsigma.io/reference/modifiers/) reference describes the semantics.
 
