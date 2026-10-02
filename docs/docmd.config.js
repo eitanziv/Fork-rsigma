@@ -302,6 +302,7 @@ export default {
         { title: "Exit Codes", path: "/reference/exit-codes" },
         { title: "Environment Variables", path: "/reference/environment-variables" },
         { title: "Feature Flags", path: "/reference/feature-flags" },
+        { title: "Value Modifiers", path: "/reference/modifiers" },
         { title: "Custom Attributes", path: "/reference/custom-attributes" },
         { title: "Builtin Pipelines", path: "/reference/builtin-pipelines" },
         { title: "Dynamic Pipeline Sources", path: "/reference/dynamic-sources" },

@@ -4,6 +4,23 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Value modifiers follow the Sigma specification
+
+`engine eval`, the daemon, and filters now interpret value modifiers the way the Sigma specification and pySigma define them. Rules and filters share one interpretation, since filters are compiled through the IR like rules. The new [Value Modifiers](https://rsigma.io/reference/modifiers/) reference describes the semantics.
+
+- A wildcard under `startswith` or `endswith` was anchored at the wrong end, so `CommandLine|startswith: 'net*user'` matched `cmd /c net user` and missed `net localuser /add`. Wildcards now also match newlines.
+- `base64offset` kept a character that depends on the byte after the value, so `Data|base64offset|contains: Test` missed the encodings of `Testing`. It now trims each variant the way pySigma does.
+- `windash` only treated `-` as interchangeable, so rules written with `/` never matched the `-` form. Every `-`, `/`, en dash, em dash, and horizontal bar is now interchangeable with the others, wildcards keep their meaning (`dir*-s`), and `windash` combined with `base64` encodes every variant instead of being ignored.
+- `wide`, `utf16`, and `utf16be` without `base64` matched the plain text. They now match the UTF-16 string, and reject non-ASCII values.
+- A wildcard under `base64` or `base64offset`, which an encoding cannot represent, is rejected instead of being encoded as a literal star.
+- An `expand` value always compiled to whole-value equality, ignoring `contains`, `startswith`, `endswith`, and wildcards from pipeline variables. A value whose placeholders a pipeline resolved now matches like any other value and converts with `backend convert`; placeholders left for match time honor the string operator. A backslash now escapes `%` as the specification defines, so `C:\Users\%user%` must be written `C:\Users\\%user%` to keep the placeholder.
+- `exists` treated a field set to `null` as absent. It is now a presence check.
+- `neq` never matched an event without the field, so `User|neq: admin` skipped events with no `User`. It now matches missing and null fields, and the PostgreSQL backend no longer adds `IS NOT NULL` to a negated field reference.
+- An empty value list (`Field: []`) is now a null check, as in pySigma.
+- A modifier repeated in one key, such as `Field|neq|neq`, is now a parse error (`SigmaParserError::DuplicateModifier`).
+
+Breaking changes for library users: `IrMatcher::Encoded` carries a wildcard-aware `pattern` instead of a plain string, `IrMatcher::Expand` and `CompiledMatcher::Expand` carry the string operator in `op`, and `HIR_SCHEMA_VERSION` is 3, so `Engine::load_hir` rejects caches written by earlier versions and they must be regenerated. `parse_expand_template` and the `value_placeholders` and `wildcard_placeholders` transformations follow the new escaping rules.
+
 ### Converted conditions are grouped by operator precedence (#530)
 
 `backend convert` now parenthesizes nested conditions from the structure of the rule instead of from the rendered text, the way pySigma does. The PostgreSQL backend left an `OR` under an `AND` bare, so a selection with a value list and another field, such as `Image|endswith: [a, b]` with `CommandLine|contains: x`, rendered as `"Image" ILIKE '%a' OR "Image" ILIKE '%b' AND "CommandLine" ILIKE '%x%'` and matched any event with the first value. The same happened to `1 of selection_*` under `and` and to `add_condition` pipeline transformations on rules with an `or` condition, while `not 1 of filter_*` and `not` over a selection with several fields negated only the first operand. The `test` backend had the same defects. The LynxDB backend, where `OR` binds tighter than `AND`, parenthesized every `AND` and left `not 1 of filter_*` and `not (a or b)` bare, so `NOT` applied to the first operand only. `NOT` is now parenthesized only over compound operands in every backend.

@@ -32,7 +32,8 @@ The crate is sync-only (no tokio/reqwest).
 |-----------------|---------|
 | `IrRule` / `IrDetection` / `IrMatcher` / `IrCondition` | Detection-rule HIR. `IrCondition::Selector` keeps the quantifier and name pattern. |
 | `IrMatcher::Str` + `IrPattern` | Faithful, wildcard-aware, original-case string match. |
-| `IrMatcher::Encoded` + `IrEncoding` | Explicit encoding transforms (`base64`, `wide`, `windash`, …). |
+| `IrMatcher::Encoded` + `IrEncoding` | Explicit encoding transforms (`base64`, `wide`, `windash`, …) over a wildcard-aware `pattern`. {{ added "unreleased" }} |
+| `IrMatcher::Expand` | A `\|expand` value with placeholders left for match time, with the string operator in `op`. {{ added "unreleased" }} |
 | `IrCorrelation` / `IrFilter` | Correlation and filter HIR. |
 | `IrRuleMetadata` | Metadata superset used when projecting eval `RuleHeader`. |
 | `lower_rule` / `lower_detection` / `lower_condition` | AST → HIR. |
@@ -66,7 +67,9 @@ Each pass preserves the match decision and the set of matched selections and fie
 
 - Lowering is **purely structural**: it resolves *which* comparison applies but never lowercases, compiles regexes, or expands encodings. Eval does that at compile time; convert renders wildcards to backend tokens. This keeps the HIR lossless.
 - Selectors such as `1 of selection_*` and `all of them` are preserved as `IrCondition::Selector`, so evaluation stays count-based and reports every matching detection. `them` skips `_`-prefixed detection names; glob/prefix patterns that explicitly match them still include them. Vacuous `all of <pattern>` over zero matching names is true, matching native evaluation.
-- Modifier contradictions (`|cidr|contains`, `|base64|base64offset`, …) fail at lower time with the same error kinds eval previously surfaced from `compile_rule`.
+- Modifier contradictions (`|cidr|contains`, `|base64|base64offset`, …) fail at lower time with the same error kinds eval previously surfaced from `compile_rule`. So do values an encoding cannot represent: a wildcard under `|base64` or `|base64offset`, and a non-ASCII value under a UTF-16 encoding with no base64 step. {{ added "unreleased" }}
+- An `|expand` value whose placeholders are all resolved by the pipeline lowers to an ordinary string matcher; only values with placeholders left become `IrMatcher::Expand`. {{ added "unreleased" }}
+- An empty value list (`Field: []`) lowers to `IrMatcher::Null`, or `Not(Null)` under `|neq`. {{ added "unreleased" }}
 
 ## Related
 
