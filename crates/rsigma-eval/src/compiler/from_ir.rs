@@ -71,7 +71,10 @@ fn compile_ir_detection_in(detection: &IrDetection, scope: Scope) -> Result<Comp
                     "AllOf detection must not be empty (vacuous truth)".into(),
                 ));
             }
-            let compiled: Result<Vec<_>> = items.iter().map(compile_ir_detection_item).collect();
+            let compiled: Result<Vec<_>> = items
+                .iter()
+                .map(|item| compile_ir_detection_item_in(item, scope))
+                .collect();
             Ok(CompiledDetection::AllOf(compiled?))
         }
         IrDetection::AnyOf(dets) => {
@@ -137,8 +140,22 @@ fn compile_ir_detection_in(detection: &IrDetection, scope: Scope) -> Result<Comp
     }
 }
 
+#[cfg(test)]
 pub(super) fn compile_ir_detection_item(item: &IrDetectionItem) -> Result<CompiledDetectionItem> {
-    let matcher = compile_ir_matcher(&item.matcher)?;
+    compile_ir_detection_item_in(item, Scope::Event)
+}
+
+/// A field-less item matches like a keyword at event scope and matches the
+/// member itself at array element scope.
+fn compile_ir_detection_item_in(
+    item: &IrDetectionItem,
+    scope: Scope,
+) -> Result<CompiledDetectionItem> {
+    let matcher = if item.field.is_none() && scope == Scope::Event {
+        compile_keyword_matcher(&item.matcher)?
+    } else {
+        compile_ir_matcher(&item.matcher)?
+    };
     let bloom_eligible =
         item.field.is_some() && crate::engine::bloom_index::is_positive_substring_matcher(&matcher);
 
@@ -225,10 +242,23 @@ fn compile_ir_matcher(matcher: &IrMatcher) -> Result<CompiledMatcher> {
 
 /// Compile a matcher that is tested against every value in the event.
 ///
-/// Keyword values are strings in the Sigma specification, so a number
-/// matches as a case-insensitive substring of its decimal text.
+/// Keywords match anywhere in a value, so a value without an explicit string
+/// operator matches as a substring. Keyword values are strings in the Sigma
+/// specification, so a number matches as a case-insensitive substring of its
+/// decimal text.
 fn compile_keyword_matcher(matcher: &IrMatcher) -> Result<CompiledMatcher> {
     match matcher {
+        IrMatcher::Str {
+            op: IrStrOp::Exact,
+            pattern,
+            case_insensitive,
+        } => compile_str(IrStrOp::Contains, pattern, *case_insensitive),
+        IrMatcher::Encoded {
+            encodings,
+            op: IrStrOp::Exact,
+            pattern,
+            case_insensitive,
+        } => compile_encoded(encodings, IrStrOp::Contains, pattern, *case_insensitive),
         IrMatcher::NumericEq(n) => {
             let pattern = IrPattern {
                 parts: vec![IrPatternPart::Literal(decimal_text(ir_number_literal(n)?))],

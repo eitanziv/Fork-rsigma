@@ -841,7 +841,8 @@ fn make_field_match(
 
 /// Record the individual event string values that satisfied a keyword
 /// matcher, capped at [`MAX_KEYWORD_MATCHES`]. Each entry uses the sentinel
-/// field name `"keyword"`.
+/// field name `"keyword"`. An `AllOf` reports the values of each child, and a
+/// negation has no satisfying value to report.
 fn collect_keyword_matches(
     selection: &str,
     matcher: &CompiledMatcher,
@@ -849,6 +850,20 @@ fn collect_keyword_matches(
     level: MatchDetailLevel,
     out: &mut Vec<FieldMatch>,
 ) {
+    match matcher {
+        CompiledMatcher::AllOf(children)
+        | CompiledMatcher::CaseInsensitiveGroup {
+            children,
+            mode: crate::matcher::GroupMode::All,
+        } => {
+            for child in children {
+                collect_keyword_matches(selection, child, event, level, out);
+            }
+            return;
+        }
+        CompiledMatcher::Not(_) => return,
+        _ => {}
+    }
     let descriptor = matcher.describe();
     let mut count = 0;
     for s in event.all_string_values() {

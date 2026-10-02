@@ -1,0 +1,26 @@
+description: A field-less |all list requires every value somewhere in the event, not all in the same value.
+rule:
+  title: keyword all
+  logsource: {category: process_creation, product: windows}
+  detection:
+    keywords:
+      '|all':
+        - 'bash -c'
+        - '/dev/tcp/'
+    condition: keywords
+events:
+  - {CommandLine: "BASH -c 'exec 5<>/dev/tcp/10.0.0.1/4444'"}
+  - {Image: '/bin/bash -c', CommandLine: 'cat < /dev/tcp/host/80'}
+  - {CommandLine: 'bash -c id'}
+  - {CommandLine: '/dev/tcp/host/80'}
+matches: [0, 1]
+unsupported: [fibratus, fibratus-nomacros]
+known_failures:
+  postgres-jsonb:
+    type: match-mismatch
+    reason: "full-text search parses /dev/tcp/10.0.0.1/4444 as one file path token, so the /dev/tcp term never matches"
+    actual: []
+  postgres-columns:
+    type: match-mismatch
+    reason: "full-text search parses /dev/tcp/10.0.0.1/4444 as one file path token, so the /dev/tcp term never matches"
+    actual: []

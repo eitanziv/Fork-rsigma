@@ -2415,6 +2415,30 @@ detection:
     assert!(matches!(err, Err(ConvertError::UnsupportedArrayMatching)));
 }
 
+#[test]
+fn array_object_body_with_a_field_less_item_is_unsupported() {
+    // The field-less item matches the element itself, which per-field SQL
+    // over the element object cannot express.
+    let mut backend = PostgresBackend::new();
+    backend.json_field = Some("data".to_string());
+    let collection = parse_sigma_yaml(
+        r#"
+title: T
+sigma-version: 3
+logsource: { category: test }
+detection:
+    selection:
+        items[any]:
+            name: 'x'
+            '|contains': 'y'
+    condition: selection
+"#,
+    )
+    .unwrap();
+    let err = backend.convert_rule(&collection.rules[0], "default", &PipelineState::default());
+    assert!(matches!(err, Err(ConvertError::UnsupportedArrayMatching)));
+}
+
 // --- Correlation window modes (tumbling / session) ---
 
 fn convert_corr(yaml: &str, format: &str) -> Vec<String> {

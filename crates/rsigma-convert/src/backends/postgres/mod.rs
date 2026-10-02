@@ -560,6 +560,11 @@ impl PostgresBackend {
                 crate::ir_convert::default_convert_ir_detection(&elem, &renamed, state)?,
             )
         } else {
+            // A field-less item in an object body matches the element itself,
+            // which the per-field SQL cannot express.
+            if has_fieldless_item(body) {
+                return Err(ConvertError::UnsupportedArrayMatching);
+            }
             let elem = self.with_json_field(Some(alias.clone()));
             (
                 "jsonb_array_elements",
@@ -588,6 +593,16 @@ impl PostgresBackend {
                  ELSE {array_expr} IS NULL OR jsonb_typeof({array_expr}) = 'null' END)"
             ),
         })
+    }
+}
+
+/// Whether an array body has a field-less item outside nested array matches.
+fn has_fieldless_item(body: &IrDetection) -> bool {
+    match body {
+        IrDetection::AllOf(items) => items.iter().any(|it| it.field.is_none()),
+        IrDetection::AnyOf(dets) | IrDetection::And(dets) => dets.iter().any(has_fieldless_item),
+        IrDetection::Conditional { named, .. } => named.values().any(has_fieldless_item),
+        IrDetection::Keywords(_) | IrDetection::ArrayMatch { .. } => false,
     }
 }
 

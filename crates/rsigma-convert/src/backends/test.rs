@@ -1161,6 +1161,58 @@ detection:
     }
 
     #[test]
+    fn test_keywords_all_renders_one_term_per_value() {
+        let queries = convert_rule_yaml(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    keywords:
+        '|all':
+            - 'bash -c'
+            - 4444
+    condition: keywords
+"#,
+        );
+        assert_eq!(queries, vec!["_=\"bash -c\" and _=4444"]);
+    }
+
+    #[test]
+    fn test_negated_field_less_value_renders_a_negated_term() {
+        let queries = convert_rule_yaml(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    keywords:
+        '|neq':
+            - whoami
+            - ipconfig
+    condition: keywords
+"#,
+        );
+        assert_eq!(queries, vec!["not (_=\"whoami\" or _=\"ipconfig\")"]);
+    }
+
+    #[test]
+    fn test_anchored_field_less_value_is_unsupported() {
+        let err = convert_rule_yaml_err(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    keywords:
+        '|startswith': whoami
+    condition: keywords
+"#,
+        );
+        assert!(matches!(err, ConvertError::UnsupportedKeyword));
+    }
+
+    #[test]
     fn test_case_sensitive_contains() {
         let queries = convert_rule_yaml(
             r#"
