@@ -105,6 +105,21 @@ fn negated_field_less_values_match_when_no_value_contains_them() {
 }
 
 #[test]
+fn selector_patterns_skip_underscore_identifiers_unless_they_start_with_one() {
+    let detection = "sel_a:\n  A: 1\n_sel_b:\n  B: 1\ncondition: 1 of *";
+    let events = [json!({"A": 1}), json!({"B": 1})];
+    assert_eq!(matching(detection, &events), vec![0]);
+
+    let detection = "sel_a:\n  A: 1\n_sel_b:\n  B: 1\ncondition: all of *";
+    let events = [json!({"A": 1}), json!({"A": 1, "B": 1}), json!({"B": 1})];
+    assert_eq!(matching(detection, &events), vec![0, 1]);
+
+    let detection = "sel_a:\n  A: 1\n_sel_b:\n  B: 1\ncondition: 1 of _sel*";
+    let events = [json!({"A": 1}), json!({"B": 1})];
+    assert_eq!(matching(detection, &events), vec![1]);
+}
+
+#[test]
 fn field_less_values_in_an_array_body_match_the_member_itself() {
     let yaml = rule_yaml(
         "sigma-version: 3\n",

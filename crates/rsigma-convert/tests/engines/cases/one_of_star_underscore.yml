@@ -1,0 +1,15 @@
+description: A selector pattern that does not start with an underscore skips identifiers that do.
+rule:
+  title: one of star skips underscore identifiers
+  logsource: {category: process_creation, product: windows}
+  detection:
+    sel_cmd:
+      CommandLine|contains: 'whoami'
+    _sel_img:
+      Image|endswith: '\cmd.exe'
+    condition: 1 of *
+events:
+  - {CommandLine: 'whoami /all', Image: 'C:\Windows\System32\net.exe'}
+  - {CommandLine: 'ipconfig', Image: 'C:\Windows\System32\cmd.exe'}
+  - {CommandLine: 'ipconfig', Image: 'C:\Windows\System32\net.exe'}
+matches: [0]
