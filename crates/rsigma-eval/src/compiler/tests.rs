@@ -1,6 +1,7 @@
+use super::helpers::{base64_offset_patterns, expand_windash};
 use super::*;
 use crate::event::JsonEvent;
-use rsigma_parser::FieldSpec;
+use rsigma_parser::{FieldSpec, Modifier, SigmaString, SigmaValue};
 use serde_json::json;
 
 fn make_field_spec(name: &str, modifiers: &[Modifier]) -> FieldSpec {

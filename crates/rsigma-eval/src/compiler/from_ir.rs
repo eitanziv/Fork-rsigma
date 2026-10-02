@@ -7,21 +7,18 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rsigma_ir::{
-    IrCondition, IrDetection, IrDetectionItem, IrEncoding, IrExpandPart, IrMatcher, IrNumber,
-    IrPattern, IrPatternPart, IrRule, IrStrOp, IrTimePart,
+    IrCondition, IrDetection, IrDetectionItem, IrExpandPart, IrMatcher, IrNumber, IrRule,
+    IrTimePart,
 };
-use rsigma_parser::value::{SigmaString, SpecialChar, StringPart};
-use rsigma_parser::{ConditionExpr, Modifier, SigmaValue};
+use rsigma_parser::ConditionExpr;
 
 use crate::error::{EvalError, Result};
 use crate::matcher::{CompiledMatcher, ExpandPart, TimePart};
 
 use super::helpers::build_regex;
 use super::optimizer;
-use super::{
-    CompiledDetection, CompiledDetectionItem, CompiledRule, ModCtx, compile_sigma_string,
-    compile_string_value, compile_value,
-};
+use super::value::{compile_encoded, compile_str};
+use super::{CompiledDetection, CompiledDetectionItem, CompiledRule};
 
 /// Compile an [`IrRule`] into a physical [`CompiledRule`] ready for evaluation.
 pub fn compile_to_compiled(ir: &IrRule) -> Result<CompiledRule> {
@@ -54,7 +51,7 @@ pub fn compile_to_compiled(ir: &IrRule) -> Result<CompiledRule> {
     })
 }
 
-fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDetection> {
+pub(super) fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDetection> {
     match detection {
         IrDetection::AllOf(items) => {
             if items.is_empty() {
@@ -119,7 +116,7 @@ fn compile_ir_detection(detection: &IrDetection) -> Result<CompiledDetection> {
     }
 }
 
-fn compile_ir_detection_item(item: &IrDetectionItem) -> Result<CompiledDetectionItem> {
+pub(super) fn compile_ir_detection_item(item: &IrDetectionItem) -> Result<CompiledDetectionItem> {
     let matcher = compile_ir_matcher(&item.matcher)?;
     let bloom_eligible =
         item.field.is_some() && crate::engine::bloom_index::is_positive_substring_matcher(&matcher);
@@ -138,25 +135,13 @@ fn compile_ir_matcher(matcher: &IrMatcher) -> Result<CompiledMatcher> {
             op,
             pattern,
             case_insensitive,
-        } => {
-            let ctx = str_modctx(*op, *case_insensitive, &[]);
-            if pattern.is_plain() {
-                compile_string_value(&pattern.as_plain().unwrap_or_default(), &ctx)
-            } else {
-                compile_sigma_string(&sigma_from_pattern(pattern), &ctx)
-            }
-        }
+        } => compile_str(*op, pattern, *case_insensitive),
         IrMatcher::Encoded {
             encodings,
             op,
             value,
             case_insensitive,
-        } => {
-            // Replay the encoding chain through the proven value compiler by
-            // reconstructing the equivalent modifier context and plain value.
-            let ctx = str_modctx(*op, *case_insensitive, encodings);
-            compile_value(&SigmaValue::String(sigma_plain(value)), &ctx)
-        }
+        } => compile_encoded(encodings, *op, value, *case_insensitive),
         IrMatcher::Regex {
             pattern,
             case_insensitive,
@@ -213,62 +198,6 @@ fn compile_ir_matcher(matcher: &IrMatcher) -> Result<CompiledMatcher> {
             Ok(CompiledMatcher::AllOf(compiled?))
         }
     }
-}
-
-/// Reconstruct the modifier context for a string/encoded matcher so the proven
-/// value compilers produce byte-identical `CompiledMatcher`s.
-fn str_modctx(op: IrStrOp, case_insensitive: bool, encodings: &[IrEncoding]) -> ModCtx {
-    let mut mods: Vec<Modifier> = Vec::new();
-    match op {
-        IrStrOp::Exact => {}
-        IrStrOp::Contains => mods.push(Modifier::Contains),
-        IrStrOp::StartsWith => mods.push(Modifier::StartsWith),
-        IrStrOp::EndsWith => mods.push(Modifier::EndsWith),
-    }
-    if !case_insensitive {
-        mods.push(Modifier::Cased);
-    }
-    for e in encodings {
-        mods.push(match e {
-            IrEncoding::Wide => Modifier::Wide,
-            IrEncoding::Utf16 => Modifier::Utf16,
-            IrEncoding::Utf16Be => Modifier::Utf16be,
-            IrEncoding::Base64 => Modifier::Base64,
-            IrEncoding::Base64Offset => Modifier::Base64Offset,
-            IrEncoding::Windash => Modifier::WindAsh,
-        });
-    }
-    ModCtx::from_modifiers(&mods)
-}
-
-fn sigma_plain(s: &str) -> SigmaString {
-    SigmaString {
-        parts: vec![StringPart::Plain(s.to_string())],
-        original: s.to_string(),
-    }
-}
-
-fn sigma_from_pattern(pattern: &IrPattern) -> SigmaString {
-    let mut original = String::new();
-    let parts = pattern
-        .parts
-        .iter()
-        .map(|p| match p {
-            IrPatternPart::Literal(t) => {
-                original.push_str(t);
-                StringPart::Plain(t.clone())
-            }
-            IrPatternPart::WildcardMulti => {
-                original.push('*');
-                StringPart::Special(SpecialChar::WildcardMulti)
-            }
-            IrPatternPart::WildcardSingle => {
-                original.push('?');
-                StringPart::Special(SpecialChar::WildcardSingle)
-            }
-        })
-        .collect();
-    SigmaString { parts, original }
 }
 
 fn ir_condition_to_expr(cond: &IrCondition) -> ConditionExpr {

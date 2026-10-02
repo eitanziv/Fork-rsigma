@@ -2,8 +2,6 @@ use base64::Engine as Base64Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use regex::Regex;
 
-use rsigma_parser::SigmaValue;
-
 use crate::error::{EvalError, Result};
 
 /// Convert a `yaml_serde::Value` to a `serde_json::Value`.
@@ -47,40 +45,6 @@ pub(crate) fn yaml_to_json_map(
     map.iter()
         .map(|(k, v)| (k.clone(), yaml_to_json(v)))
         .collect()
-}
-
-/// Extract a plain string from a SigmaValue.
-pub(super) fn value_to_plain_string(value: &SigmaValue) -> Result<String> {
-    match value {
-        SigmaValue::String(s) => Ok(s.as_plain().unwrap_or_else(|| s.original.clone())),
-        SigmaValue::Integer(n) => Ok(n.to_string()),
-        SigmaValue::Float(n) => Ok(n.to_string()),
-        SigmaValue::Bool(b) => Ok(b.to_string()),
-        SigmaValue::Null => Err(EvalError::IncompatibleValue(
-            "null value for string modifier".into(),
-        )),
-    }
-}
-
-/// Extract a numeric f64 from a SigmaValue.
-pub(super) fn value_to_f64(value: &SigmaValue) -> Result<f64> {
-    match value {
-        SigmaValue::Integer(n) => Ok(*n as f64),
-        SigmaValue::Float(n) => Ok(*n),
-        SigmaValue::String(s) => {
-            let plain = s.as_plain().unwrap_or_else(|| s.original.clone());
-            plain
-                .parse::<f64>()
-                .map_err(|_| EvalError::ExpectedNumeric(plain))
-        }
-        _ => Err(EvalError::ExpectedNumeric(format!("{value:?}"))),
-    }
-}
-
-/// Convert a SigmaString into raw bytes (UTF-8).
-pub(super) fn sigma_string_to_bytes(s: &rsigma_parser::SigmaString) -> Vec<u8> {
-    let plain = s.as_plain().unwrap_or_else(|| s.original.clone());
-    plain.into_bytes()
 }
 
 /// Convert bytes to UTF-16LE representation (wide string / utf16le).
