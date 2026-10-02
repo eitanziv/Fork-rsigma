@@ -179,9 +179,11 @@ fn compile_ir_matcher(matcher: &IrMatcher) -> Result<CompiledMatcher> {
         IrMatcher::BoolEq(b) => Ok(CompiledMatcher::BoolEq(*b)),
         IrMatcher::Expand {
             template,
+            op,
             case_insensitive,
         } => Ok(CompiledMatcher::Expand {
             template: template.iter().map(ir_expand_part).collect(),
+            op: *op,
             case_insensitive: *case_insensitive,
         }),
         IrMatcher::TimestampPart { part, inner } => Ok(CompiledMatcher::TimestampPart {

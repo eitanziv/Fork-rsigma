@@ -191,9 +191,11 @@ pub enum CompiledMatcher {
     BoolEq(bool),
 
     // -- Expand --
-    /// Placeholder expansion: `%fieldname%` is resolved from the event at match time.
+    /// Placeholder expansion: `%fieldname%` is resolved from the event at
+    /// match time and the result is compared with `op`.
     Expand {
         template: Vec<ExpandPart>,
+        op: IrStrOp,
         case_insensitive: bool,
     },
 
@@ -388,6 +390,7 @@ impl CompiledMatcher {
             CompiledMatcher::Expand {
                 template,
                 case_insensitive,
+                ..
             } => MatchDescriptor {
                 kind: MatcherKind::Expand,
                 pattern: Some(truncate_pattern(expand_template_to_string(template))),

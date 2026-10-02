@@ -243,8 +243,12 @@ pub enum IrMatcher {
     },
     Null,
     BoolEq(bool),
+    /// `expand` value whose `%name%` placeholders no pipeline resolved; they
+    /// are filled from the event field of the same name at match time and
+    /// the result is compared with `op`.
     Expand {
         template: Vec<IrExpandPart>,
+        op: IrStrOp,
         case_insensitive: bool,
     },
     TimestampPart {
@@ -259,7 +263,7 @@ pub enum IrMatcher {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum IrExpandPart {
     Literal(String),
-    /// Deferred `${source.*}` token awaiting specialization.
+    /// `%name%` placeholder.
     Placeholder(String),
 }
 

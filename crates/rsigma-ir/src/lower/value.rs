@@ -10,9 +10,9 @@ use rsigma_parser::value::{SpecialChar, StringPart};
 use rsigma_parser::{SigmaString, SigmaValue};
 
 use crate::error::IrError;
-use crate::{IrEncoding, IrMatcher, IrNumber, IrPattern, IrPatternPart, IrStrOp};
+use crate::{IrEncoding, IrExpandPart, IrMatcher, IrNumber, IrPattern, IrPatternPart, IrStrOp};
 
-use super::helpers::{Result, parse_expand_template, value_to_f64, value_to_plain_string};
+use super::helpers::{ExpandSegment, Result, scan_expand, value_to_f64, value_to_plain_string};
 use super::mod_ctx::ModCtx;
 
 /// Build an [`IrPattern`] from a parser [`SigmaString`], preserving literal
@@ -90,13 +90,10 @@ fn encodings(ctx: &ModCtx) -> Vec<IrEncoding> {
 pub(super) fn lower_value(value: &SigmaValue, ctx: &ModCtx) -> Result<IrMatcher> {
     let ci = ctx.is_case_insensitive();
 
-    if ctx.expand {
-        let plain = value_to_plain_string(value)?;
-        let template = parse_expand_template(&plain);
-        return Ok(IrMatcher::Expand {
-            template,
-            case_insensitive: ci,
-        });
+    if ctx.expand
+        && let SigmaValue::String(s) = value
+    {
+        return lower_expand(s, ctx);
     }
 
     if let Some(part) = ctx.timestamp_part {
@@ -203,6 +200,59 @@ pub(super) fn lower_value(value: &SigmaValue, ctx: &ModCtx) -> Result<IrMatcher>
     }
 
     Ok(lower_str(pattern_from_sigma(sigma_str), ctx))
+}
+
+/// Lower an `expand` value from its raw source text. Placeholders a pipeline
+/// already resolved are gone, so a value without any lowers like a value
+/// without `expand`; the remaining placeholders are filled from event fields
+/// at match time.
+fn lower_expand(s: &SigmaString, ctx: &ModCtx) -> Result<IrMatcher> {
+    let mut template = Vec::new();
+    let mut parts = Vec::new();
+    let mut has_placeholder = false;
+    let mut has_wildcard = false;
+    for segment in scan_expand(&s.original) {
+        match segment {
+            ExpandSegment::Literal(text) => {
+                template.push(IrExpandPart::Literal(text.clone()));
+                parts.push(StringPart::Plain(text));
+            }
+            ExpandSegment::Wildcard(c) => {
+                has_wildcard = true;
+                parts.push(StringPart::Special(c));
+            }
+            ExpandSegment::Placeholder(name) => {
+                has_placeholder = true;
+                template.push(IrExpandPart::Placeholder(name));
+            }
+        }
+    }
+
+    let mut plain_ctx = *ctx;
+    plain_ctx.expand = false;
+    if !has_placeholder {
+        let value = SigmaValue::String(SigmaString {
+            parts,
+            original: s.original.clone(),
+        });
+        return lower_value(&value, &plain_ctx);
+    }
+    if has_wildcard {
+        return Err(IrError::IncompatibleValue(
+            "|expand placeholders that no pipeline resolved cannot be combined with wildcards"
+                .into(),
+        ));
+    }
+    if !encodings(ctx).is_empty() {
+        return Err(IrError::IncompatibleValue(
+            "|expand placeholders that no pipeline resolved cannot be combined with encoding modifiers".into(),
+        ));
+    }
+    Ok(IrMatcher::Expand {
+        template,
+        op: str_op(ctx),
+        case_insensitive: ctx.is_case_insensitive(),
+    })
 }
 
 /// Reject values an encoding chain cannot represent: wildcards under base64,

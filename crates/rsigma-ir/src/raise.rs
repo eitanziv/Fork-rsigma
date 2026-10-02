@@ -310,15 +310,17 @@ fn raise_matcher(matcher: &IrMatcher) -> Result<(Vec<Modifier>, Vec<SigmaValue>)
         IrMatcher::BoolEq(b) => Ok((vec![], vec![SigmaValue::Bool(*b)])),
         IrMatcher::Expand {
             template,
+            op,
             case_insensitive,
         } => {
-            let mut modifiers = vec![Modifier::Expand];
+            let mut modifiers = op_modifiers(*op);
+            modifiers.push(Modifier::Expand);
             if !case_insensitive {
                 modifiers.push(Modifier::Cased);
             }
             Ok((
                 modifiers,
-                vec![SigmaValue::String(SigmaString::from_raw(&expand_source(
+                vec![SigmaValue::String(SigmaString::new(&expand_source(
                     template,
                 )))],
             ))
@@ -415,11 +417,20 @@ fn number_value(number: &IrNumber) -> Result<SigmaValue> {
     }
 }
 
+/// Raw source text of an `expand` template, with literal `\`, `*`, `?`, and
+/// `%` escaped.
 fn expand_source(template: &[IrExpandPart]) -> String {
     let mut out = String::new();
     for part in template {
         match part {
-            IrExpandPart::Literal(text) => out.push_str(text),
+            IrExpandPart::Literal(text) => {
+                for c in text.chars() {
+                    if matches!(c, '\\' | '*' | '?' | '%') {
+                        out.push('\\');
+                    }
+                    out.push(c);
+                }
+            }
             IrExpandPart::Placeholder(name) => {
                 out.push('%');
                 out.push_str(name);
@@ -483,6 +494,20 @@ mod tests {
         assert_hir_round_trips(
             "title: T\nlogsource:\n    product: windows\ndetection:\n    selection:\n        CommandLine|base64offset|contains: 'IEX'\n        Name|windash|contains: '-enc'\n        Status|neq: disabled\n    keywords:\n        - mimikatz\n        - 4688\n    condition: selection and keywords\n",
         );
+    }
+
+    #[test]
+    fn round_trips_encoded_wildcards_and_expand() {
+        let yaml = "title: T\nlogsource:\n    product: windows\ndetection:\n    selection:\n        Name|windash|contains: 'dir*-s'\n        Data|wide: 'c?d'\n        Path|contains|expand: '100\\%/%user%'\n        Home|expand: 'C:\\Users\\\\%user%\\x'\n    condition: selection\n";
+        assert_hir_round_trips(yaml);
+
+        let collection = parse_sigma_yaml(yaml).unwrap();
+        let hir = lower_rule(&collection.rules[0], &LowerOptions::default()).unwrap();
+        let raised = raise_rule(&hir, &RaiseOptions::default()).unwrap();
+        let emitted = rsigma_parser::emit_rule_yaml(&raised);
+        let reparsed = parse_sigma_yaml(&emitted).expect("emitted YAML parses");
+        let relowered = lower_rule(&reparsed.rules[0], &LowerOptions::default()).unwrap();
+        assert_eq!(hir, relowered, "HIR changed across emit:\n{emitted}");
     }
 
     #[test]

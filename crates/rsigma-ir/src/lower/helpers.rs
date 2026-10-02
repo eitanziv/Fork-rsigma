@@ -5,6 +5,7 @@
 //! structural so the HIR round-trips faithfully.
 
 use rsigma_parser::SigmaValue;
+use rsigma_parser::value::SpecialChar;
 
 use crate::error::IrError;
 
@@ -78,45 +79,61 @@ pub(super) fn value_to_f64(value: &SigmaValue) -> Result<f64> {
     }
 }
 
-/// Parse an expand template string like `C:\Users\%user%\AppData` into parts.
-pub(super) fn parse_expand_template(s: &str) -> Vec<crate::IrExpandPart> {
-    use crate::IrExpandPart;
+/// A segment of a raw `expand` value.
+pub(super) enum ExpandSegment {
+    Literal(String),
+    Wildcard(SpecialChar),
+    Placeholder(String),
+}
 
-    let mut parts = Vec::new();
-    let mut current = String::new();
-    let mut in_placeholder = false;
-    let mut placeholder = String::new();
-
-    for ch in s.chars() {
-        if ch == '%' {
-            if in_placeholder {
-                if !placeholder.is_empty() {
-                    parts.push(IrExpandPart::Placeholder(placeholder.clone()));
-                    placeholder.clear();
+/// Split the raw source text of an `expand` value into literals, wildcards,
+/// and `%name%` placeholders. A backslash escapes `*`, `?`, `%`, and itself,
+/// so `\%` is a plain percent and `\\%name%` is a backslash followed by
+/// a placeholder. A placeholder name is non-empty and has no `*`, `?`, or
+/// backslash.
+pub(super) fn scan_expand(raw: &str) -> Vec<ExpandSegment> {
+    let mut segments = Vec::new();
+    let mut literal = String::new();
+    let mut chars = raw.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        match c {
+            '\\' => match chars.peek() {
+                Some(&(_, next @ ('*' | '?' | '%' | '\\'))) => {
+                    literal.push(next);
+                    chars.next();
                 }
-                in_placeholder = false;
-            } else {
-                if !current.is_empty() {
-                    parts.push(IrExpandPart::Literal(current.clone()));
-                    current.clear();
+                _ => literal.push('\\'),
+            },
+            '*' | '?' => {
+                if !literal.is_empty() {
+                    segments.push(ExpandSegment::Literal(std::mem::take(&mut literal)));
                 }
-                in_placeholder = true;
+                segments.push(ExpandSegment::Wildcard(if c == '*' {
+                    SpecialChar::WildcardMulti
+                } else {
+                    SpecialChar::WildcardSingle
+                }));
             }
-        } else if in_placeholder {
-            placeholder.push(ch);
-        } else {
-            current.push(ch);
+            '%' => {
+                let rest = &raw[i + 1..];
+                match rest.find(['%', '*', '?', '\\']) {
+                    Some(len) if len > 0 && rest[len..].starts_with('%') => {
+                        if !literal.is_empty() {
+                            segments.push(ExpandSegment::Literal(std::mem::take(&mut literal)));
+                        }
+                        segments.push(ExpandSegment::Placeholder(rest[..len].to_string()));
+                        for _ in rest[..=len].chars() {
+                            chars.next();
+                        }
+                    }
+                    _ => literal.push('%'),
+                }
+            }
+            _ => literal.push(c),
         }
     }
-
-    if in_placeholder && !placeholder.is_empty() {
-        current.push('%');
-        current.push_str(&placeholder);
+    if !literal.is_empty() {
+        segments.push(ExpandSegment::Literal(literal));
     }
-
-    if !current.is_empty() {
-        parts.push(IrExpandPart::Literal(current));
-    }
-
-    parts
+    segments
 }

@@ -634,52 +634,65 @@ fn expand_placeholders_in_values(
 ) {
     let mut expanded_values = Vec::new();
     for value in values.drain(..) {
-        if let SigmaValue::String(ref s) = value {
-            let plain = s.as_plain().unwrap_or_else(|| s.original.clone());
-            if plain.contains('%') {
-                let result = expand_placeholder_string(&plain, state, wildcard);
-                expanded_values.extend(result);
-                continue;
-            }
+        if let SigmaValue::String(ref s) = value
+            && s.original.contains('%')
+        {
+            expanded_values.extend(expand_placeholder_string(&s.original, state, wildcard));
+            continue;
         }
         expanded_values.push(value);
     }
     *values = expanded_values;
 }
 
+/// The first placeholder at or after byte `from` of raw Sigma source text, as
+/// the offsets of its opening and closing `%`. A `%` escaped by a backslash
+/// does not open one, and a name is non-empty and has no `*`, `?`, or
+/// backslash.
+fn find_placeholder(s: &str, from: usize) -> Option<(usize, usize)> {
+    let mut search = from;
+    while let Some(offset) = s[search..].find('%') {
+        let open = search + offset;
+        let backslashes = s[..open].bytes().rev().take_while(|&b| b == b'\\').count();
+        let rest = &s[open + 1..];
+        if backslashes % 2 == 0
+            && let Some(len) = rest.find(['%', '*', '?', '\\'])
+            && len > 0
+            && rest[len..].starts_with('%')
+        {
+            return Some((open, open + 1 + len));
+        }
+        search = open + 1;
+    }
+    None
+}
+
+/// Substitute placeholders in the raw source text `s` of a value.
 fn expand_placeholder_string(s: &str, state: &PipelineState, wildcard: bool) -> Vec<SigmaValue> {
     let mut result = s.to_string();
+    let mut from = 0;
 
-    while let Some(start) = result.find('%') {
-        let rest = &result[start + 1..];
-        let Some(end) = rest.find('%') else {
-            break;
-        };
-        let placeholder = &rest[..end];
-
-        if let Some(values) = state.vars.get(placeholder) {
-            if values.len() == 1 {
-                result = format!("{}{}{}", &result[..start], values[0], &rest[end + 1..]);
-            } else if values.is_empty() {
-                if wildcard {
-                    result = format!("{}*{}", &result[..start], &rest[end + 1..]);
-                } else {
-                    break;
-                }
-            } else {
+    while let Some((open, close)) = find_placeholder(&result, from) {
+        let placeholder = &result[open + 1..close];
+        let replacement = match state.vars.get(placeholder) {
+            Some(values) if values.len() > 1 => {
                 return values
                     .iter()
                     .map(|v| {
-                        let expanded = format!("{}{}{}", &result[..start], v, &rest[end + 1..]);
+                        let expanded = format!("{}{}{}", &result[..open], v, &result[close + 1..]);
                         SigmaValue::String(SigmaString::new(&expanded))
                     })
                     .collect();
             }
-        } else if wildcard {
-            result = format!("{}*{}", &result[..start], &rest[end + 1..]);
-        } else {
-            break;
-        }
+            Some(values) if values.len() == 1 => values[0].clone(),
+            _ if wildcard => "*".to_string(),
+            _ => {
+                from = close + 1;
+                continue;
+            }
+        };
+        from = open + replacement.len();
+        result = format!("{}{}{}", &result[..open], replacement, &result[close + 1..]);
     }
 
     vec![SigmaValue::String(SigmaString::new(&result))]

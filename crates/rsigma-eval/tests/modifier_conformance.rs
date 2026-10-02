@@ -4,12 +4,16 @@
 //! events, so the candidate index and prefilters take part as they do in
 //! production.
 
-use rsigma_eval::{Engine, JsonEvent};
+use rsigma_eval::{Engine, JsonEvent, parse_pipeline};
 use rsigma_parser::parse_sigma_yaml;
 use serde_json::{Value, json};
 
 /// Compile a rule whose `detection` block is `detection`.
 fn try_engine(detection: &str) -> Result<Engine, String> {
+    try_engine_with(detection, None)
+}
+
+fn try_engine_with(detection: &str, pipeline: Option<&str>) -> Result<Engine, String> {
     let detection = detection
         .lines()
         .map(|l| format!("  {l}"))
@@ -20,14 +24,13 @@ fn try_engine(detection: &str) -> Result<Engine, String> {
     );
     let collection = parse_sigma_yaml(&yaml).map_err(|e| e.to_string())?;
     let mut engine = Engine::new();
+    if let Some(pipeline) = pipeline {
+        engine.add_pipeline(parse_pipeline(pipeline).map_err(|e| e.to_string())?);
+    }
     engine
         .add_collection(&collection)
         .map_err(|e| e.to_string())?;
     Ok(engine)
-}
-
-fn engine(detection: &str) -> Engine {
-    try_engine(detection).expect("rule compiles")
 }
 
 /// The compile error for a rule that must be rejected.
@@ -40,7 +43,12 @@ fn rejection(detection: &str) -> String {
 
 /// Indexes of the events the rule matches.
 fn matching(detection: &str, events: &[Value]) -> Vec<usize> {
-    let engine = engine(detection);
+    matching_with(detection, None, events)
+}
+
+/// Indexes of the events the rule matches after `pipeline` is applied.
+fn matching_with(detection: &str, pipeline: Option<&str>, events: &[Value]) -> Vec<usize> {
+    let engine = try_engine_with(detection, pipeline).expect("rule compiles");
     events
         .iter()
         .enumerate()
@@ -176,5 +184,136 @@ fn windash_applies_before_base64() {
     assert_eq!(
         matching("selection:\n  Data|windash|base64: '-enc'", &events),
         [0, 1]
+    );
+}
+
+#[test]
+fn expand_resolved_by_a_pipeline_honors_the_operator_and_wildcards() {
+    let pipeline = "name: p\nvars:\n  x: [ab]\ntransformations:\n  - type: value_placeholders\n";
+    let events = [
+        json!({"F": "zabz"}),
+        json!({"F": "ab"}),
+        json!({"F": "AB"}),
+        json!({"F": "a b"}),
+    ];
+    assert_eq!(
+        matching_with(
+            "selection:\n  F|contains|expand: '%x%'",
+            Some(pipeline),
+            &events
+        ),
+        [0, 1, 2]
+    );
+    assert_eq!(
+        matching_with(
+            "selection:\n  F|endswith|expand: 'z%x%'",
+            Some(pipeline),
+            &events
+        ),
+        Vec::<usize>::new()
+    );
+    assert_eq!(
+        matching_with(
+            "selection:\n  F|expand|cased: '%x%'",
+            Some(pipeline),
+            &events
+        ),
+        [1]
+    );
+
+    let pipeline = "name: p\ntransformations:\n  - type: wildcard_placeholders\n";
+    let events = [
+        json!({"F": "xyz"}),
+        json!({"F": "x"}),
+        json!({"F": "x*"}),
+        json!({"F": "yx"}),
+    ];
+    assert_eq!(
+        matching_with("selection:\n  F|expand: 'x%any%'", Some(pipeline), &events),
+        [0, 1, 2]
+    );
+}
+
+#[test]
+fn expand_fills_unresolved_placeholders_from_event_fields_with_the_operator() {
+    let events = [
+        json!({"F": "hello bob!", "user": "bob"}),
+        json!({"F": "bob", "user": "bob"}),
+        json!({"F": "hello BOB", "user": "bob"}),
+        json!({"F": "hello alice", "user": "bob"}),
+    ];
+    assert_eq!(
+        matching("selection:\n  F|contains|expand: '%user%'", &events),
+        [0, 1, 2]
+    );
+    assert_eq!(
+        matching("selection:\n  F|startswith|expand: '%user%'", &events),
+        [1]
+    );
+    assert_eq!(
+        matching("selection:\n  F|endswith|cased|expand: ' %user%'", &events),
+        Vec::<usize>::new()
+    );
+    assert_eq!(matching("selection:\n  F|expand: '%user%'", &events), [1]);
+}
+
+#[test]
+fn expand_treats_escaped_percent_as_a_literal() {
+    let events = [
+        json!({"F": "100%", "user": "x"}),
+        json!({"F": "%user%", "user": "x"}),
+        json!({"F": "x", "user": "x"}),
+    ];
+    assert_eq!(matching("selection:\n  F|expand: '100\\%'", &events), [0]);
+    assert_eq!(
+        matching("selection:\n  F|expand: '\\%user\\%'", &events),
+        [1]
+    );
+    assert_eq!(matching("selection:\n  F|expand: '%user%'", &events), [2]);
+
+    // The specification's own example, and a backslash before a placeholder.
+    let events = [
+        json!({"F": "%plainbob", "name": "bob", "user": "bob"}),
+        json!({"F": "C:\\Users\\bob\\AppData", "user": "bob"}),
+        json!({"F": "C:\\Users%user%\\AppData", "user": "bob"}),
+    ];
+    assert_eq!(matching("selection:\n  F|expand: '\\%plain%name%'", &events), [0]);
+    assert_eq!(
+        matching("selection:\n  F|expand: 'C:\\Users\\\\%user%\\AppData'", &events),
+        [1]
+    );
+    assert_eq!(
+        matching("selection:\n  F|expand: 'C:\\Users\\%user%\\AppData'", &events),
+        [2]
+    );
+}
+
+#[test]
+fn expand_rejects_wildcards_next_to_unresolved_placeholders() {
+    let err = rejection("selection:\n  F|expand: '%user%*'");
+    assert!(err.contains("cannot be combined with wildcards"), "{err}");
+}
+
+#[test]
+fn placeholder_pipelines_skip_escaped_percent_and_unresolved_placeholders() {
+    let pipeline = "name: p\ntransformations:\n  - type: wildcard_placeholders\n";
+    let events = [json!({"F": "%user%"}), json!({"F": "anything"})];
+    assert_eq!(
+        matching_with(
+            "selection:\n  F|expand: '\\%user\\%'",
+            Some(pipeline),
+            &events
+        ),
+        [0]
+    );
+
+    let pipeline = "name: p\nvars:\n  b: [two]\ntransformations:\n  - type: value_placeholders\n";
+    let events = [
+        json!({"F": "one-two", "a": "one"}),
+        json!({"F": "x-two", "a": "one"}),
+    ];
+    assert_eq!(
+        matching_with("selection:\n  F|expand: '%a%-%b%'", Some(pipeline), &events),
+        [0]
     );
 }

@@ -1,0 +1,28 @@
+description: An expand value whose placeholders a pipeline resolves keeps its operator and converts like a plain value.
+rule:
+  title: expand resolved
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|contains|expand: '%tool%'
+    condition: selection
+pipeline:
+  name: tool list
+  priority: 10
+  vars:
+    tool: [mimikatz, rubeus]
+  transformations:
+    - type: value_placeholders
+events:
+  - {CommandLine: 'C:\tmp\mimikatz.exe privilege::debug'}
+  - {CommandLine: 'rubeus asktgt'}
+  - {CommandLine: 'MIMIKATZ'}
+  - {CommandLine: 'whoami'}
+  - {Image: 'x'}
+matches: [0, 1, 2]
+known_failures:
+  test-pysigma:
+    type: output-difference
+    reason: "values of one field are not rendered as an in-list"
+    actual: ["CommandLine contains \"mimikatz\" or CommandLine contains \"rubeus\""]
+    reference: ["CommandLine in (\"*mimikatz*\", \"*rubeus*\")"]

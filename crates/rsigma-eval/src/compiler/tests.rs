@@ -509,7 +509,7 @@ fn test_compile_expand_modifier() {
         "path",
         &[Modifier::Expand],
         vec![SigmaValue::String(SigmaString::new(
-            "C:\\Users\\%username%\\Downloads",
+            "C:\\Users\\\\%username%\\Downloads",
         ))],
     )];
     let detection = compile_detection(&Detection::AllOf(items)).unwrap();
