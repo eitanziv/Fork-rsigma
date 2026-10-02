@@ -354,13 +354,8 @@ impl Backend for FibratusBackend {
             return Ok(String::new());
         }
         let joined = text_convert_condition_or(self.config, &non_empty);
-        // OR binds looser than AND (standard precedence), so an OR
-        // sub-expression nested inside an AND needs parens for correct
-        // evaluation. The trait dispatch site has no context to know
-        // when grouping is required, so wrap multi-child OR groups
-        // unconditionally. Extra parens at the top level are harmless
-        // and stripped by no one. Mirrors LynxDB's symmetric pattern
-        // for its inverted precedence.
+        // OR groups are always parenthesized so they nest safely under AND
+        // (see `convert_condition_group`).
         if non_empty.len() > 1 {
             Ok(format!("({joined})"))
         } else {
@@ -375,6 +370,19 @@ impl Backend for FibratusBackend {
             return Ok(String::new());
         }
         Ok(format!("not ({expr})"))
+    }
+
+    /// Fibratus groups in its own combinators: unary `not` only accepts a
+    /// parenthesized expression, OR groups are always parenthesized, and a
+    /// value list collapses into a single list clause, so walker grouping
+    /// would only add redundant parentheses.
+    fn convert_condition_group(
+        &self,
+        expr: &str,
+        _outer: TokenType,
+        _inner: TokenType,
+    ) -> Result<String> {
+        Ok(expr.to_string())
     }
 
     fn convert_ir_detection_item(

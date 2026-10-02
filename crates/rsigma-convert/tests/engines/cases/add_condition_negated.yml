@@ -1,0 +1,34 @@
+description: A negated pipeline add_condition with a value list negates the whole list.
+rule:
+  title: add condition negated
+  logsource: {category: process_creation, product: windows}
+  detection:
+    sel_image:
+      Image|endswith: 'cmd.exe'
+    sel_cmd:
+      CommandLine|contains: 'whoami'
+    condition: 1 of sel_*
+pipeline:
+  name: exclude users
+  priority: 10
+  transformations:
+    - id: user_exclusion
+      type: add_condition
+      negated: true
+      conditions:
+        User:
+          - alice
+          - bob
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', User: 'carol'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'whoami', User: 'bob'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', User: 'alice'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'dir', User: 'carol'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'whoami', User: 'carol'}
+matches: [0, 4]
+known_failures:
+  test-pysigma:
+    type: output-difference
+    reason: "the added condition is appended instead of prepended; selector operands are ordered by name instead of definition; values of one field are not rendered as an in-list"
+    actual: ["(CommandLine contains \"whoami\" or Image endswith \"cmd.exe\") and not (User=\"alice\" or User=\"bob\")"]
+    reference: ["not (User in (\"alice\", \"bob\")) and (Image endswith \"cmd.exe\" or CommandLine contains \"whoami\")"]

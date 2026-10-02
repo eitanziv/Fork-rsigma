@@ -177,15 +177,7 @@ impl Backend for LynxDbBackend {
         if non_empty.is_empty() {
             return Ok(String::new());
         }
-        let joined = text_convert_condition_and(self.config, &non_empty);
-        // AND binds loosest in LynxDB (unusual: NOT > OR > AND), so we must
-        // parenthesize AND groups to preserve Sigma's standard semantics when
-        // an AND is nested inside an OR.
-        if non_empty.len() > 1 {
-            Ok(format!("({joined})"))
-        } else {
-            Ok(joined)
-        }
+        Ok(text_convert_condition_and(self.config, &non_empty))
     }
 
     fn convert_condition_or(&self, exprs: &[String]) -> Result<String> {
@@ -198,6 +190,20 @@ impl Backend for LynxDbBackend {
 
     fn convert_condition_not(&self, expr: &str) -> Result<String> {
         Ok(text_convert_condition_not(self.config, expr))
+    }
+
+    fn convert_condition_group(
+        &self,
+        expr: &str,
+        outer: TokenType,
+        inner: TokenType,
+    ) -> Result<String> {
+        Ok(text_convert_condition_group(
+            self.config,
+            expr,
+            outer,
+            inner,
+        ))
     }
 
     // --- Field/value escaping ---
@@ -726,7 +732,7 @@ detection:
         );
         assert_eq!(
             q,
-            vec!["FROM main | search (FieldA=\"val1\" AND FieldB=\"val2\")"]
+            vec!["FROM main | search FieldA=\"val1\" AND FieldB=\"val2\""]
         );
     }
 
@@ -768,7 +774,7 @@ detection:
         );
         assert_eq!(
             q,
-            vec!["FROM main | search (FieldA=\"val1\" AND NOT FieldB=\"val2\")"]
+            vec!["FROM main | search FieldA=\"val1\" AND NOT FieldB=\"val2\""]
         );
     }
 
@@ -793,6 +799,76 @@ detection:
         assert_eq!(
             q,
             vec!["FROM main | search (FieldA=\"val1\" AND FieldB=\"val2\") OR FieldC=\"val3\""]
+        );
+    }
+
+    #[test]
+    fn condition_grouping_or_inside_and_is_bare() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    sel1:
+        FieldA: val1
+    sel2:
+        FieldB: val2
+    sel3:
+        FieldC: val3
+    condition: (sel1 or sel2) and sel3
+"#,
+        );
+        assert_eq!(
+            q,
+            vec!["FROM main | search FieldA=\"val1\" OR FieldB=\"val2\" AND FieldC=\"val3\""]
+        );
+    }
+
+    #[test]
+    fn condition_grouping_not_over_or() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        FieldA: val1
+    filter_1:
+        FieldB: val2
+    filter_2:
+        FieldC: val3
+    condition: selection and not 1 of filter_*
+"#,
+        );
+        assert_eq!(
+            q,
+            vec!["FROM main | search FieldA=\"val1\" AND NOT (FieldB=\"val2\" OR FieldC=\"val3\")"]
+        );
+    }
+
+    #[test]
+    fn condition_grouping_not_over_and() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        FieldA: val1
+    filter:
+        FieldB: val2
+        FieldC: val3
+    condition: selection and not filter
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![
+                "FROM main | search FieldA=\"val1\" AND NOT (FieldB=\"val2\" AND FieldC=\"val3\")"
+            ]
         );
     }
 
@@ -836,7 +912,7 @@ detection:
         );
         assert_eq!(
             q,
-            vec!["FROM main | search (CommandLine=\"whoami\" AND CommandLine=\"ipconfig\")"]
+            vec!["FROM main | search CommandLine=\"whoami\" AND CommandLine=\"ipconfig\""]
         );
     }
 
@@ -856,7 +932,7 @@ detection:
         );
         assert_eq!(
             q,
-            vec!["FROM main | search (FieldA=\"val1\" AND FieldB=\"val2\")"]
+            vec!["FROM main | search FieldA=\"val1\" AND FieldB=\"val2\""]
         );
     }
 

@@ -9,12 +9,139 @@
 use std::collections::HashMap;
 
 use rsigma_ir::{IrCondition, IrDetection, IrDetectionItem, IrMatcher, IrNumber};
-use rsigma_parser::Quantifier;
+use rsigma_parser::{Quantifier, SelectorPattern};
 
-use crate::backend::{Backend, CompareOp};
+use crate::backend::{Backend, CompareOp, TokenType};
 use crate::convert::field_has_positional_index;
 use crate::error::{ConvertError, Result};
 use crate::state::{ConversionState, ConvertResult};
+
+/// A converted operand and the operator at its top level (`None` for an
+/// atom).
+///
+/// The operator comes from the IR node shape rather than the rendered text,
+/// as pySigma groups by condition tree node: a value list is an OR even when
+/// a backend renders it as a single list clause.
+pub(crate) struct Operand {
+    pub(crate) expr: String,
+    pub(crate) op: Option<TokenType>,
+}
+
+impl Operand {
+    pub(crate) fn new(expr: String, op: Option<TokenType>) -> Self {
+        Self { expr, op }
+    }
+}
+
+fn group<B: Backend + ?Sized>(backend: &B, outer: TokenType, operand: Operand) -> Result<String> {
+    match operand.op {
+        Some(inner) if !operand.expr.is_empty() => {
+            backend.convert_condition_group(&operand.expr, outer, inner)
+        }
+        _ => Ok(operand.expr),
+    }
+}
+
+/// Join operands with AND (`all`) or OR, grouping each one first. A single
+/// operand is passed through ungrouped.
+pub(crate) fn join<B: Backend + ?Sized>(
+    backend: &B,
+    all: bool,
+    operands: Vec<Operand>,
+) -> Result<String> {
+    let outer = if all { TokenType::AND } else { TokenType::OR };
+    let parts = if operands.len() == 1 {
+        operands.into_iter().map(|o| o.expr).collect()
+    } else {
+        operands
+            .into_iter()
+            .map(|o| group(backend, outer, o))
+            .collect::<Result<Vec<_>>>()?
+    };
+    if all {
+        backend.convert_condition_and(&parts)
+    } else {
+        backend.convert_condition_or(&parts)
+    }
+}
+
+/// Negate an operand, grouping it first.
+pub(crate) fn negate<B: Backend + ?Sized>(backend: &B, operand: Operand) -> Result<String> {
+    let expr = group(backend, TokenType::NOT, operand)?;
+    backend.convert_condition_not(&expr)
+}
+
+fn list_op<T>(
+    items: &[T],
+    op: TokenType,
+    item_op: impl Fn(&T) -> Option<TokenType>,
+) -> Option<TokenType> {
+    match items {
+        [] => None,
+        [only] => item_op(only),
+        _ => Some(op),
+    }
+}
+
+/// Top-level operator of a converted matcher.
+pub(crate) fn matcher_op(matcher: &IrMatcher) -> Option<TokenType> {
+    match matcher {
+        IrMatcher::AnyOf(ms) => list_op(ms, TokenType::OR, matcher_op),
+        IrMatcher::AllOf(ms) => list_op(ms, TokenType::AND, matcher_op),
+        IrMatcher::Not(_) => Some(TokenType::NOT),
+        _ => None,
+    }
+}
+
+/// Top-level operator of a converted detection.
+pub(crate) fn detection_op(det: &IrDetection) -> Option<TokenType> {
+    match det {
+        IrDetection::AllOf(items) => list_op(items, TokenType::AND, |it| matcher_op(&it.matcher)),
+        IrDetection::AnyOf(dets) => list_op(dets, TokenType::OR, detection_op),
+        IrDetection::And(dets) => list_op(dets, TokenType::AND, detection_op),
+        IrDetection::Keywords(matcher) => matcher_op(matcher),
+        IrDetection::ArrayMatch { .. } => None,
+        IrDetection::Conditional { named, condition } => condition_op(condition, named),
+    }
+}
+
+/// Top-level operator of a converted condition.
+pub(crate) fn condition_op(
+    cond: &IrCondition,
+    detections: &HashMap<String, IrDetection>,
+) -> Option<TokenType> {
+    match cond {
+        IrCondition::Detection(name) => detections.get(name).and_then(detection_op),
+        IrCondition::And(exprs) => list_op(exprs, TokenType::AND, |e| condition_op(e, detections)),
+        IrCondition::Or(exprs) => list_op(exprs, TokenType::OR, |e| condition_op(e, detections)),
+        IrCondition::Not(_) => Some(TokenType::NOT),
+        IrCondition::Selector {
+            quantifier,
+            pattern,
+        } => {
+            let op = if matches!(quantifier, Quantifier::All) {
+                TokenType::AND
+            } else {
+                TokenType::OR
+            };
+            let names = selected_detections(detections, pattern);
+            list_op(&names, op, |n| detections.get(*n).and_then(detection_op))
+        }
+    }
+}
+
+/// Detection names a selector matches, sorted for deterministic output.
+pub(crate) fn selected_detections<'a>(
+    detections: &'a HashMap<String, IrDetection>,
+    pattern: &SelectorPattern,
+) -> Vec<&'a String> {
+    let mut names: Vec<&String> = detections
+        .keys()
+        .filter(|n| pattern.matches_detection_name(n))
+        .collect();
+    names.sort();
+    names
+}
 
 /// Resolve a leaf `ConvertResult`: a direct query fragment, or a deferred part
 /// queued in the state that contributes an empty placeholder.
@@ -46,25 +173,24 @@ pub fn default_convert_ir_detection<B: Backend + ?Sized>(
 ) -> Result<String> {
     match det {
         IrDetection::AllOf(items) => {
-            let parts: Vec<String> = items
+            let parts = items
                 .iter()
-                .map(|it| backend.convert_ir_detection_item(it, state))
+                .map(|it| {
+                    let expr = backend.convert_ir_detection_item(it, state)?;
+                    Ok(Operand::new(expr, matcher_op(&it.matcher)))
+                })
                 .collect::<Result<Vec<_>>>()?;
-            backend.convert_condition_and(&parts)
+            join(backend, true, parts)
         }
-        IrDetection::AnyOf(dets) => {
-            let parts: Vec<String> = dets
+        IrDetection::AnyOf(dets) | IrDetection::And(dets) => {
+            let parts = dets
                 .iter()
-                .map(|d| backend.convert_ir_detection(d, state))
+                .map(|d| {
+                    let expr = backend.convert_ir_detection(d, state)?;
+                    Ok(Operand::new(expr, detection_op(d)))
+                })
                 .collect::<Result<Vec<_>>>()?;
-            backend.convert_condition_or(&parts)
-        }
-        IrDetection::And(dets) => {
-            let parts: Vec<String> = dets
-                .iter()
-                .map(|d| backend.convert_ir_detection(d, state))
-                .collect::<Result<Vec<_>>>()?;
-            backend.convert_condition_and(&parts)
+            join(backend, matches!(det, IrDetection::And(_)), parts)
         }
         IrDetection::Keywords(matcher) => {
             let subs: Vec<&IrMatcher> = match matcher {
@@ -138,27 +264,25 @@ fn convert_matcher_list<B: Backend + ?Sized>(
     field: &str,
     ms: &[IrMatcher],
     state: &mut ConversionState,
-) -> Result<Vec<String>> {
+) -> Result<Vec<Operand>> {
     let mut parts = Vec::with_capacity(ms.len());
     for m in ms {
         if let Some(q) = convert_leaf(backend, field, m, state)? {
-            parts.push(q);
+            parts.push(Operand::new(q, matcher_op(m)));
         }
     }
     Ok(parts)
 }
 
-fn join_parts<B: Backend + ?Sized>(backend: &B, parts: Vec<String>, all: bool) -> Result<String> {
-    if parts.is_empty() {
-        return Ok(String::new());
-    }
-    if parts.len() == 1 {
-        return Ok(parts.into_iter().next().unwrap());
-    }
-    if all {
-        backend.convert_condition_and(&parts)
-    } else {
-        backend.convert_condition_or(&parts)
+fn join_parts<B: Backend + ?Sized>(
+    backend: &B,
+    mut parts: Vec<Operand>,
+    all: bool,
+) -> Result<String> {
+    match parts.len() {
+        0 => Ok(String::new()),
+        1 => Ok(parts.remove(0).expr),
+        _ => join(backend, all, parts),
     }
 }
 
@@ -275,19 +399,26 @@ fn convert_not<B: Backend + ?Sized>(
     state: &mut ConversionState,
 ) -> Result<Option<String>> {
     let deferred_before = state.deferred.len();
-    let (expr, compound) = match inner {
+    let (expr, op) = match inner {
         IrMatcher::AnyOf(ms) | IrMatcher::AllOf(ms) => {
             let parts = convert_matcher_list(backend, field, ms, state)?;
-            let compound = parts.len() > 1;
+            let op = match parts.as_slice() {
+                [] => None,
+                [only] => only.op,
+                _ => matcher_op(inner),
+            };
             let all = matches!(inner, IrMatcher::AllOf(_));
             let expr = if parts.is_empty() {
                 None
             } else {
                 Some(join_parts(backend, parts, all)?)
             };
-            (expr, compound)
+            (expr, op)
         }
-        other => (convert_leaf(backend, field, other, state)?, false),
+        other => (
+            convert_leaf(backend, field, other, state)?,
+            matcher_op(other),
+        ),
     };
 
     let deferred = &mut state.deferred[deferred_before..];
@@ -312,10 +443,10 @@ fn convert_not<B: Backend + ?Sized>(
         return Ok(None);
     };
     if contains_field_ref(inner) {
+        let expr = group(backend, TokenType::NOT, Operand::new(expr, op))?;
         return Ok(Some(backend.convert_negated_field_ref(field, &expr)?));
     }
-    let expr = if compound { format!("({expr})") } else { expr };
-    Ok(Some(backend.convert_condition_not(&expr)?))
+    Ok(Some(negate(backend, Operand::new(expr, op))?))
 }
 
 fn contains_field_ref(matcher: &IrMatcher) -> bool {
@@ -342,49 +473,38 @@ pub fn convert_block_condition<B: Backend + ?Sized>(
                 .ok_or_else(|| ConvertError::InvalidIdentifier(name.clone()))?;
             backend.convert_ir_detection(det, state)
         }
-        IrCondition::And(exprs) => {
+        IrCondition::And(exprs) | IrCondition::Or(exprs) => {
             let parts = exprs
                 .iter()
                 .map(|e| {
-                    let sql = convert_block_condition(backend, e, named, state)?;
-                    Ok(if matches!(e, IrCondition::Or(_)) {
-                        format!("({sql})")
-                    } else {
-                        sql
-                    })
+                    let expr = convert_block_condition(backend, e, named, state)?;
+                    Ok(Operand::new(expr, condition_op(e, named)))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            backend.convert_condition_and(&parts)
-        }
-        IrCondition::Or(exprs) => {
-            let parts = exprs
-                .iter()
-                .map(|e| convert_block_condition(backend, e, named, state))
-                .collect::<Result<Vec<_>>>()?;
-            backend.convert_condition_or(&parts)
+            join(backend, matches!(expr, IrCondition::And(_)), parts)
         }
         IrCondition::Not(inner) => {
             let part = convert_block_condition(backend, inner, named, state)?;
-            backend.convert_condition_not(&format!("({part})"))
+            negate(backend, Operand::new(part, condition_op(inner, named)))
         }
         IrCondition::Selector {
             quantifier,
             pattern,
         } => {
-            let mut names: Vec<&String> = named
-                .keys()
-                .filter(|n| pattern.matches_detection_name(n))
-                .collect();
-            names.sort();
-            let parts = names
-                .iter()
-                .map(|n| backend.convert_ir_detection(&named[*n], state))
+            let all = match quantifier {
+                Quantifier::Any => false,
+                Quantifier::All => true,
+                Quantifier::Count(_) => return Err(ConvertError::UnsupportedArrayMatching),
+            };
+            let parts = selected_detections(named, pattern)
+                .into_iter()
+                .map(|n| {
+                    let det = &named[n];
+                    let expr = backend.convert_ir_detection(det, state)?;
+                    Ok(Operand::new(expr, detection_op(det)))
+                })
                 .collect::<Result<Vec<_>>>()?;
-            match quantifier {
-                Quantifier::Any => backend.convert_condition_or(&parts),
-                Quantifier::All => backend.convert_condition_and(&parts),
-                Quantifier::Count(_) => Err(ConvertError::UnsupportedArrayMatching),
-            }
+            join(backend, all, parts)
         }
     }
 }

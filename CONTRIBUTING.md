@@ -81,6 +81,8 @@ description: What the case checks.
 rule: { ... }            # a Sigma rule
 events: [ ... ]          # one map per event
 matches: [0, 2]          # indexes of the events the rule must match
+pipeline: |              # optional: processing pipeline YAML applied before the engine's own pipelines
+  ...
 unsupported: [lynxdb]    # optional: engines whose backend must reject the rule
 known_failures:          # optional: engine label to a confirmed defect
   postgres-jsonb:
@@ -103,6 +105,12 @@ cargo test -p rsigma-convert --test engine_test_backend -- --ignored
 cargo test -p rsigma-convert --test engine_fibratus -- --ignored
 ```
 
+The PostgreSQL and LynxDB runs also check SigmaHQ rules whose conditions need grouping. For each rule that uses only plain string matches they build events from the rule's own values, take the expected matches from `engine eval`, and require the engine to agree (PostgreSQL in both modes). LynxDB only takes rules whose values avoid characters it renders or matches wrongly. Point them at a SigmaHQ checkout to run them. Without one they are skipped locally and fail in CI:
+
+```bash
+RSIGMA_SIGMA_CORPUS=/path/to/sigma cargo test -p rsigma-convert --test engine_postgres -- --ignored
+RSIGMA_SIGMA_CORPUS=/path/to/sigma cargo test -p rsigma-convert --test engine_lynxdb -- --ignored
+```
 In CI each engine has its own workflow (`.github/workflows/engine-*.yml`) that runs only when its backend, its harness, the shared cases, or the conversion core changes.
 
 ## Documentation

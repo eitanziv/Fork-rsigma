@@ -4,8 +4,10 @@
 //! JSONB column (`json_field`), and events spread over typed columns, one per
 //! field (integers as `bigint`, everything else as `text`). The generated
 //! query runs unmodified as a subquery, and the matched rows are compared with
-//! the case expectations. Run with
-//! `cargo test -p rsigma-convert --test engine_postgres -- --ignored`.
+//! the case expectations. A second test runs SigmaHQ rules whose conditions
+//! need grouping against eval; it reads the checkout in `RSIGMA_SIGMA_CORPUS`.
+//! Run with
+//! `RSIGMA_SIGMA_CORPUS=<sigma checkout> cargo test -p rsigma-convert --test engine_postgres -- --ignored`.
 
 mod engines;
 
@@ -13,8 +15,8 @@ use std::collections::{BTreeMap, HashMap};
 
 use engines::{Case, IDX_FIELD, Outcome};
 use rsigma_convert::backends::postgres::PostgresBackend;
-use testcontainers::ImageExt;
 use testcontainers::runners::AsyncRunner;
+use testcontainers::{ContainerAsync, ImageExt};
 use testcontainers_modules::postgres::Postgres;
 use tokio_postgres::NoTls;
 
@@ -142,9 +144,7 @@ fn db_error(e: &tokio_postgres::Error) -> String {
         .unwrap_or_else(|| e.to_string())
 }
 
-#[tokio::test]
-#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
-async fn postgres_executes_cases() {
+async fn start_postgres() -> (ContainerAsync<Postgres>, tokio_postgres::Client) {
     engines::require_docker();
     let container = Postgres::default()
         .with_tag(POSTGRES_TAG)
@@ -159,8 +159,11 @@ async fn postgres_executes_cases() {
     .await
     .expect("failed to connect to PostgreSQL");
     tokio::spawn(connection);
+    (container, client)
+}
 
-    let cases = engines::load_cases();
+/// Run every case in both storage modes and return the failures.
+async fn run_cases(client: &tokio_postgres::Client, prefix: &str, cases: &[Case]) -> Vec<String> {
     let mut failures = Vec::new();
     for (mode, label) in [
         (Mode::Jsonb, "postgres-jsonb"),
@@ -168,10 +171,58 @@ async fn postgres_executes_cases() {
     ] {
         let mut results = Vec::new();
         for (i, case) in cases.iter().enumerate() {
-            let table = format!("{}_case_{i}", label.replace('-', "_"));
-            results.push((case.clone(), run_case(&client, &table, mode, case).await));
+            let table = format!("{prefix}_{}_{i}", label.replace('-', "_"));
+            results.push((case.clone(), run_case(client, &table, mode, case).await));
         }
         failures.extend(engines::check_outcomes(label, &results));
     }
+    failures
+}
+
+#[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
+async fn postgres_executes_cases() {
+    let (_container, client) = start_postgres().await;
+    let failures = run_cases(&client, "case", &engines::load_cases()).await;
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Differential test against eval over the SigmaHQ rules whose conditions
+/// need grouping (see `engines::corpus`).
+#[tokio::test]
+#[ignore = "engine test: needs Docker and a SigmaHQ checkout in RSIGMA_SIGMA_CORPUS; run by the PostgreSQL engine workflow"]
+async fn postgres_agrees_with_eval_on_sigma_corpus() {
+    let Some(corpus) = std::env::var_os("RSIGMA_SIGMA_CORPUS") else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "set RSIGMA_SIGMA_CORPUS to a SigmaHQ checkout"
+        );
+        eprintln!("skipping: RSIGMA_SIGMA_CORPUS is not set");
+        return;
+    };
+    let sample = engines::corpus::grouping_cases(std::path::Path::new(&corpus), |case| {
+        engines::convert(&backend_for("t", Mode::Jsonb), case, &[], "default")
+            .is_ok_and(|q| q.len() == 1)
+    });
+    let with_both = sample
+        .cases
+        .iter()
+        .filter(|c| !c.matches.is_empty() && c.matches.len() < c.events.len())
+        .count();
+    eprintln!(
+        "{} rule files, {} need grouping, {} use only plain string values, {} convert; {} have matching and non-matching events",
+        sample.files,
+        sample.needs_grouping,
+        sample.plain_values,
+        sample.cases.len(),
+        with_both,
+    );
+    assert!(
+        with_both >= 1000,
+        "only {with_both} corpus rules have both matching and non-matching events"
+    );
+
+    let (_container, client) = start_postgres().await;
+    let failures = run_cases(&client, "corpus", &sample.cases).await;
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

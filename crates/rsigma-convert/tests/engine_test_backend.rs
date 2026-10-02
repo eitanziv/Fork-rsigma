@@ -26,7 +26,7 @@ fn test_backend_matches_pysigma() {
 
     let request: Vec<Value> = cases
         .iter()
-        .map(|c| json!({"name": c.name, "rule": c.rule_yaml}))
+        .map(|c| json!({"name": c.name, "rule": c.rule_yaml, "pipeline": c.pipeline_yaml}))
         .collect();
     let mut child = Command::new("docker")
         .args(["run", "--rm", "-i", &image])

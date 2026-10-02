@@ -176,6 +176,20 @@ impl Backend for TextQueryTestBackend {
         Ok(text_convert_condition_not(self.config, expr))
     }
 
+    fn convert_condition_group(
+        &self,
+        expr: &str,
+        outer: TokenType,
+        inner: TokenType,
+    ) -> Result<String> {
+        Ok(text_convert_condition_group(
+            self.config,
+            expr,
+            outer,
+            inner,
+        ))
+    }
+
     // --- Field/value escaping ---
 
     fn escape_and_quote_field(&self, field: &str) -> String {
@@ -486,6 +500,15 @@ impl Backend for MandatoryPipelineTestBackend {
 
     fn convert_condition_not(&self, expr: &str) -> Result<String> {
         self.0.convert_condition_not(expr)
+    }
+
+    fn convert_condition_group(
+        &self,
+        expr: &str,
+        outer: TokenType,
+        inner: TokenType,
+    ) -> Result<String> {
+        self.0.convert_condition_group(expr, outer, inner)
     }
 
     fn escape_and_quote_field(&self, field: &str) -> String {
@@ -948,6 +971,76 @@ detection:
             queries,
             vec!["CommandLine=\"whoami\" and CommandLine=\"ipconfig\""]
         );
+    }
+
+    #[test]
+    fn test_value_list_under_and_is_grouped() {
+        let queries = convert_rule_yaml(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        Image:
+            - a
+            - b
+        CommandLine: x
+    condition: selection
+"#,
+        );
+        assert_eq!(
+            queries,
+            vec!["(Image=\"a\" or Image=\"b\") and CommandLine=\"x\""]
+        );
+    }
+
+    #[test]
+    fn test_not_groups_compound_operands_only() {
+        let queries = convert_rule_yaml(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        Image: a
+    filter_1:
+        CommandLine: b
+    filter_2:
+        ParentImage: c
+        User: d
+    filter_3:
+        User: e
+    condition: selection and not 1 of filter_* and not filter_3 and not (filter_1 and not filter_3)
+"#,
+        );
+        assert_eq!(
+            queries,
+            vec![
+                "Image=\"a\" and not (CommandLine=\"b\" or ParentImage=\"c\" and User=\"d\" or User=\"e\") \
+                 and not User=\"e\" and not (CommandLine=\"b\" and not User=\"e\")"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_and_under_or_is_bare() {
+        let queries = convert_rule_yaml(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    sel_1:
+        Image: a
+        User: b
+    sel_2:
+        Image: c
+    condition: 1 of sel_*
+"#,
+        );
+        assert_eq!(queries, vec!["Image=\"a\" and User=\"b\" or Image=\"c\""]);
     }
 
     #[test]

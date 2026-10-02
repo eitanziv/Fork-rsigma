@@ -2173,8 +2173,7 @@ detection:
         "{q}"
     );
     // The per-element negation lowers to a SQL NOT inside the element scope.
-    assert!(q.contains("NOT ("), "{q}");
-    assert!(q.contains("__sigma_e0->>'protocol' = 'TCP'"), "{q}");
+    assert!(q.contains("NOT __sigma_e0->>'protocol' = 'TCP'"), "{q}");
     assert!(q.contains(" AND "), "{q}");
 }
 

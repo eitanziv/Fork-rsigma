@@ -1,0 +1,18 @@
+description: NOT over a two-field filter negates the whole AND.
+rule:
+  title: not over and
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: 'cmd.exe'
+    filter:
+      CommandLine|contains: 'shell32'
+      ParentImage|endswith: 'explorer.exe'
+    condition: selection and not filter
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'shell32', ParentImage: 'C:\explorer.exe'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'shell32', ParentImage: 'C:\services.exe'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\services.exe'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\explorer.exe'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'dir', ParentImage: 'C:\services.exe'}
+matches: [1, 2, 3]

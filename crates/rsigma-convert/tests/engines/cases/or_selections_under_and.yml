@@ -1,0 +1,19 @@
+description: An OR of selections nested under AND keeps its grouping.
+rule:
+  title: or selections under and
+  logsource: {category: process_creation, product: windows}
+  detection:
+    sel_image:
+      Image|endswith: 'cmd.exe'
+    sel_cmd:
+      CommandLine|contains: 'whoami'
+    parent:
+      ParentImage|endswith: 'explorer.exe'
+    condition: (sel_image or sel_cmd) and parent
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\explorer.exe'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'whoami', ParentImage: 'C:\explorer.exe'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\services.exe'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'dir', ParentImage: 'C:\explorer.exe'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'whoami', ParentImage: 'C:\services.exe'}
+matches: [0, 1]

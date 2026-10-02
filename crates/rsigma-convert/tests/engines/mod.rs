@@ -16,13 +16,15 @@
 
 #![allow(dead_code)]
 
+pub mod corpus;
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use rsigma_convert::backend::Backend;
 use rsigma_convert::convert_collection;
-use rsigma_eval::pipeline::Pipeline;
+use rsigma_eval::pipeline::{Pipeline, parse_pipeline};
 use rsigma_eval::{Engine, JsonEvent};
 use rsigma_parser::parse_sigma_yaml;
 use serde_json::Value;
@@ -47,6 +49,8 @@ pub struct Case {
     pub name: String,
     pub description: String,
     pub rule_yaml: String,
+    /// Processing pipeline applied before any engine pipeline, and in eval.
+    pub pipeline_yaml: Option<String>,
     pub logsource_category: Option<String>,
     pub events: Vec<Value>,
     pub matches: Vec<usize>,
@@ -63,6 +67,12 @@ impl Case {
 
     pub fn known_failure(&self, engine: &str) -> Option<&KnownFailure> {
         self.known_failures.get(engine)
+    }
+
+    pub fn pipeline(&self) -> Option<Pipeline> {
+        self.pipeline_yaml.as_ref().map(|p| {
+            parse_pipeline(p).unwrap_or_else(|e| panic!("{}: invalid pipeline: {e}", self.name))
+        })
     }
 
     /// Events with [`IDX_FIELD`] added.
@@ -201,6 +211,9 @@ fn load_case(path: &Path) -> Case {
     Case {
         description: get("description").as_str().unwrap_or_default().to_string(),
         rule_yaml: yaml_serde::to_string(rule).unwrap(),
+        pipeline_yaml: doc
+            .get("pipeline")
+            .map(|p| yaml_serde::to_string(p).unwrap()),
         logsource_category,
         events,
         matches,
@@ -269,8 +282,10 @@ pub fn convert(
 ) -> Result<Vec<String>, String> {
     let collection = parse_sigma_yaml(&case.rule_yaml)
         .unwrap_or_else(|e| panic!("{}: rule does not parse: {e}", case.name));
-    let output =
-        convert_collection(backend, &collection, pipelines, format).map_err(|e| e.to_string())?;
+    let mut all_pipelines: Vec<Pipeline> = case.pipeline().into_iter().collect();
+    all_pipelines.extend_from_slice(pipelines);
+    let output = convert_collection(backend, &collection, &all_pipelines, format)
+        .map_err(|e| e.to_string())?;
     if !output.errors.is_empty() {
         return Err(format!("{:?}", output.errors));
     }
@@ -284,7 +299,10 @@ pub fn convert(
 /// Indices of the case events rsigma's own evaluator matches.
 pub fn eval_matches(case: &Case) -> Vec<usize> {
     let collection = parse_sigma_yaml(&case.rule_yaml).unwrap();
-    let mut engine = Engine::new();
+    let mut engine = match case.pipeline() {
+        Some(pipeline) => Engine::new_with_pipeline(pipeline),
+        None => Engine::new(),
+    };
     engine
         .add_collection(&collection)
         .unwrap_or_else(|e| panic!("{}: rule does not compile: {e}", case.name));

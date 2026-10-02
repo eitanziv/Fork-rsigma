@@ -14,6 +14,7 @@ use rsigma_parser::{Quantifier, SigmaRule};
 
 use crate::backend::Backend;
 use crate::error::{ConvertError, Result};
+use crate::ir_convert::{Operand, condition_op, detection_op, join, negate, selected_detections};
 use crate::state::ConversionState;
 
 /// Walk an [`IrCondition`] and convert each node into a query fragment.
@@ -21,6 +22,7 @@ use crate::state::ConversionState;
 /// Selectors are resolved here against the rule's detections, mirroring the
 /// parser condition walker: an empty match set is rejected, `any` / `1 of`
 /// become OR, `all of` becomes AND, and `N of` (N > 1) is unsupported.
+/// Compound operands are grouped through [`Backend::convert_condition_group`].
 pub fn convert_ir_condition(
     backend: &dyn Backend,
     expr: &IrCondition,
@@ -34,59 +36,49 @@ pub fn convert_ir_condition(
             })?;
             backend.convert_ir_detection(det, state)
         }
-        IrCondition::And(exprs) => {
-            let parts: Vec<String> = exprs
+        IrCondition::And(exprs) | IrCondition::Or(exprs) => {
+            let parts = exprs
                 .iter()
-                .map(|e| convert_ir_condition(backend, e, detections, state))
+                .map(|e| {
+                    let part = convert_ir_condition(backend, e, detections, state)?;
+                    Ok(Operand::new(part, condition_op(e, detections)))
+                })
                 .collect::<Result<Vec<_>>>()?;
-            backend.convert_condition_and(&parts)
-        }
-        IrCondition::Or(exprs) => {
-            let parts: Vec<String> = exprs
-                .iter()
-                .map(|e| convert_ir_condition(backend, e, detections, state))
-                .collect::<Result<Vec<_>>>()?;
-            backend.convert_condition_or(&parts)
+            join(backend, matches!(expr, IrCondition::And(_)), parts)
         }
         IrCondition::Not(inner) => {
             let part = convert_ir_condition(backend, inner, detections, state)?;
-            backend.convert_condition_not(&part)
+            negate(backend, Operand::new(part, condition_op(inner, detections)))
         }
         IrCondition::Selector {
             quantifier,
             pattern,
         } => {
-            let mut names: Vec<&String> = detections
-                .keys()
-                .filter(|n| pattern.matches_detection_name(n))
-                .collect();
+            let names = selected_detections(detections, pattern);
             if names.is_empty() {
                 return Err(ConvertError::RuleConversion(
                     "selector matched no detections".into(),
                 ));
             }
-            // Deterministic output regardless of HashMap iteration order.
-            names.sort();
+            let all = match quantifier {
+                Quantifier::Any | Quantifier::Count(1) => false,
+                Quantifier::All => true,
+                Quantifier::Count(n) => {
+                    return Err(ConvertError::RuleConversion(format!(
+                        "'{n} of' quantifier not supported in conversion"
+                    )));
+                }
+            };
 
-            let parts: Vec<String> = names
-                .iter()
+            let parts = names
+                .into_iter()
                 .map(|name| {
-                    let det = detections.get(*name).ok_or_else(|| {
-                        ConvertError::RuleConversion(format!(
-                            "selector matched detection '{name}' but it disappeared before lookup"
-                        ))
-                    })?;
-                    backend.convert_ir_detection(det, state)
+                    let det = &detections[name];
+                    let part = backend.convert_ir_detection(det, state)?;
+                    Ok(Operand::new(part, detection_op(det)))
                 })
                 .collect::<Result<Vec<_>>>()?;
-
-            match quantifier {
-                Quantifier::Any | Quantifier::Count(1) => backend.convert_condition_or(&parts),
-                Quantifier::All => backend.convert_condition_and(&parts),
-                Quantifier::Count(n) => Err(ConvertError::RuleConversion(format!(
-                    "'{n} of' quantifier not supported in conversion"
-                ))),
-            }
+            join(backend, all, parts)
         }
     }
 }

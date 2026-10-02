@@ -268,6 +268,7 @@ Key methods:
 | `convert_field_exists` | Field existence check |
 | `convert_keyword_str` / `convert_keyword_num` | Unbound/keyword value matching |
 | `convert_condition_and` / `convert_condition_or` / `convert_condition_not` | Combine sub-expressions |
+| `convert_condition_group` | Parenthesize a compound operand for its parent operator; the default follows `NOT` > `AND` > `OR` and always groups under `NOT`, as pySigma does. Text backends delegate to `text_convert_condition_group` so their `precedence` applies |
 | `finish_query` | Assemble final query with deferred parts |
 | `finalize_query` | Apply output format to a query |
 | `finalize_output` | Finalize the complete output |
@@ -398,11 +399,12 @@ The LynxDB backend (`LynxDbBackend`) generates SPL2/Lynx Flow queries for the [L
 
 ### Boolean precedence
 
-LynxDB's parser uses non-standard boolean operator precedence: `NOT > OR > AND`. This differs from most query languages where AND binds tighter than OR. The backend explicitly parenthesizes AND groups to preserve Sigma's intended logic:
+LynxDB's parser uses non-standard boolean operator precedence: `NOT > OR > AND`. This differs from most query languages where AND binds tighter than OR. The backend parenthesizes an AND nested under an OR and every compound operand of NOT, and leaves an OR nested under an AND bare because it already binds tighter:
 
 ```
-Sigma: A AND B OR C    (intended: (A AND B) OR C)
-Query: (A AND B) OR C  (explicit parens prevent misparse as A AND (B OR C))
+Sigma: (A and B) or C        Query: (A AND B) OR C
+Sigma: (A or B) and C        Query: A OR B AND C
+Sigma: A and not (B or C)    Query: A AND NOT (B OR C)
 ```
 
 ### Deferred expressions
