@@ -76,3 +76,35 @@ fn validate_with_pipeline() {
         .success()
         .stdout(predicate::str::contains("Pipeline applied:"));
 }
+
+#[test]
+fn validate_rejects_an_unknown_correlation_reference() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("correlation.yml"),
+        r#"
+title: Unknown Reference
+correlation:
+    type: event_count
+    rules: [missing_rule]
+    group-by: [User]
+    timespan: 5m
+    condition:
+        gte: 2
+"#,
+    )
+    .unwrap();
+
+    rsigma()
+        .args([
+            "rule",
+            "validate",
+            dir.path().to_str().unwrap(),
+            "--verbose",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "unknown rule reference: missing_rule",
+        ));
+}
