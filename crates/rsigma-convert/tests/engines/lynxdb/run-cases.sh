@@ -16,9 +16,25 @@ until lynxdb health >/dev/null 2>&1; do
   sleep 0.1
 done
 
+expected=0
 for dir in /work/cases/*/; do
   n=$(basename "$dir")
   lynxdb ingest "${dir}events.ndjson" --index "c${n}" >/dev/null
+  expected=$((expected + $(grep -c . "${dir}events.ndjson")))
+done
+
+# Buffered and flushed events take different query paths with different
+# results, so query only once every event is in a segment, as in production.
+i=0
+until lynxdb status -F json | grep -q '"buffered_events": 0,' &&
+  lynxdb status -F json | grep -q "\"total_events\": ${expected},"; do
+  i=$((i + 1))
+  if [ "$i" -gt 300 ]; then
+    echo "LynxDB did not flush ${expected} events" >&2
+    lynxdb status -F json >&2
+    exit 1
+  fi
+  sleep 0.1
 done
 
 for q in /work/cases/*/q*.txt; do

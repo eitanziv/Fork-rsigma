@@ -2,8 +2,9 @@
 //!
 //! The image in `tests/engines/lynxdb/` starts a pinned LynxDB release, ingests
 //! each case's events into its own index (`c<n>`, selected through the
-//! backend's `index` pipeline state), runs the generated queries unmodified,
-//! and reports the matched events. Run with
+//! backend's `index` pipeline state), waits until every event is flushed to a
+//! segment, runs the generated queries unmodified, and reports the matched
+//! events. Run with
 //! `cargo test -p rsigma-convert --test engine_lynxdb -- --ignored`.
 
 mod engines;
@@ -62,13 +63,13 @@ fn collect(dir: &Path, n: usize, query_count: usize) -> Result<Outcome, String> 
         for line in read("out").lines().filter(|l| l.starts_with('{')) {
             let row: serde_json::Value =
                 serde_json::from_str(line).map_err(|e| format!("unparseable row {line}: {e}"))?;
-            let idx = row
-                .get(IDX_FIELD)
-                .and_then(|v| {
-                    v.as_u64()
-                        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
-                })
-                .ok_or_else(|| format!("row without {IDX_FIELD}: {line}"))?;
+            // Rows read from segments carry only the fields the query
+            // references, so take the index from the original event.
+            let idx = row["_raw"]
+                .as_str()
+                .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+                .and_then(|raw| raw[IDX_FIELD].as_u64())
+                .ok_or_else(|| format!("row without {IDX_FIELD} in _raw: {line}"))?;
             matched.push(idx as usize);
         }
     }

@@ -11,3 +11,5 @@ events:
   - {CommandLine: 'x'}
   - {Image: 'C:\x.exe'}
 matches: [0]
+known_failures:
+  lynxdb: equality with an empty string matches nothing once events are flushed to segments

@@ -13,3 +13,4 @@ matches: [0]
 known_failures:
   postgres-jsonb: re renders as the case-insensitive ~* operator
   postgres-columns: re renders as the case-insensitive ~* operator
+  lynxdb: the =~ operator matches nothing once events are flushed to segments, while match() does
