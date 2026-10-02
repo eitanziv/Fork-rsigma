@@ -392,3 +392,16 @@ fn neq_inside_an_array_scope_matches_members_without_the_field() {
     assert!(hits(json!({"connections": [{"port": 1}]})));
     assert!(hits(json!({"connections": [{"dest": "a"}, {}]})));
 }
+
+#[test]
+fn empty_value_list_is_a_null_check() {
+    let events = [
+        json!({"User": null}),
+        json!({"Image": "x"}),
+        json!({"User": ""}),
+        json!({"User": "bob"}),
+    ];
+    assert_eq!(matching("selection:\n  User: []", &events), [0, 1]);
+    assert_eq!(matching("selection:\n  User|contains: []", &events), [0, 1]);
+    assert_eq!(matching("selection:\n  User|neq: []", &events), [2, 3]);
+}

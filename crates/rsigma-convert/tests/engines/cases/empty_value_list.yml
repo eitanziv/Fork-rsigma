@@ -1,0 +1,27 @@
+description: An empty value list is a null check, so it matches a missing or null field.
+rule:
+  title: empty value list
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      User: []
+    condition: selection
+events:
+  - {User: null}
+  - {Image: 'x'}
+  - {User: ''}
+  - {User: 'bob'}
+matches: [0, 1]
+known_failures:
+  lynxdb:
+    type: match-mismatch
+    reason: "NOT field=* does not match a field that is present with a null value"
+    actual: [1]
+  fibratus:
+    type: match-mismatch
+    reason: "null renders as = '', which matches an empty string instead of an absent field"
+    actual: [2]
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "null renders as = '', which matches an empty string instead of an absent field"
+    actual: [2]
