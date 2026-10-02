@@ -467,7 +467,7 @@ where
                 }
                 item.matcher.matches(&value, event)
             } else {
-                matches!(item.matcher, CompiledMatcher::Null)
+                item.matcher.matches_absent()
             }
         }
         None => item.matcher.matches_keyword(event),
@@ -524,14 +524,12 @@ fn collect_detection_fields(
                                 ));
                             }
                         } else if level != MatchDetailLevel::Off
-                            && matches!(
-                                item.matcher,
-                                CompiledMatcher::Null | CompiledMatcher::Exists(false)
-                            )
+                            && (item.exists == Some(false) || item.matcher.matches_absent())
                         {
-                            // Field absent and matched by the `Null` matcher or
-                            // an `|exists: false` assertion. Never reported at
-                            // `Off` (preserves wire shape).
+                            // Field absent and matched by a matcher that holds
+                            // for absent fields or an `|exists: false`
+                            // assertion. Never reported at `Off` (preserves
+                            // wire shape).
                             out.push(make_field_match(
                                 selection,
                                 field_name,

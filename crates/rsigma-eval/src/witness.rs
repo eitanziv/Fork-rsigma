@@ -15,7 +15,8 @@
 //! behavior in [`crate::compiler`]:
 //!
 //! - An item with a field name evaluates to `false` on an absent field unless
-//!   its matcher is literally [`CompiledMatcher::Null`]. Field presence is
+//!   its matcher holds for absent fields ([`CompiledMatcher::matches_absent`]:
+//!   `null`, or a negation such as `|neq`). Field presence is
 //!   therefore a sound witness for almost every field-scoped item, which is
 //!   what keeps rules built from regexes, CIDR blocks, and numeric
 //!   comparisons out of the always-evaluated set.
@@ -285,8 +286,9 @@ fn analyze_item(item: &CompiledDetectionItem) -> Analysis {
         None => {}
     }
 
-    // `CompiledMatcher::Null` is the one matcher an absent field satisfies.
-    if matches!(item.matcher, CompiledMatcher::Null) {
+    // An item that holds for an absent field (`null`, or a negation such as
+    // `|neq`) cannot require the field.
+    if item.matcher.matches_absent() {
         return Analysis::Open;
     }
 

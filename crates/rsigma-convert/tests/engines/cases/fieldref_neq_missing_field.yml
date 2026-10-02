@@ -1,0 +1,16 @@
+description: fieldref with neq negates the whole item, so it matches when either field is missing.
+rule:
+  title: fieldref neq missing field
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      User|fieldref|neq: TargetUser
+    condition: selection
+unsupported: [lynxdb]
+events:
+  - {User: 'alice', TargetUser: 'alice'}
+  - {User: 'alice', TargetUser: 'bob'}
+  - {User: 'alice'}
+  - {TargetUser: 'alice'}
+  - {Image: 'x'}
+matches: [1, 2, 3, 4]

@@ -341,3 +341,54 @@ fn exists_checks_presence_and_counts_null_as_present() {
     );
     assert_eq!(matching("selection:\n  User|exists: false", &events), [3]);
 }
+
+#[test]
+fn neq_negates_the_whole_item_so_missing_and_null_fields_match() {
+    let events = [
+        json!({"User": "admin"}),
+        json!({"User": "bob"}),
+        json!({"User": null}),
+        json!({"Image": "x"}),
+        json!({"User": "root"}),
+    ];
+    assert_eq!(
+        matching("selection:\n  User|neq: admin", &events),
+        [1, 2, 3, 4]
+    );
+    assert_eq!(
+        matching("selection:\n  User|neq: [admin, root]", &events),
+        [1, 2, 3]
+    );
+    assert_eq!(
+        matching("selection:\n  User|contains|neq: dmi", &events),
+        [1, 2, 3, 4]
+    );
+}
+
+#[test]
+fn fieldref_neq_matches_when_either_field_is_missing() {
+    let events = [
+        json!({"User": "alice", "TargetUser": "alice"}),
+        json!({"User": "alice", "TargetUser": "bob"}),
+        json!({"User": "alice"}),
+        json!({"TargetUser": "alice"}),
+    ];
+    assert_eq!(
+        matching("selection:\n  User|fieldref|neq: TargetUser", &events),
+        [1, 2, 3]
+    );
+}
+
+#[test]
+fn neq_inside_an_array_scope_matches_members_without_the_field() {
+    let yaml = "title: t\nsigma-version: 3\nlogsource: {category: test}\ndetection:\n  selection:\n    connections[any]:\n      dest|neq: a\n  condition: selection\n";
+    let mut engine = Engine::new();
+    engine
+        .add_collection(&parse_sigma_yaml(yaml).unwrap())
+        .unwrap();
+    let hits = |e: Value| !engine.evaluate(&JsonEvent::borrow(&e)).is_empty();
+    assert!(!hits(json!({"connections": [{"dest": "a"}]})));
+    assert!(hits(json!({"connections": [{"dest": "b"}]})));
+    assert!(hits(json!({"connections": [{"port": 1}]})));
+    assert!(hits(json!({"connections": [{"dest": "a"}, {}]})));
+}

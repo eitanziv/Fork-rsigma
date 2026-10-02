@@ -13,7 +13,6 @@ use rsigma_parser::{ArrayQuantifier, ConditionExpr, Quantifier};
 
 use super::{CompiledDetection, CompiledDetectionItem};
 use crate::event::{Event, EventValue};
-use crate::matcher::CompiledMatcher;
 
 /// Cap on recorded array members in explain traces and `matched_fields`.
 ///
@@ -244,7 +243,7 @@ pub(crate) fn eval_array_item<E: Event>(
     match &item.field {
         Some(name) => match element_field(member, name) {
             Some(value) => item.matcher.matches(value, outer),
-            None => matches!(item.matcher, CompiledMatcher::Null),
+            None => item.matcher.matches_absent(),
         },
         // No field name: match the array member value itself.
         None => item.matcher.matches(member, outer),

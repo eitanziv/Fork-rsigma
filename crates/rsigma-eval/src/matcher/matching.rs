@@ -45,6 +45,21 @@ fn runtime_str_cmp(op: IrStrOp, haystack: &str, needle: &str) -> bool {
 }
 
 impl CompiledMatcher {
+    /// Whether this matcher holds for a field that is absent from the event.
+    ///
+    /// Only `null` matches an absent field; negation inverts that, so a
+    /// negated item such as `|neq` matches when the field is missing.
+    pub fn matches_absent(&self) -> bool {
+        match self {
+            CompiledMatcher::Null => true,
+            CompiledMatcher::Exists(expect) => !expect,
+            CompiledMatcher::Not(inner) => !inner.matches_absent(),
+            CompiledMatcher::AnyOf(matchers) => matchers.iter().any(Self::matches_absent),
+            CompiledMatcher::AllOf(matchers) => matchers.iter().all(Self::matches_absent),
+            _ => false,
+        }
+    }
+
     /// Check if this matcher matches an [`EventValue`] from an event.
     ///
     /// The `event` parameter is needed for `FieldRef` to access other fields.

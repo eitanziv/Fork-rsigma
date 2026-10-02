@@ -127,10 +127,9 @@ pub trait Backend: Send + Sync {
 
     /// Negate a field-to-field comparison.
     ///
-    /// The evaluator treats a missing referenced field as not equal when the
-    /// left field is present, and a missing left field as no match. The
-    /// default is [`Backend::convert_condition_not`]. PostgreSQL overrides
-    /// this because `NOT (NULL)` is not true.
+    /// `|neq` negates the whole item, so the negation matches when either
+    /// field is missing. The default is [`Backend::convert_condition_not`].
+    /// PostgreSQL overrides this because `NOT (NULL)` is not true.
     fn convert_negated_field_ref(&self, _field: &str, expr: &str) -> Result<String> {
         self.convert_condition_not(expr)
     }

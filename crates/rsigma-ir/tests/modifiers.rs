@@ -502,7 +502,7 @@ detection:
         &json!({"Image": "a.exe", "ParentImage": "a.exe"})
     ));
     assert!(matches(&engine, &json!({"Image": "a.exe"})));
-    assert!(!matches(&engine, &json!({"ParentImage": "a.exe"})));
+    assert!(matches(&engine, &json!({"ParentImage": "a.exe"})));
 }
 
 #[test]
@@ -522,7 +522,7 @@ detection:
     assert!(matches(&any, &json!({"User": "alice"})));
     assert!(!matches(&any, &json!({"User": "root"})));
     assert!(!matches(&any, &json!({"User": "admin"})));
-    assert!(!matches(&any, &json!({"Other": "x"})));
+    assert!(matches(&any, &json!({"Other": "x"})));
 
     let all = engine_from(
         r#"

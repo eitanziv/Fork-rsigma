@@ -1,0 +1,24 @@
+description: neq negates the whole item, so it matches when the field is missing or null.
+rule:
+  title: neq missing field
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      User|neq: admin
+    condition: selection
+events:
+  - {User: 'admin'}
+  - {User: 'bob'}
+  - {User: null}
+  - {Image: 'x'}
+  - {User: 'ADMIN'}
+matches: [1, 2, 3]
+known_failures:
+  postgres-jsonb:
+    type: match-mismatch
+    reason: "NOT over a missing or null field is NULL instead of true, and plain equality is case-sensitive"
+    actual: [1, 4]
+  postgres-columns:
+    type: match-mismatch
+    reason: "NOT over a missing or null field is NULL instead of true, and plain equality is case-sensitive"
+    actual: [1, 4]
