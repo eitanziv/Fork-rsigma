@@ -86,23 +86,20 @@ fn exact_window_boundary() {
 }
 
 #[test]
-fn missing_group_by_field_does_not_panic() {
+fn missing_group_by_field_skips_correlation() {
     let mut engine = corr_engine(EVENT_COUNT_YAML);
     let base = 1000;
 
-    // Events without the "User" field that group-by expects
+    // Events without the "User" field that group-by expects cannot be
+    // assigned to a group.
     for i in 0..5 {
         let r = process(&mut engine, json!({"EventType": "login"}), base + i);
-        // Should not panic; events land in a "null/empty" group
-        if i >= 2 {
-            // May or may not fire depending on whether null group keys accumulate
-            let _ = r;
-        }
+        assert_eq!(r.correlation_count(), 0);
     }
 }
 
 #[test]
-fn group_by_with_object_value() {
+fn group_by_with_object_value_skips_correlation() {
     let mut engine = corr_engine(EVENT_COUNT_YAML);
     let base = 1000;
 
@@ -113,9 +110,8 @@ fn group_by_with_object_value() {
             json!({"EventType": "login", "User": {"name": "admin"}}),
             base + i,
         );
-        let _ = r;
+        assert_eq!(r.correlation_count(), 0);
     }
-    // Should not panic; exercises GroupKey::extract with non-stringifiable values
 }
 
 #[test]

@@ -729,8 +729,11 @@ impl CorrelationEngine {
             .find(|identity| corr.rule_refs.iter().any(|rule_ref| rule_ref == identity))
             .unwrap_or("");
 
-        // Extract group key
-        let group_key = GroupKey::extract(event, &corr.group_by, &ref_strs);
+        // An event without every group-by value cannot be assigned to a
+        // correlation group.
+        let Some(group_key) = GroupKey::extract(event, &corr.group_by, &ref_strs) else {
+            return;
+        };
 
         // Get or create window state
         let state_key = (corr_idx, group_key.clone());
@@ -975,7 +978,9 @@ impl CorrelationEngine {
                 let suppress_secs = corr.suppress_secs.or(self.config.suppress);
                 let action = corr.action.unwrap_or(self.config.action_on_match);
 
-                let group_key = GroupKey::from_pairs(&group_key_pairs, &corr.group_by);
+                let Some(group_key) = GroupKey::from_pairs(&group_key_pairs, &corr.group_by) else {
+                    continue;
+                };
                 let state_key = (corr_idx, group_key.clone());
                 let state = self
                     .state

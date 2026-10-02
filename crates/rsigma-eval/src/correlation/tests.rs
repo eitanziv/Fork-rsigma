@@ -10,7 +10,7 @@ fn test_group_key_extract() {
         GroupByField::Direct("User".to_string()),
         GroupByField::Direct("Host".to_string()),
     ];
-    let key = GroupKey::extract(&event, &group_by, &["rule1"]);
+    let key = GroupKey::extract(&event, &group_by, &["rule1"]).unwrap();
     assert_eq!(
         key.0,
         vec![Some("admin".to_string()), Some("srv01".to_string())]
@@ -25,8 +25,7 @@ fn test_group_key_missing_field() {
         GroupByField::Direct("User".to_string()),
         GroupByField::Direct("Host".to_string()),
     ];
-    let key = GroupKey::extract(&event, &group_by, &["rule1"]);
-    assert_eq!(key.0, vec![Some("admin".to_string()), None]);
+    assert!(GroupKey::extract(&event, &group_by, &["rule1"]).is_none());
 }
 
 #[test]
@@ -40,7 +39,7 @@ fn test_group_key_aliased() {
             ("rule_b".to_string(), "destination.ip".to_string()),
         ]),
     }];
-    let key = GroupKey::extract(&event, &group_by, &["rule_a"]);
+    let key = GroupKey::extract(&event, &group_by, &["rule_a"]).unwrap();
     assert_eq!(key.0, vec![Some("10.0.0.1".to_string())]);
 }
 
