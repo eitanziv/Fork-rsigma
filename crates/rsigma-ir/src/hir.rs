@@ -201,13 +201,14 @@ pub enum IrMatcher {
         case_insensitive: bool,
     },
     /// Encoding-transformed string match (`base64`, `base64offset`, `wide`,
-    /// `utf16`, `utf16be`, `windash`). `value` is the untransformed plain
-    /// string. Eval replays `encodings` (in order) to build the concrete
-    /// matcher; convert backends that cannot express the transform reject it.
+    /// `utf16`, `utf16be`, `windash`). `pattern` is the untransformed value;
+    /// it has wildcards only when no base64 encoding applies. Eval replays
+    /// `encodings` to build the concrete matcher; convert backends that cannot
+    /// express the transform reject it.
     Encoded {
         encodings: Vec<IrEncoding>,
         op: IrStrOp,
-        value: String,
+        pattern: IrPattern,
         case_insensitive: bool,
     },
     /// Explicit regex (`|re`) with raw pattern and flags kept separate so eval

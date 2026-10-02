@@ -1,8 +1,20 @@
-use super::helpers::{base64_offset_patterns, expand_windash};
+use super::helpers::{base64_offset_patterns, windash_variants};
 use super::*;
 use crate::event::JsonEvent;
+use rsigma_ir::{IrPattern, IrPatternPart};
 use rsigma_parser::{FieldSpec, Modifier, SigmaString, SigmaValue};
 use serde_json::json;
+
+/// Windash variants of a plain value.
+fn expand_windash(input: &str) -> Result<Vec<String>> {
+    let pattern = IrPattern {
+        parts: vec![IrPatternPart::Literal(input.to_string())],
+    };
+    Ok(windash_variants(&pattern)?
+        .into_iter()
+        .filter_map(|p| p.as_plain())
+        .collect())
+}
 
 fn make_field_spec(name: &str, modifiers: &[Modifier]) -> FieldSpec {
     FieldSpec::new(Some(name.to_string()), modifiers.to_vec())
@@ -329,6 +341,49 @@ fn test_windash_single_dash() {
     assert!(variants.contains(&"\u{2013}v".to_string()));
     assert!(variants.contains(&"\u{2014}v".to_string()));
     assert!(variants.contains(&"\u{2015}v".to_string()));
+}
+
+#[test]
+fn test_windash_expands_every_dash_character_in_the_value() {
+    for input in ["/f", "\u{2013}f", "\u{2014}f", "\u{2015}f"] {
+        let variants = expand_windash(input).unwrap();
+        assert_eq!(variants.len(), 5, "{input:?}");
+        assert!(variants.contains(&"-f".to_string()), "{input:?}");
+        assert!(variants.contains(&"/f".to_string()), "{input:?}");
+    }
+    assert_eq!(expand_windash("a/b-c").unwrap().len(), 25);
+}
+
+#[test]
+fn test_windash_keeps_wildcards() {
+    let pattern = IrPattern {
+        parts: vec![
+            IrPatternPart::Literal("dir".into()),
+            IrPatternPart::WildcardMulti,
+            IrPatternPart::Literal("-s".into()),
+        ],
+    };
+    let variants = windash_variants(&pattern).unwrap();
+    assert_eq!(variants.len(), 5);
+    for v in &variants {
+        assert_eq!(v.parts[1], IrPatternPart::WildcardMulti);
+    }
+    assert!(wildcard_item_matches(
+        &[Modifier::Contains, Modifier::WindAsh],
+        "dir*-s",
+        "cmd /c dir C:\\ /s"
+    ));
+    assert!(!wildcard_item_matches(
+        &[Modifier::Contains, Modifier::WindAsh],
+        "dir*-s",
+        "cmd /c dir* -x"
+    ));
+}
+
+#[test]
+fn test_windash_rejects_too_many_positions() {
+    assert_eq!(expand_windash("a/b/c/d").unwrap().len(), 125);
+    assert!(expand_windash("a/b/c/d/e/f/g/h/i/j").is_err());
 }
 
 #[test]

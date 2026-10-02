@@ -22,7 +22,7 @@ use crate::hir::IrRule;
 
 /// Schema version of the serialized HIR. Bump on any breaking change to the
 /// HIR types or the embedded `rsigma-parser` types they contain.
-pub const HIR_SCHEMA_VERSION: u32 = 2;
+pub const HIR_SCHEMA_VERSION: u32 = 3;
 
 /// Header prefixed to a serialized HIR blob.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

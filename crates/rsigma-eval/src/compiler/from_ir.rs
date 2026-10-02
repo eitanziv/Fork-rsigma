@@ -139,9 +139,9 @@ fn compile_ir_matcher(matcher: &IrMatcher) -> Result<CompiledMatcher> {
         IrMatcher::Encoded {
             encodings,
             op,
-            value,
+            pattern,
             case_insensitive,
-        } => compile_encoded(encodings, *op, value, *case_insensitive),
+        } => compile_encoded(encodings, *op, pattern, *case_insensitive),
         IrMatcher::Regex {
             pattern,
             case_insensitive,

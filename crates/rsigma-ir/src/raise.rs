@@ -237,7 +237,7 @@ fn raise_matcher(matcher: &IrMatcher) -> Result<(Vec<Modifier>, Vec<SigmaValue>)
         IrMatcher::Encoded {
             encodings,
             op,
-            value,
+            pattern,
             case_insensitive,
         } => {
             let mut modifiers: Vec<Modifier> =
@@ -248,7 +248,7 @@ fn raise_matcher(matcher: &IrMatcher) -> Result<(Vec<Modifier>, Vec<SigmaValue>)
             }
             Ok((
                 modifiers,
-                vec![SigmaValue::String(SigmaString::from_raw(value))],
+                vec![SigmaValue::String(ir_pattern_to_sigma(pattern))],
             ))
         }
         IrMatcher::Regex {

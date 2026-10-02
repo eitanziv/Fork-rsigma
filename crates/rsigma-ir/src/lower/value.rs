@@ -192,18 +192,48 @@ pub(super) fn lower_value(value: &SigmaValue, ctx: &ModCtx) -> Result<IrMatcher>
     // explicit for the compile/convert consumers to interpret.
     let enc = encodings(ctx);
     if !enc.is_empty() {
-        let plain = sigma_str
-            .as_plain()
-            .unwrap_or_else(|| sigma_str.original.clone());
+        let pattern = pattern_from_sigma(sigma_str);
+        check_encodable(&enc, &pattern)?;
         return Ok(IrMatcher::Encoded {
             encodings: enc,
             op: str_op(ctx),
-            value: plain,
+            pattern,
             case_insensitive: ci,
         });
     }
 
     Ok(lower_str(pattern_from_sigma(sigma_str), ctx))
+}
+
+/// Reject values an encoding chain cannot represent: wildcards under base64,
+/// whose output has no character boundaries to keep them at, and non-ASCII
+/// text under a UTF-16 encoding that is matched as a string.
+fn check_encodable(encodings: &[IrEncoding], pattern: &IrPattern) -> Result<()> {
+    let base64 = encodings
+        .iter()
+        .any(|e| matches!(e, IrEncoding::Base64 | IrEncoding::Base64Offset));
+    if base64 && pattern.has_wildcards() {
+        return Err(IrError::IncompatibleValue(
+            "|base64 and |base64offset do not support wildcards; escape * and ? as \\* and \\? to match them literally".into(),
+        ));
+    }
+    let utf16 = encodings.iter().any(|e| {
+        matches!(
+            e,
+            IrEncoding::Wide | IrEncoding::Utf16 | IrEncoding::Utf16Be
+        )
+    });
+    let non_ascii = pattern
+        .parts
+        .iter()
+        .any(|p| matches!(p, IrPatternPart::Literal(t) if !t.is_ascii()));
+    if utf16 && !base64 && non_ascii {
+        return Err(IrError::IncompatibleValue(
+            "|wide, |utf16, and |utf16be without |base64 or |base64offset require an ASCII value"
+                .into(),
+        ));
+    }
+    Ok(())
 }
 
 fn lower_str(pattern: IrPattern, ctx: &ModCtx) -> IrMatcher {
