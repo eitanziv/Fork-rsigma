@@ -105,10 +105,11 @@ cargo test -p rsigma-convert --test engine_test_backend -- --ignored
 cargo test -p rsigma-convert --test engine_fibratus -- --ignored
 ```
 
-The PostgreSQL run also checks SigmaHQ rules whose conditions need grouping. For each rule that uses only plain string matches it builds events from the rule's own values, takes the expected matches from `engine eval`, and requires PostgreSQL to agree in both modes. Point it at a SigmaHQ checkout to run it. Without one it is skipped locally and fails in CI:
+The PostgreSQL and LynxDB runs also check SigmaHQ rules whose conditions need grouping. For each rule that uses only plain string matches they build events from the rule's own values, take the expected matches from `engine eval`, and require the engine to agree (PostgreSQL in both modes). LynxDB only takes rules whose values avoid characters it renders or matches wrongly. Point them at a SigmaHQ checkout to run them. Without one they are skipped locally and fail in CI:
 
 ```bash
 RSIGMA_SIGMA_CORPUS=/path/to/sigma cargo test -p rsigma-convert --test engine_postgres -- --ignored
+RSIGMA_SIGMA_CORPUS=/path/to/sigma cargo test -p rsigma-convert --test engine_lynxdb -- --ignored
 ```
 In CI each engine has its own workflow (`.github/workflows/engine-*.yml`) that runs only when its backend, its harness, the shared cases, or the conversion core changes.
 

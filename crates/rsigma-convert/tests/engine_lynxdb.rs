@@ -4,8 +4,9 @@
 //! each case's events into its own index (`c<n>`, selected through the
 //! backend's `index` pipeline state), waits until every event is flushed to a
 //! segment, runs the generated queries unmodified, and reports the matched
-//! events. Run with
-//! `cargo test -p rsigma-convert --test engine_lynxdb -- --ignored`.
+//! events. A second test runs SigmaHQ rules whose conditions need grouping
+//! against eval; it reads the checkout in `RSIGMA_SIGMA_CORPUS`. Run with
+//! `RSIGMA_SIGMA_CORPUS=<sigma checkout> cargo test -p rsigma-convert --test engine_lynxdb -- --ignored`.
 
 mod engines;
 
@@ -76,18 +77,19 @@ fn collect(dir: &Path, n: usize, query_count: usize) -> Result<Outcome, String> 
     Ok(Outcome::Matched(matched))
 }
 
-#[test]
-#[ignore = "engine test: needs Docker; run by the LynxDB engine workflow"]
-fn lynxdb_executes_cases() {
+/// Run every case in one LynxDB server and return the outcomes.
+fn run_cases(label: &str, cases: Vec<Case>) -> Vec<(Case, Result<Outcome, String>)> {
     engines::require_docker();
     let image = engines::docker_build("lynxdb", IMAGE);
 
-    let work = std::env::temp_dir().join(format!("rsigma-engine-lynxdb-{}", std::process::id()));
+    let work = std::env::temp_dir().join(format!(
+        "rsigma-engine-lynxdb-{label}-{}",
+        std::process::id()
+    ));
     let cases_dir = work.join("cases");
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(&cases_dir).unwrap();
 
-    let cases = engines::load_cases();
     let prepared: Vec<Result<usize, String>> = cases
         .iter()
         .enumerate()
@@ -114,5 +116,77 @@ fn lynxdb_executes_cases() {
         })
         .collect();
     let _ = std::fs::remove_dir_all(&work);
+    results
+}
+
+#[test]
+#[ignore = "engine test: needs Docker; run by the LynxDB engine workflow"]
+fn lynxdb_executes_cases() {
+    let results = run_cases("cases", engines::load_cases());
     engines::assert_outcomes("lynxdb", &results);
+}
+
+/// Whether every detection value avoids the characters LynxDB mis-renders or
+/// mis-matches (`/`, `|`, `=`, `>`, quotes, brackets, embedded wildcards, and
+/// others), so the corpus run isolates condition grouping.
+fn plain_lynxdb_values(case: &Case) -> bool {
+    fn plain(v: &yaml_serde::Value) -> bool {
+        match v {
+            yaml_serde::Value::String(s) => s
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || " .-_:\\".contains(c)),
+            yaml_serde::Value::Sequence(items) => items.iter().all(plain),
+            yaml_serde::Value::Mapping(m) => m.values().all(plain),
+            _ => true,
+        }
+    }
+    let rule: yaml_serde::Value = yaml_serde::from_str(&case.rule_yaml).unwrap();
+    rule["detection"]
+        .as_mapping()
+        .unwrap()
+        .iter()
+        .filter(|(k, _)| k.as_str() != Some("condition"))
+        .all(|(_, v)| plain(v))
+}
+
+/// Differential test against eval over the SigmaHQ rules whose conditions
+/// need grouping (see `engines::corpus`).
+#[test]
+#[ignore = "engine test: needs Docker and a SigmaHQ checkout in RSIGMA_SIGMA_CORPUS; run by the LynxDB engine workflow"]
+fn lynxdb_agrees_with_eval_on_sigma_corpus() {
+    let Some(corpus) = std::env::var_os("RSIGMA_SIGMA_CORPUS") else {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "set RSIGMA_SIGMA_CORPUS to a SigmaHQ checkout"
+        );
+        eprintln!("skipping: RSIGMA_SIGMA_CORPUS is not set");
+        return;
+    };
+    let sample = engines::corpus::grouping_cases(Path::new(&corpus), |case| {
+        plain_lynxdb_values(case)
+            && engines::convert(
+                &LynxDbBackend::new(),
+                case,
+                &[index_pipeline("c")],
+                "default",
+            )
+            .is_ok_and(|q| q.len() == 1)
+    });
+    let with_both = sample
+        .cases
+        .iter()
+        .filter(|c| !c.matches.is_empty() && c.matches.len() < c.events.len())
+        .count();
+    eprintln!(
+        "{} rules convert; {with_both} have matching and non-matching events",
+        sample.cases.len()
+    );
+    assert!(
+        with_both >= 700,
+        "only {with_both} corpus rules have both matching and non-matching events"
+    );
+
+    let results = run_cases("corpus", sample.cases);
+    let failures = engines::check_outcomes("lynxdb", &results);
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
