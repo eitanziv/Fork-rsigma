@@ -292,7 +292,7 @@ pub fn incident_finding_with(incident: &IncidentResult, src: &dyn FindingSource)
     insert_if(
         &mut finding,
         "resources",
-        (!resources.is_empty()).then(|| Value::Array(resources)),
+        (!resources.is_empty()).then_some(Value::Array(resources)),
     );
     finding.insert("unmapped".to_string(), Value::Object(unmapped));
     Value::Object(finding)
@@ -482,7 +482,7 @@ impl LiftedRisk {
             }
         }
 
-        lifted.remaining = (!remaining.is_empty()).then(|| Value::Object(remaining));
+        lifted.remaining = (!remaining.is_empty()).then_some(Value::Object(remaining));
         lifted
     }
 }

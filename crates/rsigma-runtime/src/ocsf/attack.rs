@@ -40,7 +40,7 @@ pub(super) fn attacks_from_tags(tags: &[String]) -> Option<Value> {
             out.push(entry);
         }
     }
-    (!out.is_empty()).then(|| Value::Array(out))
+    (!out.is_empty()).then_some(Value::Array(out))
 }
 
 /// Build the `attacks[]` array from canonical tactic slugs, as the risk layer
@@ -55,7 +55,7 @@ pub(super) fn attacks_from_tactics(tactics: &[String]) -> Option<Value> {
             }
         }
     }
-    (!out.is_empty()).then(|| Value::Array(out))
+    (!out.is_empty()).then_some(Value::Array(out))
 }
 
 /// `t1059` / `t1059.001` to the corresponding OCSF member and ATT&CK uid.
