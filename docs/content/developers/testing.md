@@ -12,7 +12,7 @@ The workspace runs several test tiers. Most are gated in CI on every PR; coverag
 | Snapshot / golden | insta snapshots mainly under `crates/rsigma-parser/tests/snapshots/`; convert/runtime/cli goldens under each crate's `tests/golden/` (or fixtures); dynamic-pipeline goldens in `tests/fixtures/dynamic-pipelines/golden/` | `cargo test` plus the SigmaHQ-corpus job for the dynamic-pipelines goldens. | `test` and `sigma-corpus` jobs. |
 | SigmaHQ corpus | `.github/workflows/ci.yml` -> `sigma-corpus` | `cargo build --release --all-features --locked -p rsigma` then `target/release/rsigma rule validate …` against the pinned corpus SHA | `sigma-corpus` job, on every PR. |
 | Coverage | `cargo-llvm-cov` (Linux) | CI: `cargo llvm-cov --workspace --all-features --locked --no-report` then `cargo llvm-cov report --lcov …`. Locally a one-shot form is fine; prefer `--locked`. | `coverage` job (advisory, not gating). |
-| Representative performance | `.github/workflows/performance.yml`, `scripts/perf/` | `scripts/perf/fetch-fixtures.sh` then the offline and daemon harnesses | Coarse same-runner base/PR gate (path-selective); weekly full matrix plus native glibc/static musl scaling on dedicated eight-core amd64/arm64 runners. |
+| Representative performance | `.github/workflows/performance.yml`, `scripts/perf/` | `scripts/perf/fetch-fixtures.sh` then the offline and daemon harnesses | Coarse same-runner base/PR gate for evaluator hot-path, dependency, toolchain, and performance-harness changes; weekly full matrix plus native glibc/static musl scaling on dedicated eight-core amd64/arm64 runners. |
 
 ## Unit tests
 
