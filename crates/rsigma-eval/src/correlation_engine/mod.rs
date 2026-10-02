@@ -667,12 +667,13 @@ impl CorrelationEngine {
                 .into_iter()
                 .zip(identities)
                 .filter_map(|(detection, (id, name))| {
-                    let correlation_only = id
-                        .as_ref()
-                        .into_iter()
-                        .chain(name.as_ref())
-                        .any(|identity| self.correlation_only_rules.contains(identity));
-                    (!correlation_only).then_some(detection)
+                    let mut identities = id.as_ref().into_iter().chain(name.as_ref());
+                    let generated = identities
+                        .clone()
+                        .any(|identity| self.generated_rules.contains(identity));
+                    let correlation_only =
+                        identities.any(|identity| self.correlation_only_rules.contains(identity));
+                    (generated || !correlation_only).then_some(detection)
                 })
                 .collect()
         } else {

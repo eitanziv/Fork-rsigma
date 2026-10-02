@@ -2328,6 +2328,7 @@ detection:
     condition: selection
 ---
 title: Many Logins
+generate: true
 correlation:
     type: event_count
     rules:
@@ -2337,7 +2338,6 @@ correlation:
     timeframe: 60s
     condition:
         gte: 3
-    generate: true
 level: high
 "#;
     let collection = parse_sigma_yaml(yaml).unwrap();
@@ -2356,6 +2356,47 @@ level: high
         1,
         "generate:true keeps detection output"
     );
+}
+
+#[test]
+fn test_generate_true_wins_across_id_and_name_references() {
+    let yaml = r#"
+title: Login
+id: 00000000-0000-4000-8000-000000000001
+name: login
+logsource:
+    category: auth
+detection:
+    selection:
+        EventType: login
+    condition: selection
+---
+title: Count by ID
+correlation:
+    type: event_count
+    rules: [00000000-0000-4000-8000-000000000001]
+    group-by: [User]
+    timespan: 60s
+    condition:
+        gte: 3
+---
+title: Count by Name
+generate: true
+correlation:
+    type: event_count
+    rules: [login]
+    group-by: [User]
+    timespan: 60s
+    condition:
+        gte: 3
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    engine.add_collection(&collection).unwrap();
+
+    let ev = json!({"EventType": "login", "User": "alice"});
+    let result = engine.process_event_at(&JsonEvent::borrow(&ev), 1000);
+    assert_eq!(result.detection_count(), 1);
 }
 
 // =========================================================================
