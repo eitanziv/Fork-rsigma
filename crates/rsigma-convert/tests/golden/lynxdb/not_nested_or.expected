@@ -1,0 +1,1 @@
+FROM main | search Image=*"\\cmd.exe" AND NOT (CommandLine=*"shell32"* OR CommandLine=*"rundll32"* OR (ParentImage=*"\\explorer.exe" AND User="admin"))

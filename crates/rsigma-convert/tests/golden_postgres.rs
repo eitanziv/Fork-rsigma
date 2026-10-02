@@ -106,6 +106,16 @@ fn golden_multi_field_detection() {
 }
 
 #[test]
+fn golden_not_one_of_filters() {
+    run_golden("not_one_of_filters");
+}
+
+#[test]
+fn golden_not_nested_or() {
+    run_golden("not_nested_or");
+}
+
+#[test]
 fn golden_fieldref() {
     run_golden("fieldref");
 }

@@ -1,0 +1,19 @@
+description: A NOT nested inside a negated AND keeps both groupings.
+rule:
+  title: nested not
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: 'cmd.exe'
+    filter_cmd:
+      CommandLine|contains: 'shell32'
+    allowed_parent:
+      ParentImage|endswith: 'explorer.exe'
+    condition: selection and not (filter_cmd and not allowed_parent)
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'shell32', ParentImage: 'C:\explorer.exe'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'shell32', ParentImage: 'C:\services.exe'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\services.exe'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\explorer.exe'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'dir', ParentImage: 'C:\services.exe'}
+matches: [0, 2, 3]

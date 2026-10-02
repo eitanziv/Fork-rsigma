@@ -65,6 +65,16 @@ fn golden_and_or_not() {
 }
 
 #[test]
+fn golden_not_one_of_filters() {
+    run_golden("not_one_of_filters");
+}
+
+#[test]
+fn golden_not_nested_or() {
+    run_golden("not_nested_or");
+}
+
+#[test]
 fn golden_wildcards() {
     run_golden("wildcards");
 }

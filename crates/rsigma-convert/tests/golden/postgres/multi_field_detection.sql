@@ -1,1 +1,1 @@
-SELECT * FROM security_events WHERE "Image" ILIKE '%\\cmd.exe' AND "CommandLine" ILIKE '%/c%' OR "CommandLine" ILIKE '%/k%'
+SELECT * FROM security_events WHERE "Image" ILIKE '%\\cmd.exe' AND ("CommandLine" ILIKE '%/c%' OR "CommandLine" ILIKE '%/k%')

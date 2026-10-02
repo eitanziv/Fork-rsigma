@@ -1,0 +1,1 @@
+SELECT * FROM security_events WHERE ("Image" ILIKE '%\\a.exe' OR "Image" ILIKE '%\\b.exe') AND "CommandLine" ILIKE '%x%' AND NOT ("CommandLine" ILIKE '%shell32%' OR "ParentImage" ILIKE '%\\explorer.exe')

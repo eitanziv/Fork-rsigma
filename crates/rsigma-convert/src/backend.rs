@@ -105,6 +105,26 @@ pub trait Backend: Send + Sync {
     fn convert_condition_or(&self, exprs: &[String]) -> Result<String>;
     fn convert_condition_not(&self, expr: &str) -> Result<String>;
 
+    /// Group `expr`, an operand whose top-level operator is `inner`, for use
+    /// under `outer`.
+    ///
+    /// The condition and detection walkers call this for every compound
+    /// operand before passing it to a combinator. The default parenthesizes
+    /// when `inner` binds looser than `outer` under the standard precedence
+    /// (`NOT` > `AND` > `OR`), and always under `NOT`, as pySigma does.
+    fn convert_condition_group(
+        &self,
+        expr: &str,
+        outer: TokenType,
+        inner: TokenType,
+    ) -> Result<String> {
+        if outer == TokenType::NOT || inner > outer {
+            Ok(format!("({expr})"))
+        } else {
+            Ok(expr.to_string())
+        }
+    }
+
     /// Negate a field-to-field comparison.
     ///
     /// The evaluator treats a missing referenced field as not equal when the
@@ -476,8 +496,13 @@ pub struct TextQueryConfig {
 }
 
 impl TextQueryConfig {
-    /// Check if `inner` needs parenthesisation when nested inside `outer`.
+    /// Check if `inner` needs parenthesisation when nested inside `outer`:
+    /// when it binds looser than `outer` under `precedence`, or when `outer`
+    /// is `NOT`.
     pub fn needs_grouping(&self, outer: TokenType, inner: TokenType) -> bool {
+        if outer == TokenType::NOT {
+            return true;
+        }
         let rank = |t: TokenType| -> u8 {
             if t == self.precedence.0 {
                 0

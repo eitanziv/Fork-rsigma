@@ -10,7 +10,7 @@ LynxDB is a log analytics engine with its own search language (SPL2 syntax). The
 
 - No table or schema concept; the target is an **index** (default `main`).
 - No `WHERE` clause; conditions are encoded inline in the `search` keyword's expression.
-- Boolean precedence is non-standard (`NOT > OR > AND`), so the backend explicitly parenthesizes every compound expression.
+- Boolean precedence is non-standard (`NOT > OR > AND`), so the backend parenthesizes wherever that precedence would change a condition's meaning.
 - A subset of Sigma modifiers (regex, CIDR, single-character wildcards, case-sensitive matches) is **deferred**: emitted as a downstream pipeline stage instead of a native search term.
 
 ## Backend options
@@ -45,7 +45,7 @@ Verified against the LynxDB backend's golden tests at [`crates/rsigma-convert/sr
 | CIDR (`cidr` modifier) | Deferred to a `where cidrmatch("cidr", field)` pipeline stage. |
 | Case-sensitive (`cased` modifier) | `field=CASE(value)` |
 | `exists: true`/`false` | `field=*`/`NOT field=*` |
-| Boolean `AND`, `OR`, `NOT` | Explicit parenthesization for the non-standard precedence (`NOT > OR > AND`). |
+| Boolean `AND`, `OR`, `NOT` | Parenthesized where the non-standard precedence (`NOT > OR > AND`) requires it: an `AND` under an `OR`, and a compound operand of `NOT`. |
 | `null` value | `NOT field=*` (no equivalent of `IS NULL`). |
 | IN-list (`field` with multiple values) | `field IN (val1, val2, ...)` (LynxDB's native IN form). |
 | `all` modifier | values combined with explicit `AND` in the search expression. |
@@ -83,15 +83,11 @@ User="Administrator" AND ProcessName=*explorer*
 
 ## Boolean precedence
 
-LynxDB's parser evaluates Boolean operators in the order `NOT > OR > AND`, which is the reverse of standard SQL (and most programming languages). The backend explicitly parenthesizes every compound expression so the same Sigma `condition:` produces the same set of matches regardless of how LynxDB happens to associate the operators.
+LynxDB's parser evaluates Boolean operators in the order `NOT > OR > AND`, which is the reverse of standard SQL (and most programming languages) for `AND` and `OR`. The backend groups by that precedence, so the same Sigma `condition:` produces the same set of matches as `engine eval`:
 
-Concretely, a Sigma rule with `condition: selection1 and not selection2` produces:
-
-```text
-FROM main | search (selection1_clause) AND (NOT selection2_clause)
-```
-
-Operators always parenthesize their operands. The output is verbose but reliable; the alternative would be a per-query precedence audit by the operator.
+- An `AND` nested under an `OR` is parenthesized: `(A and B) or C` becomes `(A AND B) OR C`.
+- An `OR` nested under an `AND` stays bare, because it already binds tighter: `(A or B) and C` becomes `A OR B AND C`.
+- A compound operand of `NOT` is always parenthesized: `A and not 1 of filter_*` becomes `A AND NOT (filter_1 OR filter_2)`. {{ added "unreleased" }}
 
 ## Examples
 

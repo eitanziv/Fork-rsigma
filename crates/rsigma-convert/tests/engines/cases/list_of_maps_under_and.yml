@@ -1,0 +1,19 @@
+description: A detection that is a list of maps (an OR containing an AND) keeps its grouping under AND.
+rule:
+  title: list of maps under and
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      - Image|endswith: 'cmd.exe'
+      - CommandLine|contains: 'whoami'
+        ParentImage|endswith: 'explorer.exe'
+    user:
+      User: 'admin'
+    condition: selection and user
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\services.exe', User: 'admin'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'whoami', ParentImage: 'C:\explorer.exe', User: 'admin'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\services.exe', User: 'guest'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'whoami', ParentImage: 'C:\services.exe', User: 'admin'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'whoami', ParentImage: 'C:\explorer.exe', User: 'guest'}
+matches: [0, 1]

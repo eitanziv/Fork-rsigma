@@ -45,13 +45,16 @@ Run `rustdoc` (`cargo doc --open -p rsigma-convert`) for the full list of ~90 fi
 
 Step 3: implement the trait. Hold the config as `&'static TextQueryConfig`, delegate `convert_rule` to `convert_rule_via_ir`, and implement leaf converters plus `finish_query` / `finalize_query`. `ConversionState` is from `rsigma_convert::state`; `PipelineState` is from `rsigma_eval::pipeline::state`.
 
+The condition walker passes every compound operand through `convert_condition_group` before combining it. Delegating to `text_convert_condition_group` parenthesizes by the config's `precedence`, so a target where `OR` binds tighter than `AND` only needs a different `precedence` tuple. {{ added "unreleased" }}
+
 ```rust
 use rsigma_convert::{
-    Backend, TextQueryConfig,
+    Backend, TextQueryConfig, TokenType,
     condition_ir::convert_rule_via_ir,
     error::Result,
     state::ConversionState,
-    text_convert_condition_and, text_convert_condition_not, text_convert_condition_or,
+    text_convert_condition_and, text_convert_condition_group, text_convert_condition_not,
+    text_convert_condition_or,
     text_convert_field_str_ir, text_escape_and_quote_field,
     // … other text_convert_* helpers as needed
 };
@@ -108,6 +111,15 @@ impl Backend for SplunkBackend {
 
     fn convert_condition_not(&self, expr: &str) -> Result<String> {
         Ok(text_convert_condition_not(self.config, expr))
+    }
+
+    fn convert_condition_group(
+        &self,
+        expr: &str,
+        outer: TokenType,
+        inner: TokenType,
+    ) -> Result<String> {
+        Ok(text_convert_condition_group(self.config, expr, outer, inner))
     }
 
     fn escape_and_quote_field(&self, field: &str) -> String {

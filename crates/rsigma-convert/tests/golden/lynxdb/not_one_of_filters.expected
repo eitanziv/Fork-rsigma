@@ -1,0 +1,1 @@
+FROM main | search Image=*"\\a.exe" OR Image=*"\\b.exe" AND CommandLine=*"x"* AND NOT (CommandLine=*"shell32"* OR ParentImage=*"\\explorer.exe")

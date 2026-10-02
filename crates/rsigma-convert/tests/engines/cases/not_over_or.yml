@@ -17,20 +17,8 @@ events:
   - {Image: 'C:\pwsh.exe', CommandLine: 'x', ParentImage: 'C:\explorer.exe'}
 matches: [0]
 known_failures:
-  postgres-jsonb:
-    type: match-mismatch
-    reason: "NOT is not parenthesized over the OR of the filters"
-    actual: [0, 2, 3]
-  postgres-columns:
-    type: match-mismatch
-    reason: "NOT is not parenthesized over the OR of the filters"
-    actual: [0, 2, 3]
-  lynxdb:
-    type: match-mismatch
-    reason: "NOT is not parenthesized over the OR of the filters"
-    actual: [0, 2]
   test-pysigma:
     type: output-difference
-    reason: "backslashes in values are doubled; NOT is not parenthesized over the OR of the filters"
-    actual: ["Image endswith \"\\\\cmd.exe\" and not CommandLine contains \"shell32\" or ParentImage endswith \"\\\\explorer.exe\""]
+    reason: "backslashes in values are doubled"
+    actual: ["Image endswith \"\\\\cmd.exe\" and not (CommandLine contains \"shell32\" or ParentImage endswith \"\\\\explorer.exe\")"]
     reference: ["Image endswith \"\\cmd.exe\" and not (CommandLine contains \"shell32\" or ParentImage endswith \"\\explorer.exe\")"]

@@ -1,0 +1,15 @@
+title: Not One Of Filters
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        Image|endswith:
+            - '\a.exe'
+            - '\b.exe'
+        CommandLine|contains: 'x'
+    filter_1:
+        CommandLine|contains: 'shell32'
+    filter_2:
+        ParentImage|endswith: '\explorer.exe'
+    condition: selection and not 1 of filter_*

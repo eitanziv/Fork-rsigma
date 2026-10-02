@@ -46,6 +46,8 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 
 Keyword matching uses the `'simple'` text-search configuration (no language stemming) over `ROW(*)::text`, so the query matches the token against every column concatenated. This is intentionally broader than per-field FTS: keyword detections in Sigma are unbound, "search this string anywhere in the event".
 
+Nested conditions are parenthesized by SQL precedence (`NOT` > `AND` > `OR`): an `OR` under an `AND`, such as a value list in a selection that also tests another field, becomes `("Image" ILIKE '%\\a.exe' OR "Image" ILIKE '%\\b.exe') AND "CommandLine" ILIKE '%x%'`, and a compound operand of `NOT`, such as `not 1 of filter_*`, becomes `NOT (... OR ...)`. {{ added "unreleased" }}
+
 Field names are always double-quoted (`"CommandLine"`). String literals are always single-quoted with PostgreSQL-standard escaping (`'don''t'`). Identifiers passed through `-O table=...` are validated against `^[A-Za-z_][A-Za-z0-9_$]*$` before insertion; non-matching identifiers fail conversion with `InvalidIdentifier`. See [Security Hardening: SQL injection prevention](../security.md#sql-injection-prevention).
 
 ## Output formats
@@ -178,14 +180,14 @@ data->'args'->>-1
 
 `[all_or_empty]` uses the same shape with `WHERE NOT (...)`.
 
-An **extended** block body (a `condition:` plus named element-scoped sub-selections) lowers to the same primitive, with the condition compiled into the inner predicate as a boolean expression over the element (`OR`, and a parenthesized `NOT`):
+An **extended** block body (a `condition:` plus named element-scoped sub-selections) lowers to the same primitive, with the condition compiled into the inner predicate as a boolean expression over the element (`AND`, `OR`, and `NOT`, grouped by SQL precedence):
 
 ```sql
 -- connections[any]: { condition: in_cidr and not is_tcp, in_cidr: {ip|cidr: ...}, is_tcp: {protocol: TCP} }
 (jsonb_typeof(data->'connections') = 'array' AND EXISTS (
   SELECT 1 FROM jsonb_array_elements(data->'connections') AS __sigma_e0
   WHERE (__sigma_e0->>'ip')::inet <<= '123.1.0.0/16'::cidr
-    AND NOT (__sigma_e0->>'protocol' = 'TCP')))
+    AND NOT __sigma_e0->>'protocol' = 'TCP'))
 ```
 
 Array matching requires JSONB mode; in flat-column mode the backend reports `UnsupportedArrayMatching`.

@@ -1,0 +1,20 @@
+description: NOT over an OR whose first operand is a two-field AND negates the whole OR.
+rule:
+  title: not over nested or
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: 'cmd.exe'
+    filter_pair:
+      CommandLine|contains: 'shell32'
+      User: 'admin'
+    filter_parent:
+      ParentImage|endswith: 'explorer.exe'
+    condition: selection and not 1 of filter_*
+events:
+  - {Image: 'C:\cmd.exe', CommandLine: 'shell32', ParentImage: 'C:\services.exe', User: 'admin'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'shell32', ParentImage: 'C:\services.exe', User: 'guest'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\explorer.exe', User: 'guest'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'dir', ParentImage: 'C:\services.exe', User: 'admin'}
+  - {Image: 'C:\pwsh.exe', CommandLine: 'dir', ParentImage: 'C:\services.exe', User: 'guest'}
+matches: [1, 3]
