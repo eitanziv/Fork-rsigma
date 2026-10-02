@@ -13,4 +13,8 @@ events:
   - {DestinationIp: '10.255.255.255'}
 matches: [0, 3]
 known_failures:
-  test-pysigma: cidrmatch arguments are swapped and the field is not quoted
+  test-pysigma:
+    type: output-difference
+    reason: "cidrmatch arguments are swapped and the field is not quoted"
+    actual: ["cidrmatch(\"10.0.0.0/8\", DestinationIp)"]
+    reference: ["cidrmatch('DestinationIp', \"10.0.0.0/8\")"]

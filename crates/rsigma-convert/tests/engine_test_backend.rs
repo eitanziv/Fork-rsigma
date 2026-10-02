@@ -11,6 +11,7 @@ mod engines;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+use engines::Problem;
 use rsigma_convert::backends::test::TextQueryTestBackend;
 use serde_json::{Value, json};
 
@@ -56,14 +57,20 @@ fn test_backend_matches_pysigma() {
         let problem = match (ours, theirs.get("queries")) {
             (Ok(q), Some(p)) => {
                 let p: Vec<String> = serde_json::from_value(p.clone()).unwrap();
-                (q != p).then(|| format!("rsigma {q:?}, pySigma {p:?}"))
+                (q != p).then_some(Problem::OutputDifference {
+                    actual: q,
+                    reference: p,
+                })
             }
             (Err(_), None) => None,
-            (Ok(q), None) => Some(format!(
-                "rsigma {q:?}, pySigma rejected it: {}",
-                theirs["error"]
-            )),
-            (Err(e), Some(p)) => Some(format!("rsigma rejected it ({e}), pySigma {p}")),
+            (Ok(q), None) => Some(Problem::ReferenceRejected {
+                actual: q,
+                error: theirs["error"].to_string(),
+            }),
+            (Err(e), Some(p)) => Some(Problem::ReferenceAccepted {
+                error: e,
+                reference: serde_json::from_value(p.clone()).unwrap(),
+            }),
         };
         problems.push((case, problem));
     }

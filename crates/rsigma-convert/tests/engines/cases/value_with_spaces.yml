@@ -13,6 +13,16 @@ events:
   - {Image: 'C:\Program Files\x.exe.bak'}
 matches: [0, 1]
 known_failures:
-  postgres-jsonb: plain equality renders as the case-sensitive = operator
-  postgres-columns: plain equality renders as the case-sensitive = operator
-  test-pysigma: backslashes in values are doubled
+  postgres-jsonb:
+    type: match-mismatch
+    reason: "plain equality renders as the case-sensitive = operator"
+    actual: [0]
+  postgres-columns:
+    type: match-mismatch
+    reason: "plain equality renders as the case-sensitive = operator"
+    actual: [0]
+  test-pysigma:
+    type: output-difference
+    reason: "backslashes in values are doubled"
+    actual: ["Image=\"C\\:\\\\Program Files\\\\x.exe\""]
+    reference: ["Image=\"C\\:\\Program Files\\x.exe\""]

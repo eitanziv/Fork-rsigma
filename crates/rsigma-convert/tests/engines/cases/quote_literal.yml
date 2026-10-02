@@ -15,4 +15,8 @@ events:
   - {CommandLine: 'echo say hi'}
 matches: [0, 2]
 known_failures:
-  test-pysigma: values of one field are not rendered as an in-list
+  test-pysigma:
+    type: output-difference
+    reason: "values of one field are not rendered as an in-list"
+    actual: ["CommandLine contains \"say \\\"hi\\\"\" or CommandLine contains \"it's\""]
+    reference: ["CommandLine in (\"*it's*\", \"*say \\\"hi\\\"*\")"]

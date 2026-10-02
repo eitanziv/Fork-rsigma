@@ -83,10 +83,13 @@ events: [ ... ]          # one map per event
 matches: [0, 2]          # indexes of the events the rule must match
 unsupported: [lynxdb]    # optional: engines whose backend must reject the rule
 known_failures:          # optional: engine label to a confirmed defect
-  postgres-jsonb: why the result is wrong
+  postgres-jsonb:
+    type: match-mismatch
+    reason: why the result is wrong
+    actual: [1]
 ```
 
-The engine labels are `eval`, `postgres-jsonb`, `postgres-columns`, `lynxdb`, `fibratus`, `fibratus-nomacros`, and `test-pysigma`. A known failure that starts passing fails the test, so a fix must remove its entry. Prefer cases that probe edge behavior (missing fields, escapes, grouping, case) over happy paths.
+The engine labels are `eval`, `postgres-jsonb`, `postgres-columns`, `lynxdb`, `fibratus`, `fibratus-nomacros`, and `test-pysigma`. Known failures use `type: match-mismatch` with the exact matched indexes, `type: engine-error` with a required error substring, or `type: output-difference` with the exact rsigma and reference queries. A failure that changes outcome or starts passing fails the test, so a fix must update or remove its entry. Prefer cases that probe edge behavior (missing fields, escapes, grouping, case) over happy paths.
 
 The `eval` run is part of `cargo test`. The engine runs are `#[ignore]`d and need extra tooling:
 

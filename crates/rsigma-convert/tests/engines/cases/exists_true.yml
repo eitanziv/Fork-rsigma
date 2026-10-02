@@ -12,5 +12,11 @@ events:
   - {User: ''}
 matches: [0, 2]
 known_failures:
-  fibratus: exists renders as a comparison with false, which never matches a string field
-  fibratus-nomacros: exists renders as a comparison with false, which never matches a string field
+  fibratus:
+    type: match-mismatch
+    reason: "exists renders as a comparison with false, which never matches a string field"
+    actual: []
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "exists renders as a comparison with false, which never matches a string field"
+    actual: []

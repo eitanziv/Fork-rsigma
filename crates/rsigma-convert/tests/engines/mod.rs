@@ -52,8 +52,8 @@ pub struct Case {
     pub matches: Vec<usize>,
     /// Engines that must reject the rule at conversion time.
     pub unsupported: Vec<String>,
-    /// Engine label to a description of a confirmed defect on that engine.
-    pub known_failures: BTreeMap<String, String>,
+    /// Engine label to the exact outcome of a confirmed defect.
+    pub known_failures: BTreeMap<String, KnownFailure>,
 }
 
 impl Case {
@@ -61,8 +61,8 @@ impl Case {
         self.unsupported.iter().any(|e| e == engine)
     }
 
-    pub fn known_failure(&self, engine: &str) -> Option<&str> {
-        self.known_failures.get(engine).map(String::as_str)
+    pub fn known_failure(&self, engine: &str) -> Option<&KnownFailure> {
+        self.known_failures.get(engine)
     }
 
     /// Events with [`IDX_FIELD`] added.
@@ -78,6 +78,58 @@ impl Case {
                 e
             })
             .collect()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum KnownFailure {
+    MatchMismatch {
+        reason: String,
+        actual: Vec<usize>,
+    },
+    EngineError {
+        reason: String,
+        contains: String,
+    },
+    OutputDifference {
+        reason: String,
+        actual: Vec<String>,
+        reference: Vec<String>,
+    },
+}
+
+impl KnownFailure {
+    fn reason(&self) -> &str {
+        match self {
+            Self::MatchMismatch { reason, .. }
+            | Self::EngineError { reason, .. }
+            | Self::OutputDifference { reason, .. } => reason,
+        }
+    }
+
+    fn matches(&self, problem: &Problem) -> bool {
+        match (self, problem) {
+            (
+                Self::MatchMismatch { actual, .. },
+                Problem::MatchMismatch {
+                    actual: got,
+                    expected: _,
+                },
+            ) => actual == got,
+            (Self::EngineError { contains, .. }, Problem::EngineError(error)) => {
+                error.contains(contains)
+            }
+            (
+                Self::OutputDifference {
+                    actual, reference, ..
+                },
+                Problem::OutputDifference {
+                    actual: got,
+                    reference: got_reference,
+                },
+            ) => actual == got && reference == got_reference,
+            _ => false,
+        }
     }
 }
 
@@ -128,14 +180,18 @@ fn load_case(path: &Path) -> Case {
         .get("unsupported")
         .map(|u| serde_json::from_value(serde_json::to_value(u).unwrap()).unwrap())
         .unwrap_or_default();
-    let known_failures: BTreeMap<String, String> = doc
-        .get("known_failures")
-        .map(|k| {
-            serde_json::from_value(serde_json::to_value(k).unwrap()).unwrap_or_else(|e| {
-                panic!("{name}: `known_failures` must map engine labels to descriptions: {e}")
-            })
-        })
-        .unwrap_or_default();
+    let mut known_failures = BTreeMap::new();
+    if let Some(entries) = doc.get("known_failures") {
+        for (label, value) in entries
+            .as_mapping()
+            .unwrap_or_else(|| panic!("{name}: `known_failures` must be a map"))
+        {
+            let label = label
+                .as_str()
+                .unwrap_or_else(|| panic!("{name}: known-failure labels must be strings"));
+            known_failures.insert(label.to_string(), parse_known_failure(&name, label, value));
+        }
+    }
     for label in known_failures.keys() {
         assert!(
             ENGINE_LABELS.contains(&label.as_str()),
@@ -151,6 +207,56 @@ fn load_case(path: &Path) -> Case {
         unsupported,
         known_failures,
         name,
+    }
+}
+
+fn parse_known_failure(name: &str, label: &str, value: &yaml_serde::Value) -> KnownFailure {
+    let required_str = |key: &str| {
+        value
+            .get(key)
+            .and_then(yaml_serde::Value::as_str)
+            .unwrap_or_else(|| panic!("{name}: `{label}` known failure needs string `{key}`"))
+            .to_string()
+    };
+    let reason = required_str("reason");
+    match required_str("type").as_str() {
+        "match-mismatch" => {
+            KnownFailure::MatchMismatch {
+                reason,
+                actual: serde_json::from_value(
+                    serde_json::to_value(value.get("actual").unwrap_or_else(|| {
+                        panic!("{name}: `{label}` match mismatch needs `actual`")
+                    }))
+                    .unwrap(),
+                )
+                .unwrap_or_else(|e| {
+                    panic!("{name}: `{label}` match mismatch has invalid `actual`: {e}")
+                }),
+            }
+        }
+        "engine-error" => KnownFailure::EngineError {
+            reason,
+            contains: required_str("contains"),
+        },
+        "output-difference" => {
+            let queries = |key: &str| {
+                serde_json::from_value(
+                    serde_json::to_value(value.get(key).unwrap_or_else(|| {
+                        panic!("{name}: `{label}` output difference needs `{key}`")
+                    }))
+                    .unwrap(),
+                )
+                .unwrap_or_else(|e| {
+                    panic!("{name}: `{label}` output difference has invalid `{key}`: {e}")
+                })
+            };
+            KnownFailure::OutputDifference {
+                reason,
+                actual: queries("actual"),
+                reference: queries("reference"),
+            }
+        }
+        kind => panic!("{name}: `{label}` has unknown known-failure type `{kind}`"),
     }
 }
 
@@ -196,6 +302,51 @@ pub enum Outcome {
     ConversionRejected(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Problem {
+    MatchMismatch {
+        actual: Vec<usize>,
+        expected: Vec<usize>,
+    },
+    EngineError(String),
+    ConversionRejected(String),
+    UnexpectedAcceptance(String),
+    OutputDifference {
+        actual: Vec<String>,
+        reference: Vec<String>,
+    },
+    ReferenceRejected {
+        actual: Vec<String>,
+        error: String,
+    },
+    ReferenceAccepted {
+        error: String,
+        reference: Vec<String>,
+    },
+}
+
+impl Problem {
+    fn describe(&self) -> String {
+        match self {
+            Self::MatchMismatch { actual, expected } => {
+                format!("matched {actual:?}, expected {expected:?}")
+            }
+            Self::EngineError(error) => format!("engine error: {error}"),
+            Self::ConversionRejected(error) => format!("conversion failed: {error}"),
+            Self::UnexpectedAcceptance(message) => message.clone(),
+            Self::OutputDifference { actual, reference } => {
+                format!("rsigma {actual:?}, reference {reference:?}")
+            }
+            Self::ReferenceRejected { actual, error } => {
+                format!("rsigma {actual:?}, reference rejected it: {error}")
+            }
+            Self::ReferenceAccepted { error, reference } => {
+                format!("rsigma rejected it ({error}), reference {reference:?}")
+            }
+        }
+    }
+}
+
 /// Compare outcomes against the case expectations and panic with every
 /// mismatch at once.
 pub fn assert_outcomes(engine: &str, results: &[(Case, Result<Outcome, String>)]) {
@@ -206,26 +357,28 @@ pub fn assert_outcomes(engine: &str, results: &[(Case, Result<Outcome, String>)]
 /// Compare outcomes against the case expectations. Returns one summary line
 /// followed by one line per failing case, or nothing when every case passed.
 pub fn check_outcomes(engine: &str, results: &[(Case, Result<Outcome, String>)]) -> Vec<String> {
-    let problems: Vec<(&Case, Option<String>)> = results
+    let problems: Vec<(&Case, Option<Problem>)> = results
         .iter()
         .map(|(case, result)| (case, outcome_problem(engine, case, result)))
         .collect();
     check_problems(engine, &problems)
 }
 
-fn outcome_problem(engine: &str, case: &Case, result: &Result<Outcome, String>) -> Option<String> {
+fn outcome_problem(engine: &str, case: &Case, result: &Result<Outcome, String>) -> Option<Problem> {
     match (result, case.is_unsupported(engine)) {
-        (Err(e), _) => Some(format!("engine error: {e}")),
+        (Err(e), _) => Some(Problem::EngineError(e.clone())),
         (Ok(Outcome::ConversionRejected(_)), true) => None,
-        (Ok(Outcome::ConversionRejected(e)), false) => Some(format!("conversion failed: {e}")),
-        (Ok(Outcome::Matched(got)), true) => Some(format!(
+        (Ok(Outcome::ConversionRejected(e)), false) => Some(Problem::ConversionRejected(e.clone())),
+        (Ok(Outcome::Matched(got)), true) => Some(Problem::UnexpectedAcceptance(format!(
             "expected a conversion error, but the query ran and matched {got:?}"
-        )),
+        ))),
         (Ok(Outcome::Matched(got)), false) => {
             let mut got = got.clone();
             got.sort_unstable();
-            got.dedup();
-            (got != case.matches).then(|| format!("matched {got:?}, expected {:?}", case.matches))
+            (got != case.matches).then(|| Problem::MatchMismatch {
+                actual: got,
+                expected: case.matches.clone(),
+            })
         }
     }
 }
@@ -233,16 +386,26 @@ fn outcome_problem(engine: &str, case: &Case, result: &Result<Outcome, String>) 
 /// Reconcile per-case problems with the recorded known failures. A known
 /// failure that no longer reproduces is itself a failure, so the fix that
 /// resolves it must also remove the entry.
-pub fn check_problems(engine: &str, problems: &[(&Case, Option<String>)]) -> Vec<String> {
+pub fn check_problems(engine: &str, problems: &[(&Case, Option<Problem>)]) -> Vec<String> {
     let mut failures = Vec::new();
     for (case, problem) in problems {
         match (problem, case.known_failure(engine)) {
-            (Some(p), None) => failures.push(format!("  {}: {p}", case.name)),
+            (Some(problem), None) => {
+                failures.push(format!("  {}: {}", case.name, problem.describe()));
+            }
             (None, Some(known)) => failures.push(format!(
-                "  {}: now passes; remove the known failure \"{known}\"",
-                case.name
+                "  {}: now passes; remove the known failure \"{}\"",
+                case.name,
+                known.reason()
             )),
-            (Some(_), Some(_)) | (None, None) => {}
+            (Some(problem), Some(known)) if known.matches(problem) => {}
+            (Some(problem), Some(known)) => failures.push(format!(
+                "  {}: known failure changed ({}); got {}",
+                case.name,
+                known.reason(),
+                problem.describe()
+            )),
+            (None, None) => {}
         }
     }
     if !failures.is_empty() {

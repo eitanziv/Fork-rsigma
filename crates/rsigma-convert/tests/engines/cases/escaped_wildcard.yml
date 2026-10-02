@@ -12,7 +12,20 @@ events:
   - {CommandLine: 'x ab y'}
 matches: [0]
 known_failures:
-  lynxdb: the literal star is emitted inside quotes, where LynxDB still treats it as a wildcard
-  test-pysigma: the escape of a literal * is dropped
-  fibratus: a literal * renders as \* in the string, which the Fibratus parser rejects as a bad escape
-  fibratus-nomacros: a literal * renders as \* in the string, which the Fibratus parser rejects as a bad escape
+  lynxdb:
+    type: match-mismatch
+    reason: "the literal star is emitted inside quotes, where LynxDB still treats it as a wildcard"
+    actual: [0, 1, 2]
+  test-pysigma:
+    type: output-difference
+    reason: "the escape of a literal * is dropped"
+    actual: ["CommandLine contains \"a*b\""]
+    reference: ["CommandLine contains \"a\\*b\""]
+  fibratus:
+    type: engine-error
+    reason: "a literal * renders as \\* in the string, which the Fibratus parser rejects as a bad escape"
+    contains: "expected a valid string but bad string or escape found"
+  fibratus-nomacros:
+    type: engine-error
+    reason: "a literal * renders as \\* in the string, which the Fibratus parser rejects as a bad escape"
+    contains: "expected a valid string but bad string or escape found"

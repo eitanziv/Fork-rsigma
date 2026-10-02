@@ -15,4 +15,8 @@ events:
   - {Image: 'C:\cmd.exe', ParentImage: 'C:\EXPLORER.EXE'}
 matches: [1]
 known_failures:
-  test-pysigma: backslashes in values are doubled
+  test-pysigma:
+    type: output-difference
+    reason: "backslashes in values are doubled"
+    actual: ["Image endswith \"\\\\cmd.exe\" and not ParentImage endswith \"\\\\explorer.exe\""]
+    reference: ["Image endswith \"\\cmd.exe\" and not ParentImage endswith \"\\explorer.exe\""]

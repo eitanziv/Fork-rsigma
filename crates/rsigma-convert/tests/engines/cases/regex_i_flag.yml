@@ -12,7 +12,20 @@ events:
   - {CommandLine: 'x who'}
 matches: [0, 1]
 known_failures:
-  lynxdb: the i flag is dropped from the regex
-  test-pysigma: the i flag is dropped instead of rendered as (?i)
-  fibratus: the i flag is dropped from the regex
-  fibratus-nomacros: the i flag is dropped from the regex
+  lynxdb:
+    type: match-mismatch
+    reason: "the i flag is dropped from the regex"
+    actual: []
+  test-pysigma:
+    type: output-difference
+    reason: "the i flag is dropped instead of rendered as (?i)"
+    actual: ["CommandLine=/who.mi/"]
+    reference: ["CommandLine=/(?i)who.mi/"]
+  fibratus:
+    type: match-mismatch
+    reason: "the i flag is dropped from the regex"
+    actual: [0]
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "the i flag is dropped from the regex"
+    actual: [0]

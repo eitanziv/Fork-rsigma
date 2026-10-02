@@ -16,4 +16,8 @@ events:
   - {CommandLine: 'a.exe'}
 matches: [0, 1]
 known_failures:
-  test-pysigma: backslashes in values are doubled; values of one field are not rendered as an in-list
+  test-pysigma:
+    type: output-difference
+    reason: "backslashes in values are doubled; values of one field are not rendered as an in-list"
+    actual: ["Image endswith \"\\\\a.exe\" or Image endswith \"\\\\b.exe\""]
+    reference: ["Image in (\"*\\a.exe\", \"*\\b.exe\")"]

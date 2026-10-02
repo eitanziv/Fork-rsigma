@@ -15,4 +15,8 @@ events:
   - {CommandLine: 'bar'}
 matches: [0, 1]
 known_failures:
-  test-pysigma: contains|all renders as ANDed contains instead of contains-all
+  test-pysigma:
+    type: output-difference
+    reason: "contains|all renders as ANDed contains instead of contains-all"
+    actual: ["CommandLine contains \"foo\" and CommandLine contains \"bar\""]
+    reference: ["CommandLine contains-all (\"*foo*\", \"*bar*\")"]

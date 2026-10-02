@@ -12,5 +12,11 @@ events:
   - {User: 'arger'}
 matches: [0, 1]
 known_failures:
-  postgres-jsonb: plain equality renders as the case-sensitive = operator
-  postgres-columns: plain equality renders as the case-sensitive = operator
+  postgres-jsonb:
+    type: match-mismatch
+    reason: "plain equality renders as the case-sensitive = operator"
+    actual: [1]
+  postgres-columns:
+    type: match-mismatch
+    reason: "plain equality renders as the case-sensitive = operator"
+    actual: [1]
