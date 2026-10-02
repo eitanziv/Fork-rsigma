@@ -318,6 +318,23 @@ fn placeholder_pipelines_skip_escaped_percent_and_unresolved_placeholders() {
         ),
         [0]
     );
+    assert_eq!(
+        matching_with(
+            "selection:\n  F|expand: '\\%user%'",
+            Some(pipeline),
+            &events
+        ),
+        [0]
+    );
+    let events = [json!({"F": "\\anything"}), json!({"F": "anything"})];
+    assert_eq!(
+        matching_with(
+            "selection:\n  F|expand: '\\\\%user%'",
+            Some(pipeline),
+            &events
+        ),
+        [0]
+    );
 
     let pipeline = "name: p\nvars:\n  b: [two]\ntransformations:\n  - type: value_placeholders\n";
     let events = [
