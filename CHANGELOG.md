@@ -14,6 +14,8 @@ Regex flags now reach every backend. A plain `re` converts to PostgreSQL's case-
 
 PostgreSQL plain equality is now case-insensitive, as Sigma requires: `User: admin` renders as `"User" ILIKE 'admin'` with `%`, `_`, and `\` escaped, and only `|cased` keeps `=`. Previously `=` missed `ADMIN`.
 
+PostgreSQL renders negation as `(expr) IS NOT TRUE` instead of `NOT expr`. A comparison on a missing field is NULL, and `NOT NULL` dropped the row, so `selection and not filter` and `|neq` missed events that lack the filtered field. The `[all]` and `[all_or_empty]` array blocks use the same form, so an element without the tested field now fails the block instead of passing it.
+
 Conversion now applies Sigma filters, as pySigma does when a collection loads: `convert_collection`, and so `backend convert`, `hunt`, and the MCP `convert_rules` tool, merges each filter into the detection rules it references before pipelines run, so field mappings reach the filter's fields. The new `rsigma_eval::apply_filters` performs the merge and targets rules the same way `Engine::apply_filter` does. A correlation rule converted with a backend that has no correlation support (`lynxdb` and `test`) is now an `UnsupportedCorrelation` error instead of being dropped silently; pass `--skip-unsupported` to convert the rest.
 
 Migration notes:

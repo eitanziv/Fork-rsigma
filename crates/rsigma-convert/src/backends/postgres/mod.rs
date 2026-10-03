@@ -573,11 +573,11 @@ impl PostgresBackend {
             ArrayQuantifier::All => format!(
                 "(jsonb_typeof({array_expr}) = 'array' AND jsonb_array_length({array_expr}) > 0 \
                  AND NOT EXISTS \
-                 (SELECT 1 FROM {srf}({array_expr}) AS {alias} WHERE NOT ({body_sql})))"
+                 (SELECT 1 FROM {srf}({array_expr}) AS {alias} WHERE ({body_sql}) IS NOT TRUE))"
             ),
             ArrayQuantifier::AllOrEmpty => format!(
                 "(CASE WHEN jsonb_typeof({array_expr}) = 'array' \
-                 THEN NOT EXISTS (SELECT 1 FROM {srf}({array_expr}) AS {alias} WHERE NOT ({body_sql})) \
+                 THEN NOT EXISTS (SELECT 1 FROM {srf}({array_expr}) AS {alias} WHERE ({body_sql}) IS NOT TRUE) \
                  ELSE {array_expr} IS NULL OR jsonb_typeof({array_expr}) = 'null' END)"
             ),
             ArrayQuantifier::None => format!(
@@ -682,8 +682,10 @@ impl Backend for PostgresBackend {
         Ok(text_convert_condition_or(self.config, exprs))
     }
 
+    /// `NOT` over a missing field is NULL, which drops the row, while Sigma
+    /// treats the negated detection as true. `IS NOT TRUE` maps NULL to true.
     fn convert_condition_not(&self, expr: &str) -> Result<String> {
-        Ok(text_convert_condition_not(self.config, expr))
+        Ok(format!("({expr}) IS NOT TRUE"))
     }
 
     fn convert_condition_group(
@@ -692,6 +694,9 @@ impl Backend for PostgresBackend {
         outer: TokenType,
         inner: TokenType,
     ) -> Result<String> {
+        if outer == TokenType::NOT {
+            return Ok(expr.to_string());
+        }
         Ok(text_convert_condition_group(
             self.config,
             expr,

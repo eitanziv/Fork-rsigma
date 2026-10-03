@@ -132,7 +132,7 @@ detection:
     assert_eq!(
         queries,
         vec![
-            r#"SELECT * FROM security_events WHERE "FieldA" ILIKE 'val1' AND NOT "FieldB" ILIKE 'val2'"#
+            r#"SELECT * FROM security_events WHERE "FieldA" ILIKE 'val1' AND ("FieldB" ILIKE 'val2') IS NOT TRUE"#
         ]
     );
 }
@@ -2218,7 +2218,7 @@ detection:
     assert!(
         q.contains(
             "NOT EXISTS (SELECT 1 FROM jsonb_array_elements(data->'connections') AS __sigma_e0 \
-             WHERE NOT (__sigma_e0->>'protocol' ILIKE 'TCP'))"
+             WHERE (__sigma_e0->>'protocol' ILIKE 'TCP') IS NOT TRUE)"
         ),
         "{q}"
     );
@@ -2246,7 +2246,7 @@ detection:
             "SELECT * FROM security_events WHERE \
              (CASE WHEN jsonb_typeof(data->'connections') = 'array' \
              THEN NOT EXISTS (SELECT 1 FROM jsonb_array_elements(data->'connections') AS __sigma_e0 \
-             WHERE NOT (__sigma_e0->>'protocol' ILIKE 'TCP')) \
+             WHERE (__sigma_e0->>'protocol' ILIKE 'TCP') IS NOT TRUE) \
              ELSE data->'connections' IS NULL OR jsonb_typeof(data->'connections') = 'null' END)"
         ]
     );
@@ -2281,8 +2281,11 @@ detection:
         q.contains("(__sigma_e0->>'ip')::inet <<= '123.1.0.0/16'::cidr"),
         "{q}"
     );
-    // The per-element negation lowers to a SQL NOT inside the element scope.
-    assert!(q.contains("NOT __sigma_e0->>'protocol' ILIKE 'TCP'"), "{q}");
+    // The per-element negation lowers to IS NOT TRUE inside the element scope.
+    assert!(
+        q.contains("(__sigma_e0->>'protocol' ILIKE 'TCP') IS NOT TRUE"),
+        "{q}"
+    );
     assert!(q.contains(" AND "), "{q}");
 }
 

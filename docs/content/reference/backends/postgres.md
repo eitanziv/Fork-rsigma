@@ -38,14 +38,16 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 | `all` | values combined with `AND` instead of the default `OR` |
 | `fieldref` | `lower(("field")::text) = lower(("other")::text)` (case-insensitive); `"field" = "other"` with `cased` |
 | `fieldref` with `contains` | `strpos(lower(("field")::text), lower(("other")::text)) > 0`. `startswith` uses `strpos(...) = 1`. `endswith` uses `right(("field")::text, char_length(("other")::text)) = ("other")::text`. `|cased` drops the `lower()` calls. `%` and `_` in the referenced value stay literal. {{ added "0.23.0" }} |
-| `neq` | `NOT "field" ILIKE 'value'`. A list negates the whole item: `NOT ("field" ILIKE 'a' OR "field" ILIKE 'b')`. |
+| `neq` | `("field" ILIKE 'value') IS NOT TRUE`, which also matches when the field is missing or null. A list negates the whole item: `("field" ILIKE 'a' OR "field" ILIKE 'b') IS NOT TRUE`. {{ added "unreleased" }} |
 | `fieldref` with `neq` | `(lower(("field")::text) = lower(("other")::text)) IS NOT TRUE AND "field" IS NOT NULL`. A missing referenced field still matches when the left field is present. {{ added "0.23.0" }} |
 | `null` value | `"field" IS NULL` |
 | keywords | `to_tsvector('simple', security_events::text) @@ plainto_tsquery('simple', 'value')` |
 
 Keyword matching uses the `'simple'` text-search configuration (no language stemming) over the whole event: the JSONB column as text with `-O json_field=...`, or the table row as text otherwise, referenced by the unqualified table name. A `query_expression_placeholders` template that gives the table an alias hides that name, so keyword rules need the JSONB column or an unaliased table. The query matches the token against every column concatenated. This is intentionally broader than per-field FTS: keyword detections in Sigma are unbound, "search this string anywhere in the event". Full-text search matches whole tokens, not substrings, and the parser keeps file paths and host names such as `/dev/tcp/10.0.0.1/4444` and `mimikatz.exe` as single tokens, so a keyword that is only part of such a token does not match.
 
-Nested conditions are parenthesized by SQL precedence (`NOT` > `AND` > `OR`): an `OR` under an `AND`, such as a value list in a selection that also tests another field, becomes `("Image" ILIKE '%\\a.exe' OR "Image" ILIKE '%\\b.exe') AND "CommandLine" ILIKE '%x%'`, and a compound operand of `NOT`, such as `not 1 of filter_*`, becomes `NOT (... OR ...)`. {{ added "unreleased" }}
+Nested conditions are parenthesized by SQL precedence (`NOT` > `AND` > `OR`): an `OR` under an `AND`, such as a value list in a selection that also tests another field, becomes `("Image" ILIKE '%\\a.exe' OR "Image" ILIKE '%\\b.exe') AND "CommandLine" ILIKE '%x%'`, and every negation, such as `not 1 of filter_*`, becomes `(... OR ...) IS NOT TRUE`. {{ added "unreleased" }}
+
+A comparison on a missing field is NULL in SQL, and `NOT NULL` is still NULL, so `NOT` would drop an event that Sigma matches: `selection and not filter` must match when the event lacks the field `filter` tests. `IS NOT TRUE` maps NULL to true, which matches Sigma and the rsigma engine. {{ added "unreleased" }}
 
 Field names are always double-quoted (`"CommandLine"`). String literals are always single-quoted with PostgreSQL-standard escaping (`'don''t'`). Identifiers passed through `-O table=...` are validated against `^[A-Za-z_][A-Za-z0-9_$]*$` before insertion; non-matching identifiers fail conversion with `InvalidIdentifier`. See [Security Hardening: SQL injection prevention](../security.md#sql-injection-prevention).
 
@@ -167,7 +169,7 @@ data->'args'->>-1
     AND (__sigma_e0->>'ip')::inet <<= '123.1.0.0/16'::cidr))
 ```
 
-`[all]` adds a non-empty guard and `NOT EXISTS (... WHERE NOT (...))`. Because `[none]` and `[all_or_empty]` must match an empty or missing array, they lower to a `CASE` that only unnests an actual array and treats a missing/null value as a match:
+`[all]` adds a non-empty guard and `NOT EXISTS (... WHERE (...) IS NOT TRUE)`, so an element that lacks a field the body tests fails the block. Because `[none]` and `[all_or_empty]` must match an empty or missing array, they lower to a `CASE` that only unnests an actual array and treats a missing/null value as a match:
 
 ```sql
 -- containers[none]: { privileged: 'true' }
@@ -177,7 +179,7 @@ data->'args'->>-1
   ELSE data->'containers' IS NULL OR jsonb_typeof(data->'containers') = 'null' END)
 ```
 
-`[all_or_empty]` uses the same shape with `WHERE NOT (...)`.
+`[all_or_empty]` uses the same shape with `WHERE (...) IS NOT TRUE`.
 
 An **extended** block body (a `condition:` plus named element-scoped sub-selections) lowers to the same primitive, with the condition compiled into the inner predicate as a boolean expression over the element (`AND`, `OR`, and `NOT`, grouped by SQL precedence):
 
@@ -186,7 +188,7 @@ An **extended** block body (a `condition:` plus named element-scoped sub-selecti
 (jsonb_typeof(data->'connections') = 'array' AND EXISTS (
   SELECT 1 FROM jsonb_array_elements(data->'connections') AS __sigma_e0
   WHERE (__sigma_e0->>'ip')::inet <<= '123.1.0.0/16'::cidr
-    AND NOT __sigma_e0->>'protocol' ILIKE 'TCP'))
+    AND (__sigma_e0->>'protocol' ILIKE 'TCP') IS NOT TRUE))
 ```
 
 Array matching requires JSONB mode; in flat-column mode the backend reports `UnsupportedArrayMatching`.

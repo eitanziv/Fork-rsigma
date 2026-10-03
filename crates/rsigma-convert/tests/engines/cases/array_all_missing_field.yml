@@ -1,0 +1,17 @@
+description: An [all] block fails when an element lacks the field, because that element does not match.
+rule:
+  title: array all missing field
+  sigma-version: 3
+  logsource: {category: network_connection, product: linux}
+  detection:
+    selection:
+      connections[all]:
+        protocol: 'TCP'
+    condition: selection
+unsupported: [postgres-columns, lynxdb, fibratus, fibratus-nomacros, test-pysigma]
+events:
+  - {connections: [{protocol: 'TCP'}, {protocol: 'tcp'}]}
+  - {connections: [{protocol: 'TCP'}, {ip: '10.0.0.1'}]}
+  - {connections: [{protocol: 'TCP'}, {protocol: 'UDP'}]}
+  - {connections: []}
+matches: [0]

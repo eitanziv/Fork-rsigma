@@ -1,1 +1,1 @@
-SELECT * FROM security_events WHERE "Image" ILIKE '%\\cmd.exe' AND NOT ("CommandLine" ILIKE '%shell32%' OR "CommandLine" ILIKE '%rundll32%' OR "ParentImage" ILIKE '%\\explorer.exe' AND "User" ILIKE 'admin')
+SELECT * FROM security_events WHERE "Image" ILIKE '%\\cmd.exe' AND ("CommandLine" ILIKE '%shell32%' OR "CommandLine" ILIKE '%rundll32%' OR "ParentImage" ILIKE '%\\explorer.exe' AND "User" ILIKE 'admin') IS NOT TRUE

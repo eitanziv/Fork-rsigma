@@ -1,1 +1,1 @@
-SELECT * FROM security_events WHERE "FieldA" ILIKE 'val1' AND NOT "FieldB" ILIKE 'val2'
+SELECT * FROM security_events WHERE "FieldA" ILIKE 'val1' AND ("FieldB" ILIKE 'val2') IS NOT TRUE
