@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Filter selectors and rule references follow Sigma semantics
+### Filter selectors and rule references follow Sigma semantics (#537)
 
 Filter condition selectors now remain scoped to the filter's own detection items after those items are namespaced and injected into a target rule. Patterns such as `not 1 of selection_*` and `all of them` no longer resolve against similarly named detection items from the target rule. `filter.rules` now resolves rule `name` values as well as `id`. Exact title matching remains available for compatibility and emits the new `filter_reference_by_title` lint warning so rulesets can migrate to stable identities.
 
