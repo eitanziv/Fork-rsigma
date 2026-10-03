@@ -1,10 +1,12 @@
 //! IR-native detection/item dispatch for the `Backend` trait.
 //!
 //! Walks [`IrDetection`] / [`IrDetectionItem`] and calls the IR-native
-//! `Backend` value leaves. Encoding transforms, `expand`, and timestamp parts
-//! have no faithful backend rendering and are rejected here, matching the
-//! historical parser-path behavior. `|neq` lowers to an [`IrMatcher::Not`]
-//! around the whole item and is rendered with [`Backend::convert_condition_not`].
+//! `Backend` value leaves. Encoding modifiers are expanded into an OR of plain
+//! string matches by
+//! [`rsigma_ir::encoding::expand_encoded_detections`] before the walk. An `expand` value
+//! with unresolved placeholders and timestamp parts have no backend rendering
+//! and are rejected here. `|neq` lowers to an [`IrMatcher::Not`] around the
+//! whole item and is rendered with [`Backend::convert_condition_not`].
 
 use std::collections::HashMap;
 
@@ -395,15 +397,28 @@ fn convert_leaf<B: Backend + ?Sized>(
             let res = backend.convert_field_ref(field, rf, *op, *case_insensitive, state)?;
             Ok(resolve(res, state))
         }
-        // Encoding transforms, expand, and timestamp parts have no faithful
-        // backend rendering; reject them (as the parser path did).
-        IrMatcher::Encoded { .. } => Err(ConvertError::UnsupportedModifier(
-            "value-transformation modifiers (base64/wide/utf16/windash) are not \
-             expressible as a backend query"
-                .into(),
+        IrMatcher::Encoded { .. } => Err(ConvertError::RuleConversion(
+            "encoding modifiers must be expanded before conversion".into(),
         )),
         IrMatcher::Not(inner) => convert_not(backend, field, inner, state),
-        IrMatcher::Expand { .. } => Err(ConvertError::UnsupportedModifier("Expand".into())),
+        IrMatcher::Expand { template, .. } => {
+            let unresolved: Vec<&str> = template
+                .iter()
+                .filter_map(|part| match part {
+                    rsigma_ir::IrExpandPart::Placeholder(name) => Some(name.as_str()),
+                    rsigma_ir::IrExpandPart::Literal(_) => None,
+                })
+                .collect();
+            Err(ConvertError::UnsupportedModifier(format!(
+                "expand placeholder(s) {} not resolved by a pipeline; conversion \
+                 cannot substitute event fields at match time",
+                unresolved
+                    .iter()
+                    .map(|name| format!("%{name}%"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )))
+        }
         IrMatcher::TimestampPart { .. } => {
             Err(ConvertError::UnsupportedModifier("timestamp part".into()))
         }

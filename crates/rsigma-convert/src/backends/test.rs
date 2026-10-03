@@ -1277,18 +1277,23 @@ detection:
     }
 
     #[test]
-    fn test_default_path_rejects_encoding_modifiers() {
-        // base64, base64offset, wide, utf16, utf16be, windash all transform
-        // the value before comparison. The generic dispatch only emits raw
-        // equality, so the resulting query never matches what the rule
-        // intended.
-        for modifier in [
-            "base64",
-            "base64offset",
-            "wide",
-            "utf16",
-            "utf16be",
-            "windash",
+    fn test_encoding_modifiers_expand_to_plain_matches() {
+        for (modifier, expected) in [
+            ("base64", r#"Field="LXBheWxvYWQ=""#),
+            (
+                "base64offset|contains",
+                r#"Field contains "LXBheWxvYW" or Field contains "1wYXlsb2Fk" or Field contains "tcGF5bG9hZ""#,
+            ),
+            (
+                "wide|base64offset|contains",
+                r#"Field contains "LQBwAGEAeQBsAG8AYQBkA" or Field contains "0AcABhAHkAbABvAGEAZA" or Field contains "tAHAAYQB5AGwAbwBhAGQA""#,
+            ),
+            ("utf16|base64", r#"Field="//4tAHAAYQB5AGwAbwBhAGQA""#),
+            ("utf16be|base64", r#"Field="AC0AcABhAHkAbABvAGEAZA==""#),
+            (
+                "windash|contains",
+                r#"Field contains "-payload" or Field contains "/payload" or Field contains "–payload" or Field contains "—payload" or Field contains "―payload""#,
+            ),
         ] {
             let yaml = format!(
                 r#"
@@ -1297,16 +1302,91 @@ logsource:
     category: test
 detection:
     selection:
-        Field|{modifier}: payload
+        Field|{modifier}: '-payload'
     condition: selection
 "#
             );
-            let err = convert_rule_yaml_err(&yaml);
-            assert!(
-                matches!(&err, ConvertError::UnsupportedModifier(_)),
-                "expected UnsupportedModifier for `{modifier}`, got: {err}",
-            );
+            assert_eq!(convert_rule_yaml(&yaml), vec![expected], "{modifier}");
         }
+    }
+
+    #[test]
+    fn test_encoding_expansion_keeps_or_grouped() {
+        let queries = convert_rule_yaml(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        Image|endswith: '\x.exe'
+        CommandLine|windash|contains: ' -f '
+    condition: selection
+"#,
+        );
+        assert_eq!(
+            queries,
+            vec![
+                r#"Image endswith "\\x.exe" and (CommandLine contains " -f " or CommandLine contains " /f " or CommandLine contains " –f " or CommandLine contains " —f " or CommandLine contains " ―f ")"#
+            ]
+        );
+    }
+
+    #[test]
+    fn test_negated_encoding_expansion_is_grouped() {
+        let queries = convert_rule_yaml(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        A: x
+        Field|windash|contains|neq: ' -f '
+    condition: selection
+"#,
+        );
+        assert_eq!(
+            queries,
+            vec![
+                r#"A="x" and not (Field contains " -f " or Field contains " /f " or Field contains " –f " or Field contains " —f " or Field contains " ―f ")"#
+            ]
+        );
+    }
+
+    #[test]
+    fn test_encoding_wildcard_with_base64_is_rejected() {
+        let err = convert_rule_yaml_err(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        Field|base64offset|contains: 'pay*load'
+    condition: selection
+"#,
+        );
+        assert!(
+            matches!(&err, ConvertError::UnsupportedValue(_)),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_unresolved_expand_is_rejected() {
+        let err = convert_rule_yaml_err(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        Field|expand: '%admin_users%'
+    condition: selection
+"#,
+        );
+        assert!(err.to_string().contains("%admin_users%"), "got: {err}");
     }
 
     #[test]

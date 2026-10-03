@@ -749,6 +749,7 @@ impl Backend for PostgresBackend {
         case_insensitive: bool,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
+        reject_nul_pattern("PostgreSQL", pattern)?;
         let f = self.field_expr(field)?;
         let is_cased = !case_insensitive;
         let is_contains = matches!(op, IrStrOp::Contains);
@@ -809,6 +810,7 @@ impl Backend for PostgresBackend {
         flags: RegexFlags,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
+        reject_nul("PostgreSQL", pattern)?;
         let f = self.field_expr(field)?;
         let escaped_pattern = self.escape_sql_str(pattern);
         let is_cased = flags.cased || self.case_sensitive_re;
@@ -906,6 +908,7 @@ impl Backend for PostgresBackend {
         pattern: &IrPattern,
         state: &mut ConversionState,
     ) -> Result<String> {
+        reject_nul_pattern("PostgreSQL", pattern)?;
         let search_target = self.keyword_search_target(state);
         let plain = keyword_pattern_text(pattern);
         if plain.is_empty() {

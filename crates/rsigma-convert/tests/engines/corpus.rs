@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use rsigma_eval::Engine;
+use rsigma_ir::encoding::expand_encoded_detections;
 use rsigma_ir::{
     IrCondition, IrDetection, IrMatcher, IrPattern, IrPatternPart, IrStrOp, LowerOptions,
     lower_rule,
@@ -129,6 +130,7 @@ impl Rule {
         }
         Engine::new().add_collection(&collection).ok()?;
         let mut ir = lower_rule(&collection.rules[0], &LowerOptions::default()).ok()?;
+        expand_encoded_detections(&mut ir.detections).ok()?;
         if ir.conditions.len() != 1 {
             return None;
         }
@@ -414,7 +416,7 @@ fn body(pattern: &IrPattern) -> Option<String> {
             IrPatternPart::WildcardSingle => body.push('y'),
         }
     }
-    (!body.contains('\n')).then_some(body)
+    (!body.contains(['\n', '\0'])).then_some(body)
 }
 
 /// One value meeting every constraint: an exact value if there is one,

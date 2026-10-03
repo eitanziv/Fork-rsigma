@@ -10,6 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
+base64 = "0.23"
 rsigma-parser = { path = "../rsigma-parser", version = "0.23.0", default-features = false }
 ciborium = "0.2"
 serde = { version = "1", features = ["derive"] }

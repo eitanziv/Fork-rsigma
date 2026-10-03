@@ -86,7 +86,7 @@ pub fn convert_ir_condition(
 /// Map an IR lowering error to the closest `ConvertError`, preserving the
 /// error kinds convert historically surfaced (invalid/unsupported modifiers,
 /// incompatible values).
-fn ir_err(e: rsigma_ir::IrError) -> ConvertError {
+pub(crate) fn ir_err(e: rsigma_ir::IrError) -> ConvertError {
     use rsigma_ir::IrError;
     match e {
         IrError::InvalidModifiers(m) => ConvertError::UnsupportedModifier(m),
@@ -105,7 +105,9 @@ pub fn convert_rule_via_ir(
     output_format: &str,
     pipeline_state: &PipelineState,
 ) -> Result<Vec<String>> {
-    let ir = rsigma_ir::lower_rule(rule, &rsigma_ir::LowerOptions::default()).map_err(ir_err)?;
+    let mut ir =
+        rsigma_ir::lower_rule(rule, &rsigma_ir::LowerOptions::default()).map_err(ir_err)?;
+    rsigma_ir::encoding::expand_encoded_detections(&mut ir.detections).map_err(ir_err)?;
 
     let mut queries = Vec::with_capacity(ir.conditions.len());
     for (idx, cond) in ir.conditions.iter().enumerate() {

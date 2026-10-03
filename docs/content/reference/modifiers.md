@@ -35,6 +35,8 @@ The encoding modifiers transform the value before it is matched. When several ap
 
 A value with a wildcard cannot be combined with `base64` or `base64offset`, because a base64 encoding has no way to represent "any characters". Such a rule is rejected when it is compiled.
 
+Backends convert encoding modifiers as pySigma does: each variant becomes a plain string match, and the variants are ORed together. The windash limit applies to conversion too. Without a base64 step, a UTF-16 variant contains NUL characters, which the PostgreSQL and Fibratus backends reject with `UnsupportedValue`. {{ added "unreleased" }}
+
 ## Placeholders and `expand`
 
 With `|expand`, `%name%` in a value is a placeholder. A backslash escapes `%` as well as `*`, `?`, and itself: `100\%` is a literal percent sign, and `C:\Users\\%user%` is a backslash followed by the `user` placeholder. A placeholder name is non-empty and contains no `*`, `?`, or backslash.

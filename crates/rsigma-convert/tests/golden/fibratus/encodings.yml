@@ -1,0 +1,10 @@
+title: Encoding Modifiers
+detection:
+  selection:
+    ps.exe|endswith: '\certutil.exe'
+    ps.cmdline|windash|contains: ' -decode '
+  payload:
+    ps.cmdline|base64offset|contains: 'IEX'
+  wide:
+    ps.cmdline|wide|base64offset|contains: 'http'
+  condition: selection or payload or wide

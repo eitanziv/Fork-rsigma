@@ -1,0 +1,1 @@
+FROM main | search (Image=*"\\certutil.exe" AND CommandLine=*" -decode "* OR CommandLine=*" /decode "* OR CommandLine=*" –decode "* OR CommandLine=*" —decode "* OR CommandLine=*" ―decode "*) OR CommandLine=*"SUVY"* OR CommandLine=*"lFW"* OR CommandLine=*"JRV"* OR CommandLine=*"aAB0AHQAcA"* OR CommandLine=*"gAdAB0AHAA"* OR CommandLine=*"oAHQAdABwA"*

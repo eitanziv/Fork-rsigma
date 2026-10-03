@@ -67,6 +67,26 @@ pub struct RegexFlags {
 /// `crate::backend::ir_pattern_to_sigma`.
 pub(crate) use rsigma_ir::ir_pattern_to_sigma;
 
+/// Reject a value containing a NUL character (for example from `|wide`
+/// without `|base64`), which `backend` cannot carry in its query text.
+pub(crate) fn reject_nul(backend: &str, value: &str) -> Result<()> {
+    if value.contains('\0') {
+        return Err(ConvertError::UnsupportedValue(format!(
+            "{backend} cannot represent a NUL character in a query value; \
+             combine |wide/|utf16 with |base64 or |base64offset"
+        )));
+    }
+    Ok(())
+}
+
+/// [`reject_nul`] over the literal parts of an [`IrPattern`].
+pub(crate) fn reject_nul_pattern(backend: &str, pattern: &IrPattern) -> Result<()> {
+    pattern.parts.iter().try_for_each(|part| match part {
+        IrPatternPart::Literal(s) => reject_nul(backend, s),
+        _ => Ok(()),
+    })
+}
+
 // =============================================================================
 // Backend trait
 // =============================================================================

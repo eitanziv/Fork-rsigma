@@ -248,6 +248,9 @@ impl FibratusBackend {
                     if *ci.get_or_insert(*case_insensitive) != *case_insensitive {
                         return None;
                     }
+                    if reject_nul_pattern("Fibratus", pattern).is_err() {
+                        return None;
+                    }
                     patterns.push(pattern);
                 }
                 _ => return None,
@@ -464,6 +467,7 @@ impl Backend for FibratusBackend {
         case_insensitive: bool,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
+        reject_nul_pattern("Fibratus", pattern)?;
         let f = self.escape_and_quote_field(field);
         let val = shared::quote_sigma_string(&crate::backend::ir_pattern_to_sigma(pattern));
         let is_cased = self.fibratus.case_sensitive || !case_insensitive;
@@ -576,6 +580,7 @@ impl Backend for FibratusBackend {
                 "regex pattern uses PCRE-only construct (lookaround/backreference) Fibratus's RE2 engine does not support: {pattern}"
             )));
         }
+        reject_nul("Fibratus", pattern)?;
         let f = self.escape_and_quote_field(field);
         let quoted = shared::quote_plain_str(pattern);
         Ok(ConvertResult::Query(format!("regex({f}, {quoted}) = true")))

@@ -144,3 +144,8 @@ fn golden_chained_correlation() {
 fn golden_chained_correlation_generate() {
     run_golden("chained_correlation_generate");
 }
+
+#[test]
+fn golden_encodings() {
+    run_golden("encodings");
+}

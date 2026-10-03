@@ -250,7 +250,7 @@ Two pipelines ship with `rsigma-convert` for Open Cybersecurity Schema Framework
 
 Both are starting points; copy and customize for your schema.
 
-Value-transformation modifiers (`base64`, `base64offset`, `wide`, `utf16`, `utf16le`, `utf16be`, `windash`) fail conversion with `UnsupportedModifier`. Preprocess those values at ingest when needed. There is no `prepared` output format today.
+Encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) convert to an OR of one `ILIKE` (or `=`) per encoded variant, as pySigma does. PostgreSQL text cannot hold a NUL character, so a UTF-16 encoding without a following `base64` or `base64offset` fails with `UnsupportedValue`. {{ added "unreleased" }} There is no `prepared` output format today.
 
 ## Executing hunts
 

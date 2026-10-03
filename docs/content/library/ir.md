@@ -33,6 +33,7 @@ The crate is sync-only (no tokio/reqwest).
 | `IrRule` / `IrDetection` / `IrMatcher` / `IrCondition` | Detection-rule HIR. `IrCondition::Selector` keeps the quantifier and name pattern. |
 | `IrMatcher::Str` + `IrPattern` | Faithful, wildcard-aware, original-case string match. |
 | `IrMatcher::Encoded` + `IrEncoding` | Explicit encoding transforms (`base64`, `wide`, `windash`, …) over a wildcard-aware `pattern`. {{ added "unreleased" }} |
+| `encoding::expand_encoded` / `encoding::expand_encoded_detections` | Replay an `Encoded` matcher into the plain string matches its encodings produce (windash variants, UTF-16, base64 and base64offset). Eval compiles them and conversion renders them, so both agree on the variants. `encoding::MAX_WINDASH_DASHES` caps windash expansion. {{ added "unreleased" }} |
 | `IrMatcher::Expand` | A `\|expand` value with placeholders left for match time, with the string operator in `op`. {{ added "unreleased" }} |
 | `IrCorrelation` / `IrFilter` | Correlation and filter HIR. |
 | `IrRuleMetadata` | Metadata superset used when projecting eval `RuleHeader`. |
@@ -65,7 +66,7 @@ Each pass preserves the match decision and the set of matched selections and fie
 
 ## Lowering notes
 
-- Lowering is **purely structural**: it resolves *which* comparison applies but never lowercases, compiles regexes, or expands encodings. Eval does that at compile time; convert renders wildcards to backend tokens. This keeps the HIR lossless.
+- Lowering is **purely structural**: it resolves *which* comparison applies but never lowercases, compiles regexes, or expands encodings. Eval does that at compile time; convert expands encodings with `encoding::expand_encoded_detections` and renders wildcards to backend tokens. This keeps the HIR lossless.
 - Selectors such as `1 of selection_*` and `all of them` are preserved as `IrCondition::Selector`, so evaluation stays count-based and reports every matching detection. `them` and every pattern that does not start with `_` skip `_`-prefixed detection names; a pattern that starts with `_`, such as `1 of _filter*`, selects them. A selector that matches no detection name fails lowering with `IrError::NoSelectorMatches`, so evaluation and conversion reject the rule alike. {{ added "unreleased" }}
 - Modifier contradictions (`|cidr|contains`, `|base64|base64offset`, …) fail at lower time with the same error kinds eval previously surfaced from `compile_rule`. So do values an encoding cannot represent: a wildcard under `|base64` or `|base64offset`, and a non-ASCII value under a UTF-16 encoding with no base64 step. {{ added "unreleased" }}
 - An `|expand` value whose placeholders are all resolved by the pipeline lowers to an ordinary string matcher; only values with placeholders left become `IrMatcher::Expand`. {{ added "unreleased" }}

@@ -1,0 +1,1 @@
+(ps.exe iendswith '\\certutil.exe' and ps.cmdline icontains (' -decode ', ' /decode ', ' –decode ', ' —decode ', ' ―decode ') or ps.cmdline icontains ('SUVY', 'lFW', 'JRV') or ps.cmdline icontains ('aAB0AHQAcA', 'gAdAB0AHAA', 'oAHQAdABwA'))

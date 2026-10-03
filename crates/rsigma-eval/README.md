@@ -579,8 +579,8 @@ Always benchmark against representative rule sets and event streams before flipp
 | Constant | Value | Purpose |
 |----------|-------|---------|
 | `MAX_NESTING_DEPTH` | 64 | Recursive JSON traversal depth for keyword search |
-| `MAX_WINDASH_DASHES` | 8 | Maximum dash characters expanded by windash (5^8 variants) |
-| `WINDASH_CHARS` | 5 | `-`, `/`, `–` (en-dash), `—` (em-dash), `―` (horizontal bar) |
+| `MAX_WINDASH_DASHES` | 8 | Maximum dash characters expanded by windash (5^8 variants); defined in `rsigma_ir::encoding` and shared with conversion |
+| Windash characters | 5 | `-`, `/`, `–` (en-dash), `—` (em-dash), `―` (horizontal bar) |
 | `MAX_CHAIN_DEPTH` | 10 | Maximum correlation chaining depth |
 | `max_state_entries` | 100,000 | Default hard cap for correlation state |
 | Eviction target | 90% | Hard-cap eviction drops the stalest 10% |

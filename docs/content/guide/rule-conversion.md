@@ -55,6 +55,10 @@ Correlation methods for 'postgres' (select with -O correlation_method=NAME, defa
   session  - Gaps-and-islands sessionization (requires a gap)
 ```
 
+## Encoding modifiers
+
+Every native backend converts the encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) the way pySigma does. Each variant the modifiers produce becomes a plain string match, and the variants are ORed together, so `CommandLine|windash|contains: ' -f '` converts to one `contains` match for each of `-`, `/`, `–`, `—`, and `―`, and `|base64offset|contains` converts to one match for each of the three byte alignments. The OR is grouped under an enclosing AND like any value list. A UTF-16 encoding without a following `base64` or `base64offset` produces NUL characters, which the PostgreSQL and Fibratus backends cannot carry in a query, so those rules fail with `UnsupportedValue`. {{ added "unreleased" }}
+
 ## Delegated targets (sigma-cli)
 
 The targets above are converted natively. For any other target, `rsigma backend convert` delegates to an external [sigma-cli](https://github.com/SigmaHQ/sigma-cli) when one is installed, so the full pySigma backend ecosystem (`splunk`, `elasticsearch`, `kusto`, `qradar`, `loki`, `crowdstrike`, and more) is reachable from the same command. No Python is required unless you actually convert to a delegated target, and native backends always take precedence.

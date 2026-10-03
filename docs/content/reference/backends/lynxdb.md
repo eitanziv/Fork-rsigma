@@ -173,7 +173,6 @@ The `Action` literal stays in the `search` stage; the CIDR check defers to `wher
 |---------|--------|
 | Multi-table correlations | Not yet implemented. Single-table correlations work via SPL2 `stats`. |
 | Continuous aggregates | LynxDB-equivalent (scheduled saved queries) lives on the LynxDB side. RSigma emits the SPL2; LynxDB schedules it. |
-| Value modifiers (`base64`, `base64offset`, `wide`, `utf16le`) | Currently fail with `Unsupported`. Preprocess at ingest if you need these. |
 | `temporal_ordered` correlation | Not yet implemented. |
 
 ## See also

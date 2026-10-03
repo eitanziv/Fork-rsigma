@@ -2870,3 +2870,26 @@ correlation:
     assert!(!q.contains("date_bin("), "{q}");
     assert!(!q.contains("session_id"), "{q}");
 }
+
+#[test]
+fn test_nul_from_wide_is_rejected() {
+    let collection = parse_sigma_yaml(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        CommandLine|wide|contains: 'ab'
+    condition: selection
+"#,
+    )
+    .unwrap();
+    let err = PostgresBackend::new()
+        .convert_rule(&collection.rules[0], "default", &PipelineState::default())
+        .unwrap_err();
+    assert!(
+        matches!(&err, ConvertError::UnsupportedValue(m) if m.contains("NUL")),
+        "got: {err}"
+    );
+}

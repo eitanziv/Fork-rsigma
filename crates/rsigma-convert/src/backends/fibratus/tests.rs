@@ -1198,3 +1198,23 @@ detection:
     );
     assert_eq!(q, vec!["ps.cmdline contains 'Whoami'"]);
 }
+
+#[test]
+fn nul_from_wide_is_rejected() {
+    for value in ["ab", "['ab', 'cd']"] {
+        let yaml = format!(
+            r#"
+title: Test
+detection:
+  selection:
+    ps.cmdline|wide|contains: {value}
+  condition: selection
+"#
+        );
+        let collection = parse_sigma_yaml(&yaml).unwrap();
+        let err = FibratusBackend::new()
+            .convert_rule(&collection.rules[0], "expr", &PipelineState::default())
+            .unwrap_err();
+        assert!(err.to_string().contains("NUL"), "{value}: {err}");
+    }
+}
