@@ -1678,6 +1678,40 @@ correlation:
 }
 
 #[test]
+fn test_cte_prefilter_rejects_a_reference_without_a_query() {
+    let collection = parse_sigma_yaml(
+        r#"
+title: Multi Rule Count
+correlation:
+    type: event_count
+    rules:
+        - rule_a
+        - other_correlation
+    group-by:
+        - User
+    timespan: 10m
+    condition:
+        gte: 5
+"#,
+    )
+    .unwrap();
+    let backend = PostgresBackend::new();
+    let mut pipeline_state = PipelineState::default();
+    pipeline_state.set_state(
+        "_rule_queries".to_string(),
+        serde_json::json!({ "rule_a": "SELECT * FROM security_events WHERE action = 'login'" }),
+    );
+
+    match backend.convert_correlation_rule(&collection.correlations[0], "default", &pipeline_state)
+    {
+        Err(ConvertError::UnsupportedCorrelation(msg)) => {
+            assert!(msg.contains("rule reference 'other_correlation'"), "{msg}");
+        }
+        other => panic!("expected UnsupportedCorrelation, got {other:?}"),
+    }
+}
+
+#[test]
 fn test_cte_prefilter_multi_rule_union() {
     let collection = parse_sigma_yaml(
         r#"

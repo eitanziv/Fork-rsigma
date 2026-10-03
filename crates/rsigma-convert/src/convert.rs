@@ -131,11 +131,9 @@ pub fn convert_collection(
                     .unwrap_or(serde_json::Value::Object(Default::default()));
                 pipeline_state.set_state("_rule_schemas".to_string(), map_value);
             }
-            if !rule_query_map.is_empty() {
-                let map_value = serde_json::to_value(&rule_query_map)
-                    .unwrap_or(serde_json::Value::Object(Default::default()));
-                pipeline_state.set_state("_rule_queries".to_string(), map_value);
-            }
+            let map_value = serde_json::to_value(&rule_query_map)
+                .unwrap_or(serde_json::Value::Object(Default::default()));
+            pipeline_state.set_state("_rule_queries".to_string(), map_value);
 
             let mut warnings = Vec::new();
             match backend.convert_correlation_rule_with_warnings(
@@ -301,5 +299,50 @@ correlation:
             .map(|result| result.rule_title.as_str())
             .collect();
         assert_eq!(titles, ["Base", "Count"]);
+    }
+
+    #[test]
+    fn aggregate_correlation_over_a_correlation_is_an_error() {
+        let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Count
+name: count
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [User]
+    timespan: 1m
+    condition:
+        gte: 2
+---
+title: Bursts
+correlation:
+    type: event_count
+    rules: [count]
+    group-by: [User]
+    timespan: 1h
+    condition:
+        gte: 3
+"#;
+        let collection = parse_sigma_yaml(yaml).unwrap();
+        let output =
+            convert_collection(&PostgresBackend::new(), &collection, &[], "default").unwrap();
+        assert!(output.queries.is_empty(), "{:?}", output.queries);
+        let [(title, error)] = output.errors.as_slice() else {
+            panic!("expected one error: {:?}", output.errors);
+        };
+        assert_eq!(title, "Bursts");
+        assert!(
+            error.to_string().contains("rule reference 'count'"),
+            "{error}"
+        );
     }
 }

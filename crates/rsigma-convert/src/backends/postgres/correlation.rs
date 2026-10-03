@@ -34,36 +34,44 @@ impl super::PostgresBackend {
 
     /// Build the CTE prefix and source for non-temporal correlations.
     ///
-    /// When per-rule converted queries are available (from `_rule_queries`
-    /// injected by `convert_collection`), wraps them in a
-    /// `WITH combined_events AS (q1 UNION ALL q2 ...)` CTE. The aggregate
-    /// query then reads from `combined_events` instead of the raw table.
+    /// When converting a collection, `convert_collection` injects the
+    /// converted detection queries as `_rule_queries`, and they are wrapped in
+    /// a `WITH combined_events AS (q1 UNION ALL q2 ...)` CTE. The aggregate
+    /// query then reads from `combined_events` instead of the raw table. A
+    /// reference without a converted query (another correlation, or a
+    /// detection rule that failed to convert) is an error, since scanning the
+    /// table instead would count unrelated events.
     ///
-    /// When no per-rule queries are available, falls back to the original
-    /// behavior: scan the full table with a time-window filter.
+    /// Without `_rule_queries`, as when a single correlation is converted on
+    /// its own, the query scans the full table with a time-window filter.
     ///
     /// Returns `(cte_prefix, source_table, time_filter)`.
     pub(super) fn build_correlation_source(
         &self,
         rule_refs: &[String],
-        rule_queries: &HashMap<String, String>,
+        rule_queries: Option<&HashMap<String, String>>,
         default_table: &str,
         ts: &str,
         window_secs: u64,
-    ) -> (String, String, String) {
-        let matched: Vec<&str> = rule_refs
-            .iter()
-            .filter_map(|r| rule_queries.get(r).map(|q| q.as_str()))
-            .collect();
-
-        if matched.is_empty() {
+    ) -> Result<(String, String, String)> {
+        let Some(rule_queries) = rule_queries else {
             let time_filter = format!(" WHERE {ts} >= NOW() - INTERVAL '{window_secs} seconds'");
-            (String::new(), default_table.to_string(), time_filter)
-        } else {
-            let union = matched.join(" UNION ALL ");
-            let cte = format!("WITH combined_events AS ({union}) ");
-            (cte, "combined_events".to_string(), String::new())
+            return Ok((String::new(), default_table.to_string(), time_filter));
+        };
+        let mut matched = Vec::with_capacity(rule_refs.len());
+        for rule_ref in rule_refs {
+            let query = rule_queries.get(rule_ref).ok_or_else(|| {
+                ConvertError::UnsupportedCorrelation(format!(
+                    "rule reference '{rule_ref}' has no converted detection query; \
+                     PostgreSQL aggregate correlations can only reference detection rules \
+                     that convert successfully, not other correlations"
+                ))
+            })?;
+            matched.push(query.as_str());
         }
+        let union = matched.join(" UNION ALL ");
+        let cte = format!("WITH combined_events AS ({union}) ");
+        Ok((cte, "combined_events".to_string(), String::new()))
     }
 
     /// Build a sliding window query for `event_count` correlations.

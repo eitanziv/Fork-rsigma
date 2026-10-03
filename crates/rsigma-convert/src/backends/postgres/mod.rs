@@ -1106,15 +1106,28 @@ impl Backend for PostgresBackend {
             .and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_default();
 
-        // Per-rule converted queries for CTE-based pre-filtering
-        let rule_queries: HashMap<String, String> = pipeline_state
+        let temporal = matches!(
+            rule.correlation_type,
+            CorrelationType::Temporal | CorrelationType::TemporalOrdered
+        );
+
+        // Per-rule converted queries for CTE-based pre-filtering, present when
+        // converting a collection. Temporal types filter on `rule_name` instead.
+        let rule_queries: Option<HashMap<String, String>> = pipeline_state
             .state
             .get("_rule_queries")
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
-            .unwrap_or_default();
-
-        let (cte_prefix, source_table, time_filter) =
-            self.build_correlation_source(&rule.rules, &rule_queries, &table, ts, window_secs);
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
+        let (cte_prefix, source_table, time_filter) = if temporal {
+            Default::default()
+        } else {
+            self.build_correlation_source(
+                &rule.rules,
+                rule_queries.as_ref(),
+                &table,
+                ts,
+                window_secs,
+            )?
+        };
 
         // The windowing strategy (sliding/tumbling/session). The
         // `correlation_method` option is the converting user's explicit choice
@@ -1124,10 +1137,6 @@ impl Backend for PostgresBackend {
         // behavior, so existing rules are unaffected. `tumbling` and `session`
         // are opt-in.
         let window = self.resolve_window_mode(rule)?;
-        let temporal = matches!(
-            rule.correlation_type,
-            CorrelationType::Temporal | CorrelationType::TemporalOrdered
-        );
         if matches!(window, WindowMode::Tumbling) {
             let query = if temporal {
                 self.build_temporal_tumbling(

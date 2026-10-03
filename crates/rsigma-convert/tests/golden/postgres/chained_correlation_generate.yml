@@ -8,6 +8,16 @@ detection:
         EventType: login_failure
     condition: selection
 ---
+title: Successful Login
+name: successful_login
+logsource:
+    category: authentication
+    product: test
+detection:
+    selection:
+        EventType: login_success
+    condition: selection
+---
 title: Many Failed Logins
 name: many_failed_logins
 correlation:
@@ -20,15 +30,14 @@ correlation:
     condition:
         gte: 5
 ---
-title: Repeated Failure Bursts
-name: repeated_failure_bursts
+title: Brute Force Then Login
+name: brute_force_then_login
+generate: true
 correlation:
-    type: event_count
-    generate: true
+    type: temporal
     rules:
         - many_failed_logins
+        - successful_login
     group-by:
         - User
     timespan: 1h
-    condition:
-        gte: 3
