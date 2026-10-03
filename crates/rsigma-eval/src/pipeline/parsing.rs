@@ -9,7 +9,8 @@ use rsigma_parser::SigmaValue;
 use crate::error::{EvalError, Result};
 
 use super::conditions::{
-    DetectionItemCondition, FieldMatcher, FieldNameCondition, NamedRuleCondition, RuleCondition,
+    ConditionOp, ConditionSet, DetectionItemCondition, FieldMatcher, FieldNameCondition,
+    NamedCondition, RuleCondition, StateOperator, validate_condition_expr,
 };
 use super::finalizers::Finalizer;
 use super::sources::{
@@ -106,18 +107,25 @@ fn parse_vars(value: Option<&yaml_serde::Value>) -> HashMap<String, Vec<String>>
         for (k, v) in m {
             if let Some(key) = k.as_str() {
                 let values = match v {
-                    yaml_serde::Value::Sequence(seq) => seq
-                        .iter()
-                        .filter_map(|item| item.as_str().map(String::from))
-                        .collect(),
-                    yaml_serde::Value::String(s) => vec![s.clone()],
-                    _ => Vec::new(),
+                    yaml_serde::Value::Sequence(seq) => {
+                        seq.iter().filter_map(yaml_scalar_to_string).collect()
+                    }
+                    scalar => yaml_scalar_to_string(scalar).into_iter().collect(),
                 };
                 vars.insert(key.to_string(), values);
             }
         }
     }
     vars
+}
+
+fn yaml_scalar_to_string(value: &yaml_serde::Value) -> Option<String> {
+    match value {
+        yaml_serde::Value::String(value) => Some(value.clone()),
+        yaml_serde::Value::Number(value) => Some(value.to_string()),
+        yaml_serde::Value::Bool(value) => Some(value.to_string()),
+        _ => None,
+    }
 }
 
 /// Parse a YAML value as a sequence of transformation items.
@@ -134,57 +142,135 @@ fn parse_transformation_item(value: &yaml_serde::Value) -> Result<Transformation
         EvalError::InvalidModifiers("transformation item must be a mapping".to_string())
     })?;
 
+    validate_transformation_item_keys(obj)?;
+
     let id = obj
         .get(ykey("id"))
         .and_then(|v| v.as_str())
         .map(String::from);
 
     // Handle `include` directives as a special transformation type
-    let transformation = if let Some(include_val) = obj.get(ykey("include")) {
+    let transformation = if obj.get(ykey("type")).is_none()
+        && let Some(include_val) = obj.get(ykey("include"))
+    {
         let template = include_val.as_str().unwrap_or("").to_string();
         Transformation::Include { template }
     } else {
         parse_transformation(obj)?
     };
 
-    let rule_conditions = if let Some(conds) = obj.get(ykey("rule_conditions")) {
+    let rule_condition_items = if let Some(conds) = obj.get(ykey("rule_conditions")) {
         parse_rule_conditions(conds)?
     } else {
         Vec::new()
     };
+    let rule_conditions = parse_condition_set(
+        obj,
+        "rule",
+        rule_condition_items,
+        Some("rule_cond_expression"),
+    )?;
 
-    let rule_cond_expr = obj
-        .get(ykey("rule_cond_expression"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
+    let detection_item_condition_items =
+        if let Some(conds) = obj.get(ykey("detection_item_conditions")) {
+            parse_detection_item_conditions(conds)?
+        } else {
+            Vec::new()
+        };
+    let detection_item_conditions =
+        parse_condition_set(obj, "detection_item", detection_item_condition_items, None)?;
 
-    let detection_item_conditions = if let Some(conds) = obj.get(ykey("detection_item_conditions"))
-    {
-        parse_detection_item_conditions(conds)?
-    } else {
-        Vec::new()
-    };
-
-    let field_name_conditions = if let Some(conds) = obj.get(ykey("field_name_conditions")) {
+    let field_name_condition_items = if let Some(conds) = obj.get(ykey("field_name_conditions")) {
         parse_field_name_conditions(conds)?
     } else {
         Vec::new()
     };
-
-    let field_name_cond_not = obj
-        .get(ykey("field_name_cond_not"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+    let field_name_conditions =
+        parse_condition_set(obj, "field_name", field_name_condition_items, None)?;
 
     Ok(TransformationItem {
         id,
         transformation,
         rule_conditions,
-        rule_cond_expr,
         detection_item_conditions,
         field_name_conditions,
-        field_name_cond_not,
     })
+}
+
+fn validate_transformation_item_keys(obj: &yaml_serde::Mapping) -> Result<()> {
+    const COMMON: &[&str] = &[
+        "id",
+        "type",
+        "rule_conditions",
+        "rule_cond_expr",
+        "rule_cond_expression",
+        "rule_cond_op",
+        "rule_cond_not",
+        "detection_item_conditions",
+        "detection_item_cond_expr",
+        "detection_item_cond_op",
+        "detection_item_cond_not",
+        "field_name_conditions",
+        "field_name_cond_expr",
+        "field_name_cond_op",
+        "field_name_cond_not",
+        "allow_template_vars",
+        "vars_allowed_paths",
+        "allow_external_sources",
+    ];
+
+    let transformation_type = obj.get(ykey("type")).and_then(|value| value.as_str());
+    let specific: &[&str] = if transformation_type.is_none() && obj.get(ykey("include")).is_some() {
+        &["include"]
+    } else {
+        match transformation_type {
+            Some("field_name_mapping" | "field_name_prefix_mapping" | "map_string") => &["mapping"],
+            Some("field_name_prefix") => &["prefix"],
+            Some("field_name_suffix") => &["suffix"],
+            Some("drop_detection_item") => &[],
+            Some("value_placeholders") => &["allow_unresolved", "include", "exclude"],
+            Some("wildcard_placeholders") => &["include", "exclude"],
+            Some("add_condition") => &["conditions", "field_refs", "negated", "prepend"],
+            Some("change_logsource") => &["category", "product", "service"],
+            Some("replace_string") => {
+                &["regex", "replacement", "skip_special", "interpret_special"]
+            }
+            Some("query_expression_placeholders") => {
+                &["expression", "mapping", "include", "exclude"]
+            }
+            Some("set_state") => &["key", "val", "value"],
+            Some("rule_failure" | "detection_item_failure") => &["message"],
+            Some("field_name_transform") => &["transform_func", "mapping"],
+            Some("hashes_fields") => &[
+                "valid_hash_algos",
+                "field_prefix",
+                "drop_algo_prefix",
+                "field_to_parse",
+            ],
+            Some("set_value") => &["value", "force_type"],
+            Some("convert_type") => &["target_type"],
+            Some("regex") => &["method"],
+            Some("add_field" | "remove_field") => &["field"],
+            Some("set_field") => &["fields"],
+            Some("set_custom_attribute") => &["attribute", "value"],
+            Some("case_transformation" | "case") => &["case_type", "case", "method"],
+            Some("nest") => &["items", "transformations"],
+            Some("include") => &["include"],
+            Some(_) | None => &[],
+        }
+    };
+
+    for key in obj.keys() {
+        let key = key.as_str().ok_or_else(|| {
+            EvalError::InvalidModifiers("transformation item keys must be strings".to_string())
+        })?;
+        if !COMMON.contains(&key) && !specific.contains(&key) {
+            return Err(EvalError::InvalidModifiers(format!(
+                "unknown key '{key}' in transformation item"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
@@ -287,17 +373,41 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
             })
         }
 
-        "value_placeholders" => Ok(Transformation::ValuePlaceholders),
+        "value_placeholders" => {
+            let allow_unresolved = obj
+                .get(ykey("allow_unresolved"))
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false);
+            let (include, exclude) = parse_placeholder_filter(obj)?;
+            Ok(Transformation::ValuePlaceholders {
+                allow_unresolved,
+                include,
+                exclude,
+            })
+        }
 
-        "wildcard_placeholders" => Ok(Transformation::WildcardPlaceholders),
+        "wildcard_placeholders" => {
+            let (include, exclude) = parse_placeholder_filter(obj)?;
+            Ok(Transformation::WildcardPlaceholders { include, exclude })
+        }
 
         "query_expression_placeholders" => {
+            let _ = parse_placeholder_filter(obj)?;
             let expression = obj
                 .get(ykey("expression"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
             Ok(Transformation::QueryExpressionPlaceholders { expression })
+        }
+
+        "include" => {
+            let template = obj
+                .get(ykey("include"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("")
+                .to_string();
+            Ok(Transformation::Include { template })
         }
 
         "set_state" => {
@@ -307,10 +417,11 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
                 .unwrap_or("")
                 .to_string();
             let value = obj
-                .get(ykey("value"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+                .get(ykey("val"))
+                .or_else(|| obj.get(ykey("value")))
+                .map(yaml_to_json)
+                .transpose()?
+                .unwrap_or(serde_json::Value::Null);
             Ok(Transformation::SetState { key, value })
         }
 
@@ -428,6 +539,7 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
             let case_type = obj
                 .get(ykey("case_type"))
                 .or_else(|| obj.get(ykey("case")))
+                .or_else(|| obj.get(ykey("method")))
                 .and_then(|v| v.as_str())
                 .unwrap_or("lower")
                 .to_string();
@@ -460,23 +572,14 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
 // Condition YAML parsing
 // =============================================================================
 
-fn parse_rule_conditions(value: &yaml_serde::Value) -> Result<Vec<NamedRuleCondition>> {
-    let items = value.as_sequence().ok_or_else(|| {
-        EvalError::InvalidModifiers("rule_conditions must be a sequence".to_string())
-    })?;
-
-    items.iter().map(parse_rule_condition).collect()
+fn parse_rule_conditions(value: &yaml_serde::Value) -> Result<Vec<NamedCondition<RuleCondition>>> {
+    parse_named_conditions(value, "rule_conditions", parse_rule_condition)
 }
 
-fn parse_rule_condition(value: &yaml_serde::Value) -> Result<NamedRuleCondition> {
+fn parse_rule_condition(value: &yaml_serde::Value) -> Result<RuleCondition> {
     let obj = value.as_mapping().ok_or_else(|| {
         EvalError::InvalidModifiers("rule condition must be a mapping".to_string())
     })?;
-
-    let cond_id = obj
-        .get(ykey("id"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
 
     let type_str = obj
         .get(ykey("type"))
@@ -538,10 +641,11 @@ fn parse_rule_condition(value: &yaml_serde::Value) -> Result<NamedRuleCondition>
                 .to_string();
             let val = obj
                 .get(ykey("val"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            Ok(RuleCondition::ProcessingState { key, val })
+                .map(yaml_to_json)
+                .transpose()?
+                .unwrap_or(serde_json::Value::Null);
+            let op = parse_state_operator(obj.get(ykey("op")))?;
+            Ok(RuleCondition::ProcessingState { key, val, op })
         }
 
         "is_sigma_rule" => Ok(RuleCondition::IsSigmaRule),
@@ -575,20 +679,17 @@ fn parse_rule_condition(value: &yaml_serde::Value) -> Result<NamedRuleCondition>
         ))),
     }?;
 
-    Ok(NamedRuleCondition {
-        id: cond_id,
-        condition,
-    })
+    Ok(condition)
 }
 
 fn parse_detection_item_conditions(
     value: &yaml_serde::Value,
-) -> Result<Vec<DetectionItemCondition>> {
-    let items = value.as_sequence().ok_or_else(|| {
-        EvalError::InvalidModifiers("detection_item_conditions must be a sequence".to_string())
-    })?;
-
-    items.iter().map(parse_detection_item_condition).collect()
+) -> Result<Vec<NamedCondition<DetectionItemCondition>>> {
+    parse_named_conditions(
+        value,
+        "detection_item_conditions",
+        parse_detection_item_condition,
+    )
 }
 
 fn parse_detection_item_condition(value: &yaml_serde::Value) -> Result<DetectionItemCondition> {
@@ -649,10 +750,11 @@ fn parse_detection_item_condition(value: &yaml_serde::Value) -> Result<Detection
                 .to_string();
             let val = obj
                 .get(ykey("val"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            Ok(DetectionItemCondition::ProcessingState { key, val })
+                .map(yaml_to_json)
+                .transpose()?
+                .unwrap_or(serde_json::Value::Null);
+            let op = parse_state_operator(obj.get(ykey("op")))?;
+            Ok(DetectionItemCondition::ProcessingState { key, val, op })
         }
 
         other => Err(EvalError::InvalidModifiers(format!(
@@ -661,12 +763,10 @@ fn parse_detection_item_condition(value: &yaml_serde::Value) -> Result<Detection
     }
 }
 
-fn parse_field_name_conditions(value: &yaml_serde::Value) -> Result<Vec<FieldNameCondition>> {
-    let items = value.as_sequence().ok_or_else(|| {
-        EvalError::InvalidModifiers("field_name_conditions must be a sequence".to_string())
-    })?;
-
-    items.iter().map(parse_field_name_condition).collect()
+fn parse_field_name_conditions(
+    value: &yaml_serde::Value,
+) -> Result<Vec<NamedCondition<FieldNameCondition>>> {
+    parse_named_conditions(value, "field_name_conditions", parse_field_name_condition)
 }
 
 fn parse_field_name_condition(value: &yaml_serde::Value) -> Result<FieldNameCondition> {
@@ -720,16 +820,173 @@ fn parse_field_name_condition(value: &yaml_serde::Value) -> Result<FieldNameCond
                 .to_string();
             let val = obj
                 .get(ykey("val"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            Ok(FieldNameCondition::ProcessingState { key, val })
+                .map(yaml_to_json)
+                .transpose()?
+                .unwrap_or(serde_json::Value::Null);
+            let op = parse_state_operator(obj.get(ykey("op")))?;
+            Ok(FieldNameCondition::ProcessingState { key, val, op })
         }
 
         other => Err(EvalError::InvalidModifiers(format!(
             "unknown field name condition type: {other}"
         ))),
     }
+}
+
+fn parse_named_conditions<T>(
+    value: &yaml_serde::Value,
+    label: &str,
+    parse: impl Fn(&yaml_serde::Value) -> Result<T>,
+) -> Result<Vec<NamedCondition<T>>> {
+    match value {
+        yaml_serde::Value::Sequence(items) => items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let id = item
+                    .as_mapping()
+                    .and_then(|mapping| mapping.get(ykey("id")))
+                    .and_then(|value| value.as_str())
+                    .map(String::from)
+                    .unwrap_or_else(|| (index + 1).to_string());
+                Ok(NamedCondition {
+                    id,
+                    condition: parse(item)?,
+                })
+            })
+            .collect(),
+        yaml_serde::Value::Mapping(items) => items
+            .iter()
+            .map(|(id, item)| {
+                let id = id.as_str().ok_or_else(|| {
+                    EvalError::InvalidModifiers(format!("{label} identifiers must be strings"))
+                })?;
+                Ok(NamedCondition {
+                    id: id.to_string(),
+                    condition: parse(item)?,
+                })
+            })
+            .collect(),
+        _ => Err(EvalError::InvalidModifiers(format!(
+            "{label} must be a sequence or mapping"
+        ))),
+    }
+}
+
+fn parse_condition_set<T>(
+    obj: &yaml_serde::Mapping,
+    prefix: &str,
+    conditions: Vec<NamedCondition<T>>,
+    expression_alias: Option<&str>,
+) -> Result<ConditionSet<T>> {
+    let op_key = format!("{prefix}_cond_op");
+    let not_key = format!("{prefix}_cond_not");
+    let expression_key = format!("{prefix}_cond_expr");
+
+    let op = parse_condition_op(obj.get(ykey(&op_key)))?;
+    let negated = match obj.get(ykey(&not_key)) {
+        Some(value) => value
+            .as_bool()
+            .ok_or_else(|| EvalError::InvalidModifiers(format!("{not_key} must be a boolean")))?,
+        None => false,
+    };
+
+    let expression = match obj.get(ykey(&expression_key)) {
+        Some(value) => Some(value.as_str().ok_or_else(|| {
+            EvalError::InvalidModifiers(format!("{expression_key} must be a string"))
+        })?),
+        None => None,
+    };
+    let alias_expression = expression_alias
+        .map(|alias| {
+            obj.get(ykey(alias))
+                .map(|value| {
+                    value.as_str().ok_or_else(|| {
+                        EvalError::InvalidModifiers(format!("{alias} must be a string"))
+                    })
+                })
+                .transpose()
+        })
+        .transpose()?
+        .flatten();
+    if expression.is_some() && alias_expression.is_some() {
+        return Err(EvalError::InvalidModifiers(format!(
+            "{expression_key} and {} cannot both be set",
+            expression_alias.unwrap_or_default()
+        )));
+    }
+    let expression = expression.or(alias_expression).map(String::from);
+
+    if expression.is_some() && obj.get(ykey(&op_key)).is_some() {
+        return Err(EvalError::InvalidModifiers(format!(
+            "{expression_key} is mutually exclusive with {op_key}"
+        )));
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    for condition in &conditions {
+        if !seen.insert(condition.id.as_str()) {
+            return Err(EvalError::InvalidModifiers(format!(
+                "duplicate {prefix} condition identifier '{}'",
+                condition.id
+            )));
+        }
+    }
+
+    if let Some(expression) = &expression {
+        let ids: Vec<String> = conditions
+            .iter()
+            .map(|condition| condition.id.clone())
+            .collect();
+        validate_condition_expr(expression, &ids, &format!("{prefix} condition"))?;
+    }
+
+    Ok(ConditionSet {
+        conditions,
+        op,
+        negated,
+        expression,
+    })
+}
+
+fn parse_condition_op(value: Option<&yaml_serde::Value>) -> Result<ConditionOp> {
+    match value {
+        None => Ok(ConditionOp::And),
+        Some(value) if value.as_str() == Some("and") => Ok(ConditionOp::And),
+        Some(value) if value.as_str() == Some("or") => Ok(ConditionOp::Or),
+        Some(yaml_serde::Value::String(other)) => Err(EvalError::InvalidModifiers(format!(
+            "condition operator must be 'and' or 'or', got '{other}'"
+        ))),
+        Some(_) => Err(EvalError::InvalidModifiers(
+            "condition operator must be a string".to_string(),
+        )),
+    }
+}
+
+fn parse_state_operator(value: Option<&yaml_serde::Value>) -> Result<StateOperator> {
+    match value {
+        None => Ok(StateOperator::Eq),
+        Some(value) if value.as_str() == Some("eq") => Ok(StateOperator::Eq),
+        Some(value) if value.as_str() == Some("ne") => Ok(StateOperator::Ne),
+        Some(value) if value.as_str() == Some("gte") => Ok(StateOperator::Gte),
+        Some(value) if value.as_str() == Some("gt") => Ok(StateOperator::Gt),
+        Some(value) if value.as_str() == Some("lte") => Ok(StateOperator::Lte),
+        Some(value) if value.as_str() == Some("lt") => Ok(StateOperator::Lt),
+        Some(yaml_serde::Value::String(other)) => Err(EvalError::InvalidModifiers(format!(
+            "processing_state op must be eq, ne, gte, gt, lte, or lt; got '{other}'"
+        ))),
+        Some(_) => Err(EvalError::InvalidModifiers(
+            "processing_state op must be a string".to_string(),
+        )),
+    }
+}
+
+fn yaml_to_json(value: &yaml_serde::Value) -> Result<serde_json::Value> {
+    serde_json::to_value(value).map_err(|error| {
+        EvalError::InvalidModifiers(format!(
+            "pipeline value cannot be represented as JSON: {error}"
+        ))
+    })
 }
 
 // =============================================================================
@@ -862,6 +1119,23 @@ fn parse_string_list(value: Option<&yaml_serde::Value>) -> Vec<String> {
         Some(yaml_serde::Value::String(s)) => vec![s.clone()],
         _ => Vec::new(),
     }
+}
+
+type PlaceholderFilter = (Option<Vec<String>>, Option<Vec<String>>);
+
+fn parse_placeholder_filter(obj: &yaml_serde::Mapping) -> Result<PlaceholderFilter> {
+    let include = obj
+        .get(ykey("include"))
+        .map(|value| parse_string_list(Some(value)));
+    let exclude = obj
+        .get(ykey("exclude"))
+        .map(|value| parse_string_list(Some(value)));
+    if include.is_some() && exclude.is_some() {
+        return Err(EvalError::InvalidModifiers(
+            "placeholder transformations cannot set both include and exclude".to_string(),
+        ));
+    }
+    Ok((include, exclude))
 }
 
 fn parse_finalizers(value: &yaml_serde::Value) -> Vec<Finalizer> {

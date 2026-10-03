@@ -43,7 +43,10 @@ transformations:
 "#;
     let pipeline = parse_pipeline(yaml).unwrap();
     assert_eq!(pipeline.transformations.len(), 1);
-    assert_eq!(pipeline.transformations[0].rule_conditions.len(), 1);
+    assert_eq!(
+        pipeline.transformations[0].rule_conditions.conditions.len(),
+        1
+    );
 }
 
 #[test]
@@ -390,9 +393,9 @@ transformations:
 "#;
     let pipeline = parse_pipeline(yaml).unwrap();
     let item = &pipeline.transformations[0];
-    assert_eq!(item.rule_conditions.len(), 8);
-    assert_eq!(item.detection_item_conditions.len(), 4);
-    assert_eq!(item.field_name_conditions.len(), 4);
+    assert_eq!(item.rule_conditions.conditions.len(), 8);
+    assert_eq!(item.detection_item_conditions.conditions.len(), 4);
+    assert_eq!(item.field_name_conditions.conditions.len(), 4);
 }
 
 #[test]
@@ -413,8 +416,8 @@ transformations:
 "#;
     let pipeline = parse_pipeline(yaml).unwrap();
     let item = &pipeline.transformations[0];
-    assert_eq!(item.rule_conditions[0].id, Some("is_windows".to_string()));
-    assert_eq!(item.rule_conditions[1].id, Some("is_process".to_string()));
+    assert_eq!(item.rule_conditions.conditions[0].id, "is_windows");
+    assert_eq!(item.rule_conditions.conditions[1].id, "is_process");
 
     // Windows + process_creation => both match, OR is true => prefix applied
     let mut rule = rsigma_parser::SigmaRule {
@@ -624,7 +627,7 @@ transformations:
 }
 
 #[test]
-fn test_unnamed_conditions_fallback_to_cond_n() {
+fn test_unnamed_conditions_use_one_based_ids() {
     let yaml = r#"
 name: Fallback IDs
 transformations:
@@ -635,11 +638,17 @@ transformations:
         product: windows
       - type: logsource
         category: process_creation
-    rule_cond_expression: "cond_0 or cond_1"
+    rule_cond_expression: "1 or 2"
 "#;
     let pipeline = parse_pipeline(yaml).unwrap();
-    assert!(pipeline.transformations[0].rule_conditions[0].id.is_none());
-    assert!(pipeline.transformations[0].rule_conditions[1].id.is_none());
+    assert_eq!(
+        pipeline.transformations[0].rule_conditions.conditions[0].id,
+        "1"
+    );
+    assert_eq!(
+        pipeline.transformations[0].rule_conditions.conditions[1].id,
+        "2"
+    );
 
     let mut rule = rsigma_parser::SigmaRule {
         sigma_version: None,
@@ -687,7 +696,7 @@ transformations:
     let mut state = PipelineState::new(pipeline.vars.clone());
     pipeline.apply(&mut rule, &mut state).unwrap();
 
-    // cond_0 (windows)=false, cond_1 (process_creation)=true => OR => applied
+    // 1 (windows)=false, 2 (process_creation)=true => OR => applied
     let det = &rule.detection.named["sel"];
     if let rsigma_parser::Detection::AllOf(items) = det {
         assert_eq!(items[0].field.name, Some("x.Field".to_string()));
@@ -2211,4 +2220,420 @@ fn test_validate_source_refs_undeclared_even_with_externals() {
     let result = parsing::validate_source_refs(&refs, Some(&external));
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("missing"));
+}
+
+fn conformance_rule(detection: &str) -> rsigma_parser::SigmaRule {
+    let yaml = format!(
+        "title: Pipeline conformance\nlogsource:\n  category: test\n  product: conformance\n\
+         detection:\n{detection}\n  condition: sel\n"
+    );
+    rsigma_parser::parse_sigma_yaml(&yaml)
+        .unwrap()
+        .rules
+        .remove(0)
+}
+
+fn conformance_items(rule: &rsigma_parser::SigmaRule) -> &[rsigma_parser::DetectionItem] {
+    match &rule.detection.named["sel"] {
+        rsigma_parser::Detection::AllOf(items) => items,
+        other => panic!("expected AllOf, got {other:?}"),
+    }
+}
+
+#[test]
+fn pysigma_rule_condition_linking_and_negation_apply() {
+    let rule = conformance_rule("  sel:\n    F: x");
+    let or_pipeline = parse_pipeline(
+        r#"
+name: condition or
+transformations:
+  - type: field_name_mapping
+    mapping: {F: A}
+    rule_conditions:
+      - type: logsource
+        product: nope
+      - type: logsource
+        category: test
+    rule_cond_op: or
+"#,
+    )
+    .unwrap();
+    let transformed = transform_rule(&[or_pipeline], &rule).unwrap();
+    assert_eq!(
+        conformance_items(&transformed.rule)[0]
+            .field
+            .name
+            .as_deref(),
+        Some("A")
+    );
+
+    let not_pipeline = parse_pipeline(
+        r#"
+name: condition not
+transformations:
+  - type: field_name_mapping
+    mapping: {F: A}
+    rule_conditions:
+      - type: logsource
+        category: test
+    rule_cond_not: true
+"#,
+    )
+    .unwrap();
+    let transformed = transform_rule(&[not_pipeline], &rule).unwrap();
+    assert_eq!(
+        conformance_items(&transformed.rule)[0]
+            .field
+            .name
+            .as_deref(),
+        Some("F")
+    );
+}
+
+#[test]
+fn pysigma_condition_expressions_accept_dict_form_and_canonical_keys() {
+    let rule = conformance_rule("  sel:\n    F: drop_me\n    G: keep");
+    let pipeline = parse_pipeline(
+        r#"
+name: condition expressions
+transformations:
+  - type: drop_detection_item
+    rule_conditions:
+      category:
+        type: logsource
+        category: test
+      wrong_product:
+        type: logsource
+        product: nope
+    rule_cond_expr: category and not wrong_product
+    detection_item_conditions:
+      drop:
+        type: match_string
+        pattern: "^drop"
+      other:
+        type: match_string
+        pattern: "^other"
+    detection_item_cond_expr: drop or other
+"#,
+    )
+    .unwrap();
+    let transformed = transform_rule(&[pipeline], &rule).unwrap();
+    let fields: Vec<&str> = conformance_items(&transformed.rule)
+        .iter()
+        .filter_map(|item| item.field.name.as_deref())
+        .collect();
+    assert_eq!(fields, ["G"]);
+}
+
+#[test]
+fn pysigma_field_condition_expression_controls_mapping() {
+    let rule = conformance_rule("  sel:\n    F: x\n    G: y");
+    let pipeline = parse_pipeline(
+        r#"
+name: field expression
+transformations:
+  - type: field_name_prefix
+    prefix: mapped.
+    field_name_conditions:
+      selected:
+        type: include_fields
+        fields: [F]
+      allowed:
+        type: exclude_fields
+        fields: [Never]
+    field_name_cond_expr: selected and allowed
+"#,
+    )
+    .unwrap();
+    let transformed = transform_rule(&[pipeline], &rule).unwrap();
+    let fields: Vec<&str> = conformance_items(&transformed.rule)
+        .iter()
+        .filter_map(|item| item.field.name.as_deref())
+        .collect();
+    assert_eq!(fields, ["mapped.F", "G"]);
+}
+
+#[test]
+fn set_state_val_and_processing_state_operators_are_typed() {
+    let rule = conformance_rule("  sel:\n    F: x");
+    let pipeline = parse_pipeline(
+        r#"
+name: state comparison
+transformations:
+  - type: set_state
+    key: score
+    val: 5
+  - type: field_name_mapping
+    mapping: {F: A}
+    rule_conditions:
+      - type: processing_state
+        key: score
+        val: 3
+        op: gt
+"#,
+    )
+    .unwrap();
+    let transformed = transform_rule(&[pipeline], &rule).unwrap();
+    assert_eq!(
+        transformed.state.get_state("score"),
+        Some(&serde_json::json!(5))
+    );
+    assert_eq!(
+        conformance_items(&transformed.rule)[0]
+            .field
+            .name
+            .as_deref(),
+        Some("A")
+    );
+}
+
+#[test]
+fn processing_state_operators_apply_at_detection_and_field_scope() {
+    let rule = conformance_rule("  sel:\n    F: x");
+    let pipeline = parse_pipeline(
+        r#"
+name: scoped state comparisons
+transformations:
+  - type: set_state
+    key: score
+    val: 5
+  - type: drop_detection_item
+    detection_item_conditions:
+      - type: processing_state
+        key: score
+        val: 6
+        op: gte
+  - type: field_name_mapping
+    mapping: {F: A}
+    field_name_conditions:
+      - type: processing_state
+        key: score
+        val: 5
+        op: gte
+"#,
+    )
+    .unwrap();
+    let transformed = transform_rule(&[pipeline], &rule).unwrap();
+    assert_eq!(
+        conformance_items(&transformed.rule)[0]
+            .field
+            .name
+            .as_deref(),
+        Some("A")
+    );
+}
+
+#[test]
+fn field_transformations_map_field_reference_targets() {
+    let rule = conformance_rule("  sel:\n    F|fieldref: G");
+    let cases = [
+        ("type: field_name_mapping\n    mapping: {G: B}", "B"),
+        ("type: field_name_prefix_mapping\n    mapping: {G: B}", "B"),
+        ("type: field_name_prefix\n    prefix: x.", "x.G"),
+        ("type: field_name_suffix\n    suffix: .x", "G.x"),
+    ];
+
+    for (transformation, expected) in cases {
+        let pipeline = parse_pipeline(&format!(
+            "name: fieldref\ntransformations:\n  - {transformation}\n"
+        ))
+        .unwrap();
+        let transformed = transform_rule(&[pipeline], &rule).unwrap();
+        let value = &conformance_items(&transformed.rule)[0].values[0];
+        let SigmaValue::String(value) = value else {
+            panic!("expected string field reference");
+        };
+        assert_eq!(value.as_plain().as_deref(), Some(expected));
+    }
+}
+
+#[test]
+fn detection_item_conditions_gate_field_transformations() {
+    let rule = conformance_rule("  sel:\n    F|fieldref: G");
+    let transformations = [
+        "type: field_name_mapping\n    mapping: {F: A, G: B}",
+        "type: field_name_prefix_mapping\n    mapping: {F: A, G: B}",
+        "type: field_name_prefix\n    prefix: x.",
+        "type: field_name_suffix\n    suffix: .x",
+        "type: field_name_transform\n    transform_func: lower",
+    ];
+
+    for transformation in transformations {
+        let pipeline = parse_pipeline(&format!(
+            "name: gated\ntransformations:\n  - {transformation}\n    detection_item_conditions:\n      - type: match_string\n        pattern: '^never$'\n"
+        ))
+        .unwrap();
+        let transformed = transform_rule(&[pipeline], &rule).unwrap();
+        let item = &conformance_items(&transformed.rule)[0];
+        assert_eq!(item.field.name.as_deref(), Some("F"));
+        let SigmaValue::String(value) = &item.values[0] else {
+            panic!("expected field reference string");
+        };
+        assert_eq!(value.as_plain().as_deref(), Some("G"));
+    }
+
+    let pipeline = parse_pipeline(
+        "name: matched\ntransformations:\n  - type: field_name_mapping\n    mapping: {F: A, G: B}\n    detection_item_conditions:\n      - type: match_string\n        pattern: '^G$'\n",
+    )
+    .unwrap();
+    let transformed = transform_rule(&[pipeline], &rule).unwrap();
+    let item = &conformance_items(&transformed.rule)[0];
+    assert_eq!(item.field.name.as_deref(), Some("A"));
+    let SigmaValue::String(value) = &item.values[0] else {
+        panic!("expected field reference string");
+    };
+    assert_eq!(value.as_plain().as_deref(), Some("B"));
+}
+
+#[test]
+fn empty_condition_negation_follows_scope_semantics() {
+    let rule = conformance_rule("  sel:\n    F: value");
+    let cases = [
+        ("rule_conditions: []\n    rule_cond_not: true", Some("A")),
+        (
+            "detection_item_conditions: []\n    detection_item_cond_not: true",
+            Some("F"),
+        ),
+        (
+            "field_name_conditions: []\n    field_name_cond_not: true",
+            Some("F"),
+        ),
+    ];
+
+    for (conditions, expected) in cases {
+        let pipeline = parse_pipeline(&format!(
+            "name: empty\ntransformations:\n  - type: field_name_mapping\n    mapping: {{F: A}}\n    {conditions}\n"
+        ))
+        .unwrap();
+        let transformed = transform_rule(&[pipeline], &rule).unwrap();
+        assert_eq!(
+            conformance_items(&transformed.rule)[0]
+                .field
+                .name
+                .as_deref(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn value_placeholders_expand_cartesian_product_only_on_expand_values() {
+    let rule = conformance_rule("  sel:\n    A|expand: '%x%-%y%'\n    B: '%x%'");
+    let pipeline = parse_pipeline(
+        r#"
+name: placeholders
+vars:
+  x: [a, b]
+  y: [1, 2]
+transformations:
+  - type: value_placeholders
+"#,
+    )
+    .unwrap();
+    let transformed = transform_rule(&[pipeline], &rule).unwrap();
+    let items = conformance_items(&transformed.rule);
+    let expanded_item = items
+        .iter()
+        .find(|item| item.field.name.as_deref() == Some("A"))
+        .unwrap();
+    let expanded: Vec<String> = expanded_item
+        .values
+        .iter()
+        .filter_map(|value| match value {
+            SigmaValue::String(value) => value.as_plain(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(expanded, ["a-1", "a-2", "b-1", "b-2"]);
+    let literal_item = items
+        .iter()
+        .find(|item| item.field.name.as_deref() == Some("B"))
+        .unwrap();
+    let SigmaValue::String(literal) = &literal_item.values[0] else {
+        panic!("expected literal string");
+    };
+    assert_eq!(literal.original, "%x%");
+}
+
+#[test]
+fn unresolved_value_placeholder_fails_but_wildcard_resolves_it() {
+    let rule = conformance_rule("  sel:\n    F|expand: '%missing%'");
+    let value_pipeline =
+        parse_pipeline("name: unresolved\ntransformations:\n  - type: value_placeholders\n")
+            .unwrap();
+    let error = transform_rule(&[value_pipeline], &rule).unwrap_err();
+    assert!(error.to_string().contains("missing"));
+
+    let wildcard_pipeline =
+        parse_pipeline("name: wildcard\ntransformations:\n  - type: wildcard_placeholders\n")
+            .unwrap();
+    let transformed = transform_rule(&[wildcard_pipeline], &rule).unwrap();
+    let SigmaValue::String(value) = &conformance_items(&transformed.rule)[0].values[0] else {
+        panic!("expected wildcard string");
+    };
+    assert_eq!(value.original, "*");
+}
+
+#[test]
+fn placeholder_include_and_exclude_limit_expansion() {
+    let rule = conformance_rule("  sel:\n    F|expand: '%x%-%y%'");
+    for filter in ["include: [x]", "exclude: [y]"] {
+        let pipeline = parse_pipeline(&format!(
+            "name: filtered\nvars:\n  x: [a, b]\ntransformations:\n  - type: value_placeholders\n    {filter}\n"
+        ))
+        .unwrap();
+        let transformed = transform_rule(&[pipeline], &rule).unwrap();
+        let values: Vec<_> = conformance_items(&transformed.rule)[0]
+            .values
+            .iter()
+            .map(|value| match value {
+                SigmaValue::String(value) => value.original.as_str(),
+                _ => panic!("expected string"),
+            })
+            .collect();
+        assert_eq!(values, ["a-%y%", "b-%y%"]);
+    }
+}
+
+#[test]
+fn skipped_placeholders_do_not_consume_expansion_depth() {
+    let skipped = (0..64)
+        .map(|index| format!("%skip{index}%"))
+        .collect::<String>();
+    let rule = conformance_rule(&format!("  sel:\n    F|expand: '{skipped}%x%'"));
+    let pipeline = parse_pipeline(
+        "name: filtered\nvars:\n  x: done\ntransformations:\n  - type: value_placeholders\n    include: [x]\n",
+    )
+    .unwrap();
+    let transformed = transform_rule(&[pipeline], &rule).unwrap();
+    let SigmaValue::String(value) = &conformance_items(&transformed.rule)[0].values[0] else {
+        panic!("expected string");
+    };
+    assert_eq!(value.original, format!("{skipped}done"));
+}
+
+#[test]
+fn placeholder_include_and_exclude_are_mutually_exclusive() {
+    let error = parse_pipeline(
+        "name: invalid\ntransformations:\n  - type: value_placeholders\n    include: [x]\n    exclude: [y]\n",
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("both include and exclude"));
+}
+
+#[test]
+fn query_expression_placeholder_filters_are_accepted() {
+    parse_pipeline(
+        "name: query\ntransformations:\n  - type: query_expression_placeholders\n    expression: '{field} IN ({id})'\n    mapping: {users: allowed_users}\n    include: [users]\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn unknown_transformation_item_key_is_rejected() {
+    let error = parse_pipeline(
+        "name: typo\ntransformations:\n  - type: field_name_mapping\n    mapping: {F: A}\n    rule_cond_opp: or\n",
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("rule_cond_opp"));
 }

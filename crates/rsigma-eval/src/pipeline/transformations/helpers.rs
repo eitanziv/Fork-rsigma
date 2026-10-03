@@ -7,7 +7,7 @@ use rsigma_parser::{
     SigmaValue, SpecialChar, StringPart,
 };
 
-use super::super::conditions::{DetectionItemCondition, FieldNameCondition};
+use super::super::conditions::{ConditionSet, DetectionItemCondition, FieldNameCondition};
 use super::super::state::PipelineState;
 use crate::error::{EvalError, Result};
 
@@ -36,8 +36,8 @@ const MAX_FIELD_MAPPING_COMBINATIONS: usize = 4096;
 pub(super) fn apply_field_name_transform<F>(
     rule: &mut SigmaRule,
     state: &PipelineState,
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     transform_fn: F,
 ) -> Result<()>
 where
@@ -48,8 +48,8 @@ where
         transform_detection_fields(
             detection,
             state,
+            detection_conditions,
             field_name_conditions,
-            field_name_cond_not,
             &transform_fn,
             &rule_title,
         )?;
@@ -60,8 +60,8 @@ where
 fn transform_detection_fields<F>(
     detection: &mut Detection,
     state: &PipelineState,
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     transform_fn: &F,
     rule_title: &str,
 ) -> Result<()>
@@ -70,6 +70,22 @@ where
 {
     match detection {
         Detection::AllOf(items) => {
+            let detection_matches: Vec<bool> = items
+                .iter()
+                .map(|item| detection_conditions_match(item, state, detection_conditions))
+                .collect();
+            for (item, matches) in items.iter_mut().zip(&detection_matches) {
+                if *matches {
+                    transform_field_reference_values(
+                        item,
+                        state,
+                        field_name_conditions,
+                        transform_fn,
+                        rule_title,
+                    )?;
+                }
+            }
+
             // First pass (read-only): resolve each item's mapping result.
             // Store either a single rename or a multi-alternative expansion.
             enum Resolved {
@@ -79,25 +95,26 @@ where
             }
             let resolved: Vec<Resolved> = items
                 .iter()
-                .map(|item| match item.field.name.as_deref() {
-                    Some(name)
-                        if field_conditions_match(
-                            name,
-                            state,
-                            field_name_conditions,
-                            field_name_cond_not,
-                        ) =>
-                    {
-                        match transform_fn(name) {
-                            Some(new_names) if new_names.len() > 1 => Resolved::Expanded(new_names),
-                            Some(mut new_names) if new_names.len() == 1 => {
-                                Resolved::Renamed(new_names.pop().unwrap())
+                .zip(detection_matches)
+                .map(
+                    |(item, detection_matches)| match item.field.name.as_deref() {
+                        Some(name)
+                            if detection_matches
+                                && field_conditions_match(name, state, field_name_conditions) =>
+                        {
+                            match transform_fn(name) {
+                                Some(new_names) if new_names.len() > 1 => {
+                                    Resolved::Expanded(new_names)
+                                }
+                                Some(mut new_names) if new_names.len() == 1 => {
+                                    Resolved::Renamed(new_names.pop().unwrap())
+                                }
+                                _ => Resolved::Unchanged,
                             }
-                            _ => Resolved::Unchanged,
                         }
-                    }
-                    _ => Resolved::Unchanged,
-                })
+                        _ => Resolved::Unchanged,
+                    },
+                )
                 .collect();
 
             let needs_expansion = resolved.iter().any(|r| matches!(r, Resolved::Expanded(_)));
@@ -155,8 +172,8 @@ where
                 transform_detection_fields(
                     sub,
                     state,
+                    detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     transform_fn,
                     rule_title,
                 )?;
@@ -166,8 +183,8 @@ where
             transform_detection_fields(
                 body.as_mut(),
                 state,
+                detection_conditions,
                 field_name_conditions,
-                field_name_cond_not,
                 transform_fn,
                 rule_title,
             )?;
@@ -177,8 +194,8 @@ where
                 transform_detection_fields(
                     sub,
                     state,
+                    detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     transform_fn,
                     rule_title,
                 )?;
@@ -189,8 +206,8 @@ where
                 transform_detection_fields(
                     sub,
                     state,
+                    detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     transform_fn,
                     rule_title,
                 )?;
@@ -198,6 +215,57 @@ where
         }
         Detection::Keywords(_) => {}
     }
+    Ok(())
+}
+
+fn transform_field_reference_values<F>(
+    item: &mut DetectionItem,
+    state: &PipelineState,
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
+    transform_fn: &F,
+    rule_title: &str,
+) -> Result<()>
+where
+    F: Fn(&str) -> Option<Vec<String>>,
+{
+    if !item.field.modifiers.contains(&Modifier::FieldRef) {
+        return Ok(());
+    }
+
+    let mut mapped_values = Vec::new();
+    for value in item.values.drain(..) {
+        let SigmaValue::String(field_ref) = &value else {
+            mapped_values.push(value);
+            continue;
+        };
+        let Some(field_name) = field_ref.as_plain() else {
+            mapped_values.push(value);
+            continue;
+        };
+        if !field_conditions_match(&field_name, state, field_name_conditions) {
+            mapped_values.push(value);
+            continue;
+        }
+
+        match transform_fn(&field_name) {
+            Some(names) if !names.is_empty() => {
+                if mapped_values.len().saturating_add(names.len()) > MAX_FIELD_MAPPING_COMBINATIONS
+                {
+                    return Err(EvalError::InvalidModifiers(format!(
+                        "field reference mapping would produce more than \
+                         {MAX_FIELD_MAPPING_COMBINATIONS} values (rule: {rule_title})"
+                    )));
+                }
+                mapped_values.extend(
+                    names
+                        .into_iter()
+                        .map(|name| SigmaValue::String(SigmaString::new(&name))),
+                );
+            }
+            _ => mapped_values.push(value),
+        }
+    }
+    item.values = mapped_values;
     Ok(())
 }
 
@@ -225,16 +293,11 @@ fn cartesian_product<T: Clone>(input: Vec<Vec<T>>) -> Vec<Vec<T>> {
 fn field_conditions_match(
     field_name: &str,
     state: &PipelineState,
-    conditions: &[FieldNameCondition],
-    negate: bool,
+    condition_sets: &[&ConditionSet<FieldNameCondition>],
 ) -> bool {
-    if conditions.is_empty() {
-        return true;
-    }
-    let all_match = conditions
+    condition_sets
         .iter()
-        .all(|c| c.matches_field_name(field_name, state));
-    if negate { !all_match } else { all_match }
+        .all(|set| set.matches(|condition| condition.matches_field_name(field_name, state)))
 }
 
 // =============================================================================
@@ -244,9 +307,8 @@ fn field_conditions_match(
 pub(super) fn drop_detection_items(
     rule: &mut SigmaRule,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
 ) {
     for detection in rule.detection.named.values_mut() {
         drop_from_detection(
@@ -254,7 +316,6 @@ pub(super) fn drop_detection_items(
             state,
             detection_conditions,
             field_name_conditions,
-            field_name_cond_not,
         );
     }
 }
@@ -262,31 +323,18 @@ pub(super) fn drop_detection_items(
 fn drop_from_detection(
     detection: &mut Detection,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
 ) {
     match detection {
         Detection::AllOf(items) => {
             items.retain(|item| {
-                !should_drop_item(
-                    item,
-                    state,
-                    detection_conditions,
-                    field_name_conditions,
-                    field_name_cond_not,
-                )
+                !should_drop_item(item, state, detection_conditions, field_name_conditions)
             });
         }
         Detection::AnyOf(subs) => {
             for sub in subs.iter_mut() {
-                drop_from_detection(
-                    sub,
-                    state,
-                    detection_conditions,
-                    field_name_conditions,
-                    field_name_cond_not,
-                );
+                drop_from_detection(sub, state, detection_conditions, field_name_conditions);
             }
         }
         Detection::ArrayMatch { body, .. } => {
@@ -295,29 +343,16 @@ fn drop_from_detection(
                 state,
                 detection_conditions,
                 field_name_conditions,
-                field_name_cond_not,
             );
         }
         Detection::And(subs) => {
             for sub in subs.iter_mut() {
-                drop_from_detection(
-                    sub,
-                    state,
-                    detection_conditions,
-                    field_name_conditions,
-                    field_name_cond_not,
-                );
+                drop_from_detection(sub, state, detection_conditions, field_name_conditions);
             }
         }
         Detection::Conditional { named, .. } => {
             for sub in named.values_mut() {
-                drop_from_detection(
-                    sub,
-                    state,
-                    detection_conditions,
-                    field_name_conditions,
-                    field_name_cond_not,
-                );
+                drop_from_detection(sub, state, detection_conditions, field_name_conditions);
             }
         }
         Detection::Keywords(_) => {}
@@ -327,22 +362,34 @@ fn drop_from_detection(
 fn should_drop_item(
     item: &DetectionItem,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
 ) -> bool {
-    let det_match = detection_conditions.is_empty()
-        || detection_conditions
-            .iter()
-            .all(|c| c.matches_item(item, state));
+    let det_match = detection_conditions_match(item, state, detection_conditions);
 
     let field_match = if let Some(ref name) = item.field.name {
-        field_conditions_match(name, state, field_name_conditions, field_name_cond_not)
+        field_conditions_match(name, state, field_name_conditions)
     } else {
-        field_name_conditions.is_empty()
+        condition_sets_are_empty(field_name_conditions)
     };
 
     det_match && field_match
+}
+
+fn detection_conditions_match(
+    item: &DetectionItem,
+    state: &PipelineState,
+    condition_sets: &[&ConditionSet<DetectionItemCondition>],
+) -> bool {
+    condition_sets
+        .iter()
+        .all(|set| set.matches(|condition| condition.matches_item(item, state)))
+}
+
+fn condition_sets_are_empty<T>(condition_sets: &[&ConditionSet<T>]) -> bool {
+    condition_sets
+        .iter()
+        .all(|condition_set| condition_set.conditions.is_empty())
 }
 
 // =============================================================================
@@ -412,9 +459,8 @@ pub(super) fn add_conditions(
 pub(super) fn replace_strings_in_rule(
     rule: &mut SigmaRule,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     re: &Regex,
     replacement: &str,
     skip_special: bool,
@@ -425,7 +471,6 @@ pub(super) fn replace_strings_in_rule(
             state,
             detection_conditions,
             field_name_conditions,
-            field_name_cond_not,
             re,
             replacement,
             skip_special,
@@ -437,9 +482,8 @@ pub(super) fn replace_strings_in_rule(
 fn replace_strings_in_detection(
     detection: &mut Detection,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     re: &Regex,
     replacement: &str,
     skip_special: bool,
@@ -447,14 +491,11 @@ fn replace_strings_in_detection(
     match detection {
         Detection::AllOf(items) => {
             for item in items.iter_mut() {
-                let det_match = detection_conditions.is_empty()
-                    || detection_conditions
-                        .iter()
-                        .all(|c| c.matches_item(item, state));
+                let det_match = detection_conditions_match(item, state, detection_conditions);
                 let field_match = if let Some(ref name) = item.field.name {
-                    field_conditions_match(name, state, field_name_conditions, field_name_cond_not)
+                    field_conditions_match(name, state, field_name_conditions)
                 } else {
-                    field_name_conditions.is_empty()
+                    condition_sets_are_empty(field_name_conditions)
                 };
 
                 if det_match && field_match {
@@ -469,7 +510,6 @@ fn replace_strings_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     re,
                     replacement,
                     skip_special,
@@ -482,7 +522,6 @@ fn replace_strings_in_detection(
                 state,
                 detection_conditions,
                 field_name_conditions,
-                field_name_cond_not,
                 re,
                 replacement,
                 skip_special,
@@ -495,7 +534,6 @@ fn replace_strings_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     re,
                     replacement,
                     skip_special,
@@ -509,7 +547,6 @@ fn replace_strings_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     re,
                     replacement,
                     skip_special,
@@ -586,63 +623,124 @@ pub(super) fn expand_placeholders_in_rule(
     rule: &mut SigmaRule,
     state: &PipelineState,
     wildcard: bool,
-) {
+    allow_unresolved: bool,
+    include: Option<&[String]>,
+    exclude: Option<&[String]>,
+) -> Result<()> {
     for detection in rule.detection.named.values_mut() {
-        expand_placeholders_in_detection(detection, state, wildcard);
+        expand_placeholders_in_detection(
+            detection,
+            state,
+            wildcard,
+            allow_unresolved,
+            include,
+            exclude,
+        )?;
     }
+    Ok(())
 }
 
 fn expand_placeholders_in_detection(
     detection: &mut Detection,
     state: &PipelineState,
     wildcard: bool,
-) {
+    allow_unresolved: bool,
+    include: Option<&[String]>,
+    exclude: Option<&[String]>,
+) -> Result<()> {
     match detection {
         Detection::AllOf(items) => {
             for item in items.iter_mut() {
-                expand_placeholders_in_values(&mut item.values, state, wildcard);
+                if item.field.modifiers.contains(&Modifier::Expand) {
+                    expand_placeholders_in_values(
+                        &mut item.values,
+                        state,
+                        wildcard,
+                        allow_unresolved,
+                        include,
+                        exclude,
+                    )?;
+                }
             }
         }
         Detection::AnyOf(subs) => {
             for sub in subs.iter_mut() {
-                expand_placeholders_in_detection(sub, state, wildcard);
+                expand_placeholders_in_detection(
+                    sub,
+                    state,
+                    wildcard,
+                    allow_unresolved,
+                    include,
+                    exclude,
+                )?;
             }
         }
         Detection::ArrayMatch { body, .. } => {
-            expand_placeholders_in_detection(body.as_mut(), state, wildcard);
+            expand_placeholders_in_detection(
+                body.as_mut(),
+                state,
+                wildcard,
+                allow_unresolved,
+                include,
+                exclude,
+            )?;
         }
         Detection::And(subs) => {
             for sub in subs.iter_mut() {
-                expand_placeholders_in_detection(sub, state, wildcard);
+                expand_placeholders_in_detection(
+                    sub,
+                    state,
+                    wildcard,
+                    allow_unresolved,
+                    include,
+                    exclude,
+                )?;
             }
         }
         Detection::Conditional { named, .. } => {
             for sub in named.values_mut() {
-                expand_placeholders_in_detection(sub, state, wildcard);
+                expand_placeholders_in_detection(
+                    sub,
+                    state,
+                    wildcard,
+                    allow_unresolved,
+                    include,
+                    exclude,
+                )?;
             }
         }
-        Detection::Keywords(values) => {
-            expand_placeholders_in_values(values, state, wildcard);
-        }
+        Detection::Keywords(_) => {}
     }
+    Ok(())
 }
 
 fn expand_placeholders_in_values(
     values: &mut Vec<SigmaValue>,
     state: &PipelineState,
     wildcard: bool,
-) {
+    allow_unresolved: bool,
+    include: Option<&[String]>,
+    exclude: Option<&[String]>,
+) -> Result<()> {
     let mut expanded_values = Vec::new();
     for value in values.drain(..) {
         if let SigmaValue::String(ref s) = value
             && s.original.contains('%')
         {
-            expanded_values.extend(expand_placeholder_string(&s.original, state, wildcard));
+            expanded_values.extend(expand_placeholder_string(
+                &s.original,
+                state,
+                wildcard,
+                allow_unresolved,
+                include,
+                exclude,
+            )?);
             continue;
         }
         expanded_values.push(value);
     }
     *values = expanded_values;
+    Ok(())
 }
 
 /// The first placeholder at or after byte `from` of raw Sigma source text, as
@@ -667,35 +765,91 @@ fn find_placeholder(s: &str, from: usize) -> Option<(usize, usize)> {
     None
 }
 
-/// Substitute placeholders in the raw source text `s` of a value.
-fn expand_placeholder_string(s: &str, state: &PipelineState, wildcard: bool) -> Vec<SigmaValue> {
-    let mut result = s.to_string();
-    let mut from = 0;
+const MAX_PLACEHOLDER_COMBINATIONS: usize = 4096;
+const MAX_PLACEHOLDER_DEPTH: usize = 64;
 
-    while let Some((open, close)) = find_placeholder(&result, from) {
-        let placeholder = &result[open + 1..close];
-        let replacement = match state.vars.get(placeholder) {
-            Some(values) if values.len() > 1 => {
-                return values
-                    .iter()
-                    .map(|v| {
-                        let expanded = format!("{}{}{}", &result[..open], v, &result[close + 1..]);
-                        SigmaValue::String(SigmaString::new(&expanded))
-                    })
-                    .collect();
+/// Substitute every placeholder in the raw source text `s`, producing the
+/// Cartesian product of multi-value variables.
+fn expand_placeholder_string(
+    s: &str,
+    state: &PipelineState,
+    wildcard: bool,
+    allow_unresolved: bool,
+    include: Option<&[String]>,
+    exclude: Option<&[String]>,
+) -> Result<Vec<SigmaValue>> {
+    let mut pending = vec![(s.to_string(), 0usize)];
+    let mut complete = Vec::new();
+    let mut depth = 0;
+
+    while !pending.is_empty() {
+        let mut next = Vec::new();
+        let mut substituted = false;
+        'value: for (value, mut from) in pending {
+            loop {
+                let Some((open, close)) = find_placeholder(&value, from) else {
+                    complete.push(value);
+                    continue 'value;
+                };
+                let placeholder = &value[open + 1..close];
+                let handled = include
+                    .is_none_or(|names| names.iter().any(|name| name == placeholder))
+                    && exclude.is_none_or(|names| !names.iter().any(|name| name == placeholder));
+                if !handled {
+                    from = close + 1;
+                    continue;
+                }
+                if !wildcard && allow_unresolved && !state.vars.contains_key(placeholder) {
+                    from = close + 1;
+                    continue;
+                }
+                if depth >= MAX_PLACEHOLDER_DEPTH {
+                    return Err(EvalError::InvalidModifiers(format!(
+                        "placeholder expansion exceeds the maximum depth of {MAX_PLACEHOLDER_DEPTH}"
+                    )));
+                }
+                substituted = true;
+                let replacements: Vec<&str> = match (wildcard, state.vars.get(placeholder)) {
+                    (true, _) => vec!["*"],
+                    (false, Some(values)) => values.iter().map(String::as_str).collect(),
+                    (false, None) => {
+                        return Err(EvalError::InvalidModifiers(format!(
+                            "placeholder replacement variable '{placeholder}' is not defined"
+                        )));
+                    }
+                };
+
+                if complete
+                    .len()
+                    .saturating_add(next.len())
+                    .saturating_add(replacements.len())
+                    > MAX_PLACEHOLDER_COMBINATIONS
+                {
+                    return Err(EvalError::InvalidModifiers(format!(
+                        "placeholder expansion would produce more than \
+                         {MAX_PLACEHOLDER_COMBINATIONS} values"
+                    )));
+                }
+
+                for replacement in replacements {
+                    next.push((
+                        format!("{}{}{}", &value[..open], replacement, &value[close + 1..]),
+                        open + replacement.len(),
+                    ));
+                }
+                continue 'value;
             }
-            Some(values) if values.len() == 1 => values[0].clone(),
-            _ if wildcard => "*".to_string(),
-            _ => {
-                from = close + 1;
-                continue;
-            }
-        };
-        from = open + replacement.len();
-        result = format!("{}{}{}", &result[..open], replacement, &result[close + 1..]);
+        }
+        if substituted {
+            depth += 1;
+        }
+        pending = next;
     }
 
-    vec![SigmaValue::String(SigmaString::new(&result))]
+    Ok(complete
+        .into_iter()
+        .map(|value| SigmaValue::String(SigmaString::new(&value)))
+        .collect())
 }
 
 // =============================================================================
@@ -839,9 +993,8 @@ fn decompose_hashes_in_detection(
 pub(super) fn map_string_values(
     rule: &mut SigmaRule,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     mapping: &HashMap<String, Vec<String>>,
 ) {
     for detection in rule.detection.named.values_mut() {
@@ -850,7 +1003,6 @@ pub(super) fn map_string_values(
             state,
             detection_conditions,
             field_name_conditions,
-            field_name_cond_not,
             mapping,
         );
     }
@@ -859,21 +1011,14 @@ pub(super) fn map_string_values(
 fn map_strings_in_detection(
     detection: &mut Detection,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     mapping: &HashMap<String, Vec<String>>,
 ) {
     match detection {
         Detection::AllOf(items) => {
             for item in items.iter_mut() {
-                if item_conditions_match(
-                    item,
-                    state,
-                    detection_conditions,
-                    field_name_conditions,
-                    field_name_cond_not,
-                ) {
+                if item_conditions_match(item, state, detection_conditions, field_name_conditions) {
                     map_string_expand_values(&mut item.values, mapping);
                 }
             }
@@ -885,7 +1030,6 @@ fn map_strings_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     mapping,
                 );
             }
@@ -896,7 +1040,6 @@ fn map_strings_in_detection(
                 state,
                 detection_conditions,
                 field_name_conditions,
-                field_name_cond_not,
                 mapping,
             );
         }
@@ -907,7 +1050,6 @@ fn map_strings_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     mapping,
                 );
             }
@@ -919,7 +1061,6 @@ fn map_strings_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     mapping,
                 );
             }
@@ -972,9 +1113,8 @@ fn map_string_expand_values(values: &mut Vec<SigmaValue>, mapping: &HashMap<Stri
 pub(super) fn set_detection_item_values(
     rule: &mut SigmaRule,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     value: &SigmaValue,
 ) {
     for detection in rule.detection.named.values_mut() {
@@ -983,7 +1123,6 @@ pub(super) fn set_detection_item_values(
             state,
             detection_conditions,
             field_name_conditions,
-            field_name_cond_not,
             value,
         );
     }
@@ -992,21 +1131,14 @@ pub(super) fn set_detection_item_values(
 fn set_values_in_detection(
     detection: &mut Detection,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     value: &SigmaValue,
 ) {
     match detection {
         Detection::AllOf(items) => {
             for item in items.iter_mut() {
-                if item_conditions_match(
-                    item,
-                    state,
-                    detection_conditions,
-                    field_name_conditions,
-                    field_name_cond_not,
-                ) {
+                if item_conditions_match(item, state, detection_conditions, field_name_conditions) {
                     item.values = vec![value.clone()];
                 }
             }
@@ -1018,7 +1150,6 @@ fn set_values_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     value,
                 );
             }
@@ -1029,7 +1160,6 @@ fn set_values_in_detection(
                 state,
                 detection_conditions,
                 field_name_conditions,
-                field_name_cond_not,
                 value,
             );
         }
@@ -1040,7 +1170,6 @@ fn set_values_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     value,
                 );
             }
@@ -1052,7 +1181,6 @@ fn set_values_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     value,
                 );
             }
@@ -1068,9 +1196,8 @@ fn set_values_in_detection(
 pub(super) fn convert_detection_item_types(
     rule: &mut SigmaRule,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     target_type: &str,
 ) {
     for detection in rule.detection.named.values_mut() {
@@ -1079,7 +1206,6 @@ pub(super) fn convert_detection_item_types(
             state,
             detection_conditions,
             field_name_conditions,
-            field_name_cond_not,
             target_type,
         );
     }
@@ -1088,21 +1214,14 @@ pub(super) fn convert_detection_item_types(
 fn convert_types_in_detection(
     detection: &mut Detection,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     target_type: &str,
 ) {
     match detection {
         Detection::AllOf(items) => {
             for item in items.iter_mut() {
-                if item_conditions_match(
-                    item,
-                    state,
-                    detection_conditions,
-                    field_name_conditions,
-                    field_name_cond_not,
-                ) {
+                if item_conditions_match(item, state, detection_conditions, field_name_conditions) {
                     for val in item.values.iter_mut() {
                         *val = convert_value(val, target_type);
                     }
@@ -1116,7 +1235,6 @@ fn convert_types_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     target_type,
                 );
             }
@@ -1127,7 +1245,6 @@ fn convert_types_in_detection(
                 state,
                 detection_conditions,
                 field_name_conditions,
-                field_name_cond_not,
                 target_type,
             );
         }
@@ -1138,7 +1255,6 @@ fn convert_types_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     target_type,
                 );
             }
@@ -1150,7 +1266,6 @@ fn convert_types_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     target_type,
                 );
             }
@@ -1216,9 +1331,8 @@ fn convert_value(val: &SigmaValue, target: &str) -> SigmaValue {
 pub(super) fn apply_case_transformation(
     rule: &mut SigmaRule,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     case_type: &str,
 ) {
     for detection in rule.detection.named.values_mut() {
@@ -1227,7 +1341,6 @@ pub(super) fn apply_case_transformation(
             state,
             detection_conditions,
             field_name_conditions,
-            field_name_cond_not,
             case_type,
         );
     }
@@ -1236,21 +1349,14 @@ pub(super) fn apply_case_transformation(
 fn apply_case_in_detection(
     detection: &mut Detection,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
     case_type: &str,
 ) {
     match detection {
         Detection::AllOf(items) => {
             for item in items.iter_mut() {
-                if item_conditions_match(
-                    item,
-                    state,
-                    detection_conditions,
-                    field_name_conditions,
-                    field_name_cond_not,
-                ) {
+                if item_conditions_match(item, state, detection_conditions, field_name_conditions) {
                     for val in item.values.iter_mut() {
                         apply_case_to_value(val, case_type);
                     }
@@ -1264,7 +1370,6 @@ fn apply_case_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     case_type,
                 );
             }
@@ -1275,7 +1380,6 @@ fn apply_case_in_detection(
                 state,
                 detection_conditions,
                 field_name_conditions,
-                field_name_cond_not,
                 case_type,
             );
         }
@@ -1286,7 +1390,6 @@ fn apply_case_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     case_type,
                 );
             }
@@ -1298,7 +1401,6 @@ fn apply_case_in_detection(
                     state,
                     detection_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     case_type,
                 );
             }
@@ -1332,19 +1434,15 @@ fn apply_case_to_value(val: &mut SigmaValue, case_type: &str) {
 fn item_conditions_match(
     item: &DetectionItem,
     state: &PipelineState,
-    detection_conditions: &[DetectionItemCondition],
-    field_name_conditions: &[FieldNameCondition],
-    field_name_cond_not: bool,
+    detection_conditions: &[&ConditionSet<DetectionItemCondition>],
+    field_name_conditions: &[&ConditionSet<FieldNameCondition>],
 ) -> bool {
-    let det_match = detection_conditions.is_empty()
-        || detection_conditions
-            .iter()
-            .all(|c| c.matches_item(item, state));
+    let det_match = detection_conditions_match(item, state, detection_conditions);
 
     let field_match = if let Some(ref name) = item.field.name {
-        field_conditions_match(name, state, field_name_conditions, field_name_cond_not)
+        field_conditions_match(name, state, field_name_conditions)
     } else {
-        field_name_conditions.is_empty()
+        condition_sets_are_empty(field_name_conditions)
     };
 
     det_match && field_match
@@ -1357,7 +1455,7 @@ fn item_conditions_match(
 pub(super) fn rule_has_matching_item(
     rule: &SigmaRule,
     state: &PipelineState,
-    conditions: &[DetectionItemCondition],
+    conditions: &[&ConditionSet<DetectionItemCondition>],
 ) -> bool {
     for detection in rule.detection.named.values() {
         if detection_has_matching_item(detection, state, conditions) {
@@ -1370,12 +1468,12 @@ pub(super) fn rule_has_matching_item(
 fn detection_has_matching_item(
     detection: &Detection,
     state: &PipelineState,
-    conditions: &[DetectionItemCondition],
+    conditions: &[&ConditionSet<DetectionItemCondition>],
 ) -> bool {
     match detection {
         Detection::AllOf(items) => items
             .iter()
-            .any(|item| conditions.iter().all(|c| c.matches_item(item, state))),
+            .any(|item| detection_conditions_match(item, state, conditions)),
         Detection::AnyOf(subs) => subs
             .iter()
             .any(|sub| detection_has_matching_item(sub, state, conditions)),

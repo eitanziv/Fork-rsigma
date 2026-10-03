@@ -53,8 +53,9 @@ use rsigma_parser::{CorrelationRule, SigmaCollection, SigmaRule};
 use crate::error::{EvalError, Result};
 
 pub use conditions::{
-    DetectionItemCondition, FieldNameCondition, NamedRuleCondition, RuleCondition,
-    eval_condition_expr,
+    ConditionOp, ConditionSet, DetectionItemCondition, FieldNameCondition,
+    NamedDetectionItemCondition, NamedFieldNameCondition, NamedRuleCondition, RuleCondition,
+    StateOperator, eval_condition_expr,
 };
 pub use finalizers::Finalizer;
 pub use parsing::{
@@ -96,16 +97,12 @@ pub struct TransformationItem {
     pub id: Option<String>,
     /// The transformation to apply.
     pub transformation: Transformation,
-    /// Rule-level conditions (all must match for the transformation to fire).
-    pub rule_conditions: Vec<NamedRuleCondition>,
-    /// Optional logical expression over condition IDs.
-    pub rule_cond_expr: Option<String>,
+    /// Rule-level conditions and their linking behavior.
+    pub rule_conditions: ConditionSet<RuleCondition>,
     /// Detection-item-level conditions.
-    pub detection_item_conditions: Vec<DetectionItemCondition>,
+    pub detection_item_conditions: ConditionSet<DetectionItemCondition>,
     /// Field-name-level conditions.
-    pub field_name_conditions: Vec<FieldNameCondition>,
-    /// If true, negate the field name conditions.
-    pub field_name_cond_not: bool,
+    pub field_name_conditions: ConditionSet<FieldNameCondition>,
 }
 
 // =============================================================================
@@ -126,12 +123,11 @@ impl Pipeline {
             state.reset_detection_item();
 
             // Apply the transformation
-            let applied = item.transformation.apply(
+            let applied = item.transformation.apply_with_condition_sets(
                 rule,
                 state,
-                &item.detection_item_conditions,
-                &item.field_name_conditions,
-                item.field_name_cond_not,
+                &[&item.detection_item_conditions],
+                &[&item.field_name_conditions],
             )?;
 
             // Track application in state
@@ -170,23 +166,10 @@ impl Pipeline {
         state: &PipelineState,
         item: &TransformationItem,
     ) -> bool {
-        if item.rule_conditions.is_empty() {
-            return true;
-        }
-
-        if let Some(ref expr) = item.rule_cond_expr {
-            let mut results = HashMap::new();
-            for (i, named) in item.rule_conditions.iter().enumerate() {
-                let id = named.id.clone().unwrap_or_else(|| format!("cond_{i}"));
-                results.insert(id, named.condition.matches_rule(rule, state));
-            }
-            return eval_condition_expr(expr, &results);
-        }
-
-        // Default: all conditions must match (AND)
-        item.rule_conditions
-            .iter()
-            .all(|c| c.condition.matches_rule(rule, state))
+        item.rule_conditions.conditions.is_empty()
+            || item
+                .rule_conditions
+                .matches(|condition| condition.matches_rule(rule, state))
     }
 
     /// Apply this pipeline to a correlation rule, mutating it in place.
@@ -242,22 +225,10 @@ impl Pipeline {
         state: &PipelineState,
         item: &TransformationItem,
     ) -> bool {
-        if item.rule_conditions.is_empty() {
-            return true;
-        }
-
-        if let Some(ref expr) = item.rule_cond_expr {
-            let mut results = HashMap::new();
-            for (i, named) in item.rule_conditions.iter().enumerate() {
-                let id = named.id.clone().unwrap_or_else(|| format!("cond_{i}"));
-                results.insert(id, named.condition.matches_correlation(corr, state));
-            }
-            return eval_condition_expr(expr, &results);
-        }
-
-        item.rule_conditions
-            .iter()
-            .all(|c| c.condition.matches_correlation(corr, state))
+        item.rule_conditions.conditions.is_empty()
+            || item
+                .rule_conditions
+                .matches(|condition| condition.matches_correlation(corr, state))
     }
 }
 
@@ -377,7 +348,7 @@ fn apply_correlation_transformation(
         }
 
         Transformation::SetState { key, value } => {
-            state.set_state(key.clone(), serde_json::Value::String(value.clone()));
+            state.set_state(key.clone(), value.clone());
             Ok(true)
         }
 

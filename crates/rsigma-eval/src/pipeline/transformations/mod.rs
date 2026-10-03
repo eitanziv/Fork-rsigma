@@ -14,7 +14,9 @@ use regex::Regex;
 
 use rsigma_parser::{SigmaRule, SigmaValue};
 
-use super::conditions::{DetectionItemCondition, FieldNameCondition};
+use super::conditions::{
+    ConditionOp, ConditionSet, DetectionItemCondition, FieldNameCondition, NamedCondition,
+};
 use super::state::PipelineState;
 use crate::error::{EvalError, Result};
 
@@ -99,16 +101,32 @@ pub enum Transformation {
     },
 
     /// Expand `%name%` placeholders with pipeline variables.
-    ValuePlaceholders,
+    ValuePlaceholders {
+        /// Leave unknown placeholders for rsigma's runtime event-field
+        /// substitution instead of rejecting the pipeline application.
+        allow_unresolved: bool,
+        /// Resolve only these placeholder names.
+        include: Option<Vec<String>>,
+        /// Resolve every placeholder except these names.
+        exclude: Option<Vec<String>>,
+    },
 
     /// Replace unresolved `%name%` placeholders with `*` wildcard.
-    WildcardPlaceholders,
+    WildcardPlaceholders {
+        /// Resolve only these placeholder names.
+        include: Option<Vec<String>>,
+        /// Resolve every placeholder except these names.
+        exclude: Option<Vec<String>>,
+    },
 
     /// Store expression template (no-op for eval, kept for YAML compat).
     QueryExpressionPlaceholders { expression: String },
 
     /// Set key-value in pipeline state.
-    SetState { key: String, value: String },
+    SetState {
+        key: String,
+        value: serde_json::Value,
+    },
 
     /// Fail if rule conditions match.
     RuleFailure { message: String },
@@ -208,13 +226,54 @@ impl Transformation {
         field_name_conditions: &[FieldNameCondition],
         field_name_cond_not: bool,
     ) -> Result<bool> {
+        let detection_item_conditions = ConditionSet {
+            conditions: detection_item_conditions
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(index, condition)| NamedCondition {
+                    id: (index + 1).to_string(),
+                    condition,
+                })
+                .collect(),
+            ..ConditionSet::default()
+        };
+        let field_name_conditions = ConditionSet {
+            conditions: field_name_conditions
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(index, condition)| NamedCondition {
+                    id: (index + 1).to_string(),
+                    condition,
+                })
+                .collect(),
+            op: ConditionOp::And,
+            negated: field_name_cond_not,
+            expression: None,
+        };
+        self.apply_with_condition_sets(
+            rule,
+            state,
+            &[&detection_item_conditions],
+            &[&field_name_conditions],
+        )
+    }
+
+    pub(super) fn apply_with_condition_sets(
+        &self,
+        rule: &mut SigmaRule,
+        state: &mut PipelineState,
+        detection_item_conditions: &[&ConditionSet<DetectionItemCondition>],
+        field_name_conditions: &[&ConditionSet<FieldNameCondition>],
+    ) -> Result<bool> {
         match self {
             Transformation::FieldNameMapping { mapping } => {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| mapping.get(name).cloned(),
                 )?;
                 Ok(true)
@@ -224,8 +283,8 @@ impl Transformation {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| {
                         for (prefix, replacement) in mapping {
                             if name.starts_with(prefix.as_str()) {
@@ -246,8 +305,8 @@ impl Transformation {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| Some(vec![format!("{prefix}{name}")]),
                 )?;
                 Ok(true)
@@ -257,8 +316,8 @@ impl Transformation {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| Some(vec![format!("{name}{suffix}")]),
                 )?;
                 Ok(true)
@@ -270,7 +329,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                 );
                 Ok(true)
             }
@@ -315,7 +373,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     &re,
                     replacement,
                     *skip_special,
@@ -323,13 +380,31 @@ impl Transformation {
                 Ok(true)
             }
 
-            Transformation::ValuePlaceholders => {
-                helpers::expand_placeholders_in_rule(rule, state, false);
+            Transformation::ValuePlaceholders {
+                allow_unresolved,
+                include,
+                exclude,
+            } => {
+                helpers::expand_placeholders_in_rule(
+                    rule,
+                    state,
+                    false,
+                    *allow_unresolved,
+                    include.as_deref(),
+                    exclude.as_deref(),
+                )?;
                 Ok(true)
             }
 
-            Transformation::WildcardPlaceholders => {
-                helpers::expand_placeholders_in_rule(rule, state, true);
+            Transformation::WildcardPlaceholders { include, exclude } => {
+                helpers::expand_placeholders_in_rule(
+                    rule,
+                    state,
+                    true,
+                    false,
+                    include.as_deref(),
+                    exclude.as_deref(),
+                )?;
                 Ok(true)
             }
 
@@ -342,7 +417,7 @@ impl Transformation {
             }
 
             Transformation::SetState { key, value } => {
-                state.set_state(key.clone(), serde_json::Value::String(value.clone()));
+                state.set_state(key.clone(), value.clone());
                 Ok(true)
             }
 
@@ -373,8 +448,8 @@ impl Transformation {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| {
                         if let Some(mapped) = map.get(name) {
                             return Some(vec![mapped.clone()]);
@@ -405,7 +480,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     mapping,
                 );
                 Ok(true)
@@ -417,7 +491,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     value,
                 );
                 Ok(true)
@@ -429,7 +502,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     target_type,
                 );
                 Ok(true)
@@ -471,7 +543,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     case_type,
                 );
                 Ok(true)
@@ -479,31 +550,23 @@ impl Transformation {
 
             Transformation::Nest { items } => {
                 for item in items {
-                    let mut merged_det_conds: Vec<DetectionItemCondition> =
-                        detection_item_conditions.to_vec();
-                    merged_det_conds.extend(item.detection_item_conditions.clone());
+                    let mut merged_det_conds = detection_item_conditions.to_vec();
+                    merged_det_conds.push(&item.detection_item_conditions);
 
-                    let mut merged_field_conds: Vec<FieldNameCondition> =
-                        field_name_conditions.to_vec();
-                    merged_field_conds.extend(item.field_name_conditions.clone());
+                    let mut merged_field_conds = field_name_conditions.to_vec();
+                    merged_field_conds.push(&item.field_name_conditions);
 
-                    let rule_ok = if item.rule_conditions.is_empty() {
-                        true
-                    } else {
-                        super::conditions::all_rule_conditions_match(
-                            &item.rule_conditions,
-                            rule,
-                            state,
-                        )
-                    };
+                    let rule_ok = item.rule_conditions.conditions.is_empty()
+                        || item
+                            .rule_conditions
+                            .matches(|condition| condition.matches_rule(rule, state));
 
                     if rule_ok {
-                        item.transformation.apply(
+                        item.transformation.apply_with_condition_sets(
                             rule,
                             state,
                             &merged_det_conds,
                             &merged_field_conds,
-                            item.field_name_cond_not || field_name_cond_not,
                         )?;
                         if let Some(ref id) = item.id {
                             state.mark_applied(id);

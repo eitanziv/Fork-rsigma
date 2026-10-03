@@ -336,7 +336,7 @@ fn placeholder_pipelines_skip_escaped_percent_and_unresolved_placeholders() {
         [0]
     );
 
-    let pipeline = "name: p\nvars:\n  b: [two]\ntransformations:\n  - type: value_placeholders\n";
+    let pipeline = "name: p\nvars:\n  b: [two]\ntransformations:\n  - type: value_placeholders\n    allow_unresolved: true\n";
     let events = [
         json!({"F": "one-two", "a": "one"}),
         json!({"F": "x-two", "a": "one"}),

@@ -275,7 +275,7 @@ logsource:
     product: test
 detection:
     selection:
-        CommandLine|contains: "%malicious_commands%"
+        CommandLine|contains|expand: "%malicious_commands%"
     condition: selection
 level: high
 "#;

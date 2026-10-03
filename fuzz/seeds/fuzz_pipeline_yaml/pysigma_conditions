@@ -1,0 +1,32 @@
+name: pysigma_conditions
+vars:
+  users: [alice, bob]
+transformations:
+  - type: set_state
+    key: score
+    val: 5
+  - type: field_name_mapping
+    mapping:
+      User: user.name
+    rule_conditions:
+      windows:
+        type: logsource
+        product: windows
+      score:
+        type: processing_state
+        key: score
+        val: 3
+        op: gte
+    rule_cond_expr: windows and score
+    detection_item_conditions:
+      placeholder:
+        type: match_string
+        pattern: "%users%"
+        cond: any
+    detection_item_cond_expr: placeholder
+    field_name_conditions:
+      user:
+        type: include_fields
+        fields: [User]
+    field_name_cond_expr: user
+  - type: value_placeholders

@@ -410,7 +410,7 @@ fn test_set_state() {
     let mut state = PipelineState::default();
     let t = Transformation::SetState {
         key: "index".to_string(),
-        value: "windows".to_string(),
+        value: serde_json::Value::String("windows".to_string()),
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
     assert!(state.state_matches("index", "windows"));
@@ -486,7 +486,7 @@ fn test_value_placeholders() {
     named.insert(
         "selection".to_string(),
         Detection::AllOf(vec![DetectionItem {
-            field: FieldSpec::new(Some("User".to_string()), vec![]),
+            field: FieldSpec::new(Some("User".to_string()), vec![Modifier::Expand]),
             values: vec![SigmaValue::String(SigmaString::new("%admin_users%"))],
         }]),
     );
@@ -526,7 +526,11 @@ fn test_value_placeholders() {
         vec!["root".to_string(), "admin".to_string()],
     );
 
-    let t = Transformation::ValuePlaceholders;
+    let t = Transformation::ValuePlaceholders {
+        allow_unresolved: false,
+        include: None,
+        exclude: None,
+    };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
     let det = &rule.detection.named["selection"];
@@ -905,22 +909,18 @@ fn test_nest_transformation() {
             transformation: Transformation::FieldNamePrefix {
                 prefix: "winlog.".to_string(),
             },
-            rule_conditions: vec![],
-            rule_cond_expr: None,
-            detection_item_conditions: vec![],
-            field_name_conditions: vec![],
-            field_name_cond_not: false,
+            rule_conditions: Default::default(),
+            detection_item_conditions: Default::default(),
+            field_name_conditions: Default::default(),
         },
         super::super::TransformationItem {
             id: Some("inner_suffix".to_string()),
             transformation: Transformation::FieldNameSuffix {
                 suffix: ".keyword".to_string(),
             },
-            rule_conditions: vec![],
-            rule_cond_expr: None,
-            detection_item_conditions: vec![],
-            field_name_conditions: vec![],
-            field_name_cond_not: false,
+            rule_conditions: Default::default(),
+            detection_item_conditions: Default::default(),
+            field_name_conditions: Default::default(),
         },
     ];
 
@@ -1001,7 +1001,7 @@ fn test_wildcard_placeholders_replaces_unresolved() {
     named.insert(
         "selection".to_string(),
         Detection::AllOf(vec![DetectionItem {
-            field: FieldSpec::new(Some("User".to_string()), vec![]),
+            field: FieldSpec::new(Some("User".to_string()), vec![Modifier::Expand]),
             values: vec![SigmaValue::String(SigmaString::new("%unknown_var%"))],
         }]),
     );
@@ -1037,7 +1037,10 @@ fn test_wildcard_placeholders_replaces_unresolved() {
 
     let mut state = PipelineState::default();
     // No vars set — placeholder should be replaced with wildcard
-    let t = Transformation::WildcardPlaceholders;
+    let t = Transformation::WildcardPlaceholders {
+        include: None,
+        exclude: None,
+    };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
     let det = &rule.detection.named["selection"];
@@ -1053,12 +1056,12 @@ fn test_wildcard_placeholders_replaces_unresolved() {
 }
 
 #[test]
-fn test_wildcard_placeholders_with_known_var() {
+fn test_wildcard_placeholders_replace_known_var() {
     let mut named = HashMap::new();
     named.insert(
         "selection".to_string(),
         Detection::AllOf(vec![DetectionItem {
-            field: FieldSpec::new(Some("User".to_string()), vec![]),
+            field: FieldSpec::new(Some("User".to_string()), vec![Modifier::Expand]),
             values: vec![SigmaValue::String(SigmaString::new("%admin%"))],
         }]),
     );
@@ -1097,14 +1100,17 @@ fn test_wildcard_placeholders_with_known_var() {
         .vars
         .insert("admin".to_string(), vec!["root".to_string()]);
 
-    // WildcardPlaceholders should still expand known vars
-    let t = Transformation::WildcardPlaceholders;
+    // WildcardPlaceholders replaces every handled placeholder, even known vars.
+    let t = Transformation::WildcardPlaceholders {
+        include: None,
+        exclude: None,
+    };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
     let det = &rule.detection.named["selection"];
     if let Detection::AllOf(items) = det {
         if let SigmaValue::String(s) = &items[0].values[0] {
-            assert_eq!(s.original, "root");
+            assert_eq!(s.original, "*");
         } else {
             panic!("Expected String value");
         }

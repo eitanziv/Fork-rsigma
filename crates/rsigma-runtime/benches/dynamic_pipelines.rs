@@ -436,7 +436,7 @@ logsource:
     category: process_creation
 detection:
     selection:
-        CommandLine|contains: "%malicious_commands%"
+        CommandLine|contains|expand: "%malicious_commands%"
     condition: selection
 level: high
 "#;
