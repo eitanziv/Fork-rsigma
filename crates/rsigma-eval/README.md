@@ -398,36 +398,43 @@ Each transformation item in a pipeline can have:
 
 List conditions have one-based identifiers (`1`, `2`, ...). Condition expressions require every identifier to be defined and referenced. An expression and the corresponding `_cond_op` cannot be used together. Unknown transformation-item keys are rejected.
 
+Condition semantics follow pySigma:
+
+- `match_string` and field-name regexes match from the start of the text, like Python's `re.match`. `match_string` sees a value as pySigma renders it after modifiers: `contains`, `startswith`, and `endswith` add their `*` wildcards and literal `*` and `?` are escaped. Field references, regular expressions, CIDR values, numbers, comparisons, and encoded values never match; `negate` inverts each value's result before `cond` combines them.
+- Field-name conditions select a detection item when its field name or the target of one of its field references matches, and the negation applies to that combined result.
+- `processing_item_applied` at field-name scope is true for a `fields` entry or field reference target that the transformation with that `id` renamed, and the mark follows later renames. At detection-item scope it is true for a detection item that the transformation changed, and an item keeps the marks of the item it replaced.
+- `processing_state` `eq` and `ne` compare numbers by value, so `1` equals `1.0`.
+
 ### Transformations (26 types)
 
 | Type | Fields | Description |
 |------|--------|-------------|
-| `field_name_mapping` | `mapping: {k: v \| [v1, v2, ...]}` | Rename fields and `fieldref` targets via a mapping dict; list values expand the matched detection item into an OR over the alternatives (one-to-many, pySigma-compatible) |
+| `field_name_mapping` | `mapping: {k: v \| [v1, v2, ...]}` | Rename fields, `fieldref` targets, and the rule's `fields` list via a mapping dict; list values expand the matched detection item into an OR over the alternatives (one-to-many, pySigma-compatible) |
 | `field_name_prefix_mapping` | `mapping: {prefix: replacement}` | Rename fields matching a prefix |
 | `field_name_prefix` | `prefix` | Add a prefix to all field names |
 | `field_name_suffix` | `suffix` | Add a suffix to all field names |
-| `field_name_transform` | `transform_func`, `mapping` | Case transformation (see below) |
+| `field_name_transform` | `transform_func`, `mapping`, `apply_keyword` (only `false`) | Case transformation (see below) |
 | `drop_detection_item` | — | Remove matching detection items |
-| `add_condition` | `conditions: {k: v \| [v1, v2, ...]}`, `negated` (default: `false`) | Inject additional detection conditions; list values are OR-linked |
+| `add_condition` | `conditions: {k: v \| [v1, v2, ...]}`, `negated` (default: `false`), `name`, `template` (default: `false`) | Inject additional detection conditions; list values are OR-linked. `name` names the added detection and must not collide with an existing one; `template: true` substitutes `$category`, `$product`, and `$service` in string values |
 | `change_logsource` | `category`, `product`, `service` | Modify logsource fields |
-| `replace_string` | `regex`, `replacement`, `skip_special` (default: `false`) | Regex-based string replacement (`skip_special` preserves wildcards) |
+| `replace_string` | `regex`, `replacement`, `skip_special` (default: `false`), `interpret_special` (default: `false`) | Regex-based string replacement (`skip_special` preserves wildcards; `interpret_special` parses wildcards in the replaced text) |
 | `map_string` | `mapping: {k: v \| [v1, v2]}` | Map string values to replacements (supports one-to-many) |
-| `set_value` | `value` | Replace detection item values |
+| `set_value` | `value`, `force_type` (`str`/`num`) | Replace detection item values |
 | `convert_type` | `target_type` (`str`/`int`/`float`/`bool`, default: `str`) | Convert values between types |
 | `value_placeholders` | `allow_unresolved` (default: `false`), `include`/`exclude` | Expand `%placeholder%` in `|expand` values; multi-value variables produce a Cartesian product and unresolved variables fail unless runtime substitution is explicitly allowed |
 | `wildcard_placeholders` | `include`/`exclude` | Replace handled placeholders with wildcards in `|expand` values |
-| `query_expression_placeholders` | `expression` (default: `""`) | Backend query placeholders (no-op in eval) |
+| `query_expression_placeholders` | `expression` (default: `""`) | Backend query placeholders (no-op in eval); `mapping`, `include`, and `exclude` are rejected |
 | `set_state` | `key`, `val` (`value` alias) | Store typed key-value pairs in pipeline state |
 | `rule_failure` | `message` (default: `"rule failure"`) | Raise an error for matching rules |
 | `detection_item_failure` | `message` (default: `"detection item failure"`) | Raise an error for matching detection items |
-| `hashes_fields` | `valid_hash_algos`, `field_prefix` (default: `"File"`), `drop_algo_prefix` (default: `false`) | Transform hash field names |
+| `hashes_fields` | `valid_hash_algos` (required), `field_prefix` (default: `""`), `drop_algo_prefix` (default: `false`), `field_to_parse` (default: `[Hashes, Hash]`) | Replace hash items with an OR over per-algorithm fields; values are `ALGO=hash`, `ALGO\|hash`, or a bare hash whose algorithm comes from its length |
 | `add_field` | `field` | Add a new detection item with a fixed value |
 | `remove_field` | `field` | Remove a field from detection items |
 | `set_field` | `fields: [...]` | Rename the field of a detection item |
 | `set_custom_attribute` | `attribute`, `value` | Set key-value attributes on rules |
 | `case_transformation` | `case_type` / `case` (`lower`/`upper`/`snake_case`) | Transform case of field values |
 | `nest` | `items` or `transformations` | Apply a group of transformations conditionally |
-| `regex` | — | Regex transformation (no-op in eval) |
+| `regex` | `method` (`ignore_case_brackets`/`ignore_case_flag`; `plain` is rejected) | Regex transformation (no-op in eval, where string matching is already case-insensitive) |
 
 **Aliases**: `case` is accepted as an alias for `case_transformation`.
 
@@ -459,8 +466,8 @@ List conditions have one-based identifiers (`1`, `2`, ...). Condition expression
 
 | Type | Fields |
 |------|--------|
-| `match_string` | `pattern` (default: `".*"`), `negate` (default: `false`) |
-| `is_null` | `negate` |
+| `match_string` | `pattern` (default: `".*"`), `negate` (default: `false`), `cond` (`any`/`all`, default: `any`) |
+| `is_null` | `negate`, `cond` (`any`/`all`, default: `any`) |
 | `processing_item_applied` | `processing_item_id` |
 | `processing_state` | `key`, `val`, `op` (`eq`/`ne`/`gte`/`gt`/`lte`/`lt`) |
 
@@ -468,8 +475,8 @@ List conditions have one-based identifiers (`1`, `2`, ...). Condition expression
 
 | Type | Fields |
 |------|--------|
-| `include_fields` | `fields`, `match_type` (`plain` or `regex`, default: `plain`) |
-| `exclude_fields` | `fields`, `match_type` |
+| `include_fields` | `fields`, `mode` (`plain` or `re`, default: `plain`; `match_type` is an alias) |
+| `exclude_fields` | `fields`, `mode` |
 | `processing_item_applied` | `processing_item_id` |
 | `processing_state` | `key`, `val`, `op` (`eq`/`ne`/`gte`/`gt`/`lte`/`lt`) |
 

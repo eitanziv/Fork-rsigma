@@ -8,9 +8,34 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 Processing pipelines now apply pySigma condition linking consistently at rule, detection-item, and field-name scope. The canonical `*_cond_op`, `*_cond_not`, and `*_cond_expr` keys are supported, `rule_cond_expression` remains an alias, condition collections accept lists or identifier-keyed mappings, and list identifiers are one-based. Unknown transformation-item keys, invalid operators, and unresolved expression references now fail pipeline parsing instead of being ignored.
 
-`set_state` reads typed values from `val` while retaining `value` as an alias, and `processing_state` supports `eq`, `ne`, `gte`, `gt`, `lte`, and `lt`. Field-name transformations honor detection-item conditions and also rewrite `fieldref` targets. Placeholder transformations now operate only on `|expand` values, support mutually exclusive `include`/`exclude` filters, expand the Cartesian product of multiple variables, and report unresolved `value_placeholders` variables unless `allow_unresolved: true` explicitly enables runtime substitution; `wildcard_placeholders` replaces every handled placeholder with `*`.
+`set_state` reads typed values from `val` while retaining `value` as an alias, and `processing_state` supports `eq`, `ne`, `gte`, `gt`, `lte`, and `lt`, with `eq` and `ne` comparing numbers by value. Field-name transformations honor detection-item conditions and also rewrite `fieldref` targets and the rule's `fields` list. Placeholder transformations now operate only on `|expand` values, support mutually exclusive `include`/`exclude` filters, expand the Cartesian product of multiple variables, and report unresolved `value_placeholders` variables unless `allow_unresolved: true` explicitly enables runtime substitution; `wildcard_placeholders` replaces every handled placeholder with `*`. A backslash escapes `%` in placeholder values as it does in the `expand` modifier.
 
-Breaking changes for library users: `TransformationItem` stores each condition scope in `ConditionSet<T>` instead of separate vectors and flags; each `ProcessingState` condition carries a typed `val` and `StateOperator`; `Transformation::SetState.value` is a `serde_json::Value` instead of `String`; and the placeholder transformation variants carry their new options. Access parsed conditions through `.conditions`, use one-based string identifiers for positional conditions, wrap programmatic state strings with `serde_json::Value::String`, set `StateOperator::Eq` for the previous equality behavior, and initialize placeholder options to `false`/`None` for the previous unfiltered behavior. The legacy `NamedRuleCondition` type and `all_rule_conditions_match` helper remain available for callers that only need AND linking.
+Conditions match the way pySigma evaluates them:
+
+- `match_string` and field-name regexes match from the start of the text. `match_string` sees the value with `contains`, `startswith`, and `endswith` wildcards added and literal wildcards escaped, never matches field references or other non-string values, applies `negate` per value, and accepts `cond: any|all`. `is_null` accepts `cond` too.
+- Field-name conditions select a detection item through its field name or any of its field reference targets, for every transformation, including `drop_detection_item` and `detection_item_failure`.
+- `include_fields` and `exclude_fields` read pySigma's `mode: plain|re` key, with `match_type` kept as an alias.
+- `processing_item_applied` tracks renamed fields at field-name scope and changed items at detection-item scope instead of reporting whether the transformation ran anywhere in the rule.
+- `nest` applies each inner item under its own conditions only, and correlation rules honor field-name conditions, `nest`, and `field_name_transform`.
+
+Transformation parameters from pySigma are implemented or rejected instead of being ignored. `add_condition` accepts `name` and `template`, `replace_string` accepts `interpret_special`, and `set_value` accepts `force_type`. `hashes_fields` now replaces each `Hashes` or `Hash` item (configurable with `field_to_parse`) with an OR over per-algorithm fields, accepts `ALGO|hash` and bare hashes whose algorithm comes from their length, requires `valid_hash_algos`, and fails when no valid algorithm is found. `regex` validates `method` and rejects `plain`, `field_name_transform` rejects `apply_keyword: true`, and `query_expression_placeholders` rejects `mapping`, `include`, and `exclude`.
+
+Migration notes:
+
+- Add `|expand` to values whose placeholders a pipeline should expand; plain values and keywords are no longer expanded.
+- Set `allow_unresolved: true` on `value_placeholders` to keep runtime substitution for variables the pipeline does not define.
+- `hashes_fields` no longer prefixes field names with `File` by default and no longer splits comma-separated values. Set `field_prefix: File` to keep the previous field names.
+- Add `cond: all` where a `match_string` or `is_null` condition must hold for every value.
+
+Breaking changes for library users:
+
+- `TransformationItem` stores each condition scope in `ConditionSet<T>` instead of separate vectors and flags. Access parsed conditions through `.conditions` and use one-based string identifiers for positional conditions. The legacy `NamedRuleCondition` type and `all_rule_conditions_match` helper remain available for callers that only need AND linking.
+- Each `ProcessingState` condition carries a typed `val` and a `StateOperator`; set `StateOperator::Eq` for the previous equality behavior. `Transformation::SetState.value` is a `serde_json::Value`; wrap strings with `serde_json::Value::String`.
+- `DetectionItemCondition::MatchString` and `IsNull` carry a `cond: ValueMatch`; `ValueMatch::Any` keeps the previous linking.
+- `Transformation::AddCondition` gains `name` and `template`, `ReplaceString` gains `interpret_special`, `HashesFields` gains `field_to_parse`, and the placeholder variants carry their new options. Use `None`, `false`, and `vec!["Hashes".into(), "Hash".into()]` for the previous behavior.
+- `PipelineState` replaces the public `detection_item_applied` set, `reset_detection_item()`, and `was_applied_to_detection_item()` with `detection_item_was_processed_by()`, and adds `field_name_applied`, `track_field_rename()`, and `field_was_processed_by()`.
+- `eval_condition_expr` returns `false` for an expression that does not parse, such as an empty string.
+- `Transformation::apply` with an empty field-name condition list and `field_name_cond_not: true` no longer renames fields, because the negated empty set is false.
 
 ### Grype scans keep GitHub code scanning current (#538)
 
