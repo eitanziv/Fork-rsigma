@@ -554,6 +554,23 @@ impl Engine {
         let fc = self.filter_counter;
         self.filter_counter += 1;
 
+        // An id/name match wins over the deprecated title fallback across the
+        // whole collection, so a title cannot capture a reference that names
+        // another rule's stable identity.
+        let stable_references: Vec<String> = match &filter.rules {
+            FilterRuleTarget::Any => Vec::new(),
+            FilterRuleTarget::Specific(refs) => refs
+                .iter()
+                .filter(|reference| {
+                    self.rules.iter().any(|rule| {
+                        rule.id.as_deref() == Some(reference.as_str())
+                            || rule.name.as_deref() == Some(reference.as_str())
+                    })
+                })
+                .cloned()
+                .collect(),
+        };
+
         // Rewrite the filter's own condition expression with namespaced identifiers
         // so that `selection` becomes `__filter_0_selection`, etc.
         let rewritten_cond = if let Some(cond_expr) = filter.detection.conditions.first() {
@@ -577,9 +594,22 @@ impl Engine {
         for rule in &mut self.rules {
             let rule_matches = match &filter.rules {
                 FilterRuleTarget::Any => true,
-                FilterRuleTarget::Specific(refs) => refs
-                    .iter()
-                    .any(|r| rule.id.as_deref() == Some(r.as_str()) || rule.title == *r),
+                FilterRuleTarget::Specific(refs) => refs.iter().any(|reference| {
+                    let identity_match = rule.id.as_deref() == Some(reference.as_str())
+                        || rule.name.as_deref() == Some(reference.as_str());
+                    let title_match = !stable_references.contains(reference)
+                        && !identity_match
+                        && rule.title == *reference;
+                    if title_match {
+                        log::warn!(
+                            "filter '{}' references rule '{}' by title; title references are \
+                             deprecated, use the rule id or name",
+                            filter.title,
+                            reference
+                        );
+                    }
+                    identity_match || title_match
+                }),
             };
 
             // Also check logsource compatibility if the filter specifies one

@@ -16,7 +16,7 @@
 //! use rsigma_parser::lint::catalogue::catalogue;
 //!
 //! let entries = catalogue();
-//! assert_eq!(entries.len(), 89);
+//! assert_eq!(entries.len(), 90);
 //! let invalid_status = entries.iter().find(|e| e.name == "invalid_status").unwrap();
 //! assert!(invalid_status.fix.is_some()); // has a safe auto-fix
 //! ```
@@ -135,6 +135,7 @@ lint_catalogue! {
     FilterHasLevel => (Severity::Warning, SAFE, "Filter rules should not have a 'level' field."),
     FilterHasStatus => (Severity::Warning, SAFE, "Filter rules should not have a 'status' field."),
     MissingFilterLogsource => (Severity::Error, NONE, "Filter rule is missing 'logsource'."),
+    FilterReferenceByTitle => (Severity::Warning, NONE, "A filter references a rule by title instead of id or name."),
 
     // ── Detection logic (cross-cutting) ──────────────────────────────────
     NullInValueList => (Severity::Warning, NONE, "A value list contains a null entry."),
@@ -294,6 +295,10 @@ const LINT_RULE_NAMES: &[(LintRule, &str)] = &[
     (LintRule::FilterHasLevel, "filter_has_level"),
     (LintRule::FilterHasStatus, "filter_has_status"),
     (LintRule::MissingFilterLogsource, "missing_filter_logsource"),
+    (
+        LintRule::FilterReferenceByTitle,
+        "filter_reference_by_title",
+    ),
     (LintRule::NullInValueList, "null_in_value_list"),
     (
         LintRule::SingleValueAllModifier,
@@ -349,13 +354,13 @@ mod tests {
 
     #[test]
     fn catalogue_covers_every_rule() {
-        // 89 LintRule variants. The exhaustive `describe` match guarantees a
+        // 90 LintRule variants. The exhaustive `describe` match guarantees a
         // metadata entry per variant at compile time; this asserts the count
         // and the `ALL_LINT_RULES`/`LINT_RULE_NAMES` lists stay in sync.
         let entries = catalogue();
-        assert_eq!(entries.len(), 89, "expected 89 catalogue entries");
-        assert_eq!(ALL_LINT_RULES.len(), 89);
-        assert_eq!(LINT_RULE_NAMES.len(), 89);
+        assert_eq!(entries.len(), 90, "expected 90 catalogue entries");
+        assert_eq!(ALL_LINT_RULES.len(), 90);
+        assert_eq!(LINT_RULE_NAMES.len(), 90);
     }
 
     #[test]

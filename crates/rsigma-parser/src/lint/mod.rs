@@ -138,6 +138,7 @@ pub enum LintRule {
     FilterHasLevel,
     FilterHasStatus,
     MissingFilterLogsource,
+    FilterReferenceByTitle,
 
     // ── Detection logic (cross-cutting) ──────────────────────────────────
     NullInValueList,
@@ -238,6 +239,7 @@ impl fmt::Display for LintRule {
             LintRule::FilterHasLevel => "filter_has_level",
             LintRule::FilterHasStatus => "filter_has_status",
             LintRule::MissingFilterLogsource => "missing_filter_logsource",
+            LintRule::FilterReferenceByTitle => "filter_reference_by_title",
             LintRule::NullInValueList => "null_in_value_list",
             LintRule::SingleValueAllModifier => "single_value_all_modifier",
             LintRule::AllWithRe => "all_with_re",
@@ -568,6 +570,7 @@ fn is_action_fragment(m: &yaml_serde::Mapping) -> bool {
 /// directory-global for directory linting.
 struct RuleIndex {
     majors: HashMap<String, u32>,
+    detection_titles: HashMap<String, u32>,
     /// Whether the index covers the whole set being linted. Only then is an
     /// unresolved reference genuinely missing rather than living in a file
     /// outside the linted scope.
@@ -578,6 +581,7 @@ impl RuleIndex {
     fn new(complete: bool) -> Self {
         Self {
             majors: HashMap::new(),
+            detection_titles: HashMap::new(),
             complete,
         }
     }
@@ -600,10 +604,8 @@ impl RuleIndex {
             return;
         }
         // Only detection rules and correlation rules can be referenced.
-        if matches!(
-            detect_doc_type(m),
-            DocType::Detection | DocType::Correlation
-        ) {
+        let doc_type = detect_doc_type(m);
+        if matches!(doc_type, DocType::Detection | DocType::Correlation) {
             let major = crate::version::resolve_major(
                 m.get(key("sigma-version"))
                     .and_then(crate::version::major_from_value),
@@ -612,6 +614,11 @@ impl RuleIndex {
                 if let Some(v) = get_str(m, id_key) {
                     self.majors.insert(v.to_string(), major);
                 }
+            }
+            if doc_type == DocType::Detection
+                && let Some(title) = get_str(m, "title")
+            {
+                self.detection_titles.insert(title.to_string(), major);
             }
         }
     }
@@ -665,7 +672,8 @@ fn lint_cross_references(docs: &[Value], index: &RuleIndex, warnings: &mut Vec<L
         if is_action_fragment(m) {
             continue;
         }
-        let (refs, path) = match detect_doc_type(m) {
+        let doc_type = detect_doc_type(m);
+        let (refs, path) = match doc_type {
             DocType::Correlation => (correlation_rule_refs(m), "/correlation/rules"),
             DocType::Filter => match filter_rule_refs(m) {
                 Some(refs) => (refs, "/filter/rules"),
@@ -684,7 +692,22 @@ fn lint_cross_references(docs: &[Value], index: &RuleIndex, warnings: &mut Vec<L
             .or_else(|| get_str(m, "name"))
             .unwrap_or("<rule>");
         for r in refs {
-            match index.majors.get(&r).copied() {
+            let mut target = index.majors.get(&r).copied();
+            if target.is_none()
+                && doc_type == DocType::Filter
+                && let Some(title_target) = index.detection_titles.get(&r).copied()
+            {
+                warnings.push(warning(
+                    LintRule::FilterReferenceByTitle,
+                    format!(
+                        "'{label}' references rule title '{r}'; title references are deprecated, \
+                         use the rule id or name"
+                    ),
+                    path,
+                ));
+                target = Some(title_target);
+            }
+            match target {
                 Some(target) if target != self_major => warnings.push(warning(
                     LintRule::SigmaVersionMismatch,
                     format!(
@@ -2157,6 +2180,61 @@ correlation:
         assert!(has_no_rule(
             &lint_yaml_str(yaml),
             LintRule::SigmaVersionMismatch
+        ));
+    }
+
+    #[test]
+    fn filter_reference_by_title_is_deprecated() {
+        let yaml = r#"
+title: Base Rule
+id: 00000000-0000-4000-8000-000000000001
+name: base_rule
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Filter by Title
+logsource:
+    category: test
+filter:
+    rules: [Base Rule]
+    selection:
+        User: admin
+    condition: not selection
+"#;
+        assert!(has_rule(
+            &lint_yaml_str(yaml),
+            LintRule::FilterReferenceByTitle
+        ));
+    }
+
+    #[test]
+    fn filter_reference_by_name_is_not_deprecated() {
+        let yaml = r#"
+title: Base Rule
+name: base_rule
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Filter by Name
+logsource:
+    category: test
+filter:
+    rules: [base_rule]
+    selection:
+        User: admin
+    condition: not selection
+"#;
+        assert!(has_no_rule(
+            &lint_yaml_str(yaml),
+            LintRule::FilterReferenceByTitle
         ));
     }
 
