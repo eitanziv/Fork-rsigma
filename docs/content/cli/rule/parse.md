@@ -56,7 +56,7 @@ For a strict per-rule gate that fails on parse errors, use [`rule validate`](val
 
 ## See also
 
-- [`rule validate`](validate.md) for parsing every rule in a directory plus pipeline compile checks.
+- [`rule validate`](validate.md) for parsing a rule file or every rule in a directory, plus pipeline compile checks.
 - [`rule stdin`](stdin.md) for parsing a rule streamed in over stdin.
 - [`rule condition`](condition.md) for parsing just a condition expression.
 - [Linting Rules](../../guide/linting-rules.md) for the spec-conformance gate that goes beyond parsing.

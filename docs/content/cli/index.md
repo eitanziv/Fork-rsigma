@@ -52,7 +52,7 @@ rsigma
 │   └── daemon                 long-running streaming detection (`daemon` feature)
 ├── rule
 │   ├── parse                  parse a single rule file, dump AST as JSON
-│   ├── validate               parse + compile a directory of rules
+│   ├── validate               parse + compile a rule file or a directory of rules
 │   ├── lint                   run the {{ rsigma.lint.rules }} lint checks
 │   ├── fields                 list every field referenced by the rules
 │   ├── draft                  draft a rule from exemplar events (optional baseline)
