@@ -1,4 +1,7 @@
-use rsigma_parser::{ConditionExpr, LogSource, SelectorPattern};
+use rsigma_parser::{
+    ConditionExpr, FilterRule, FilterRuleTarget, LogSource, SelectorPattern, SigmaCollection,
+    SigmaRule,
+};
 
 /// Asymmetric containment check for filter-to-rule matching: every field the
 /// filter specifies must be present and equal in the rule. Fields the filter
@@ -76,6 +79,141 @@ pub(super) fn rewrite_condition_identifiers(expr: &ConditionExpr, counter: usize
             }
         }
     }
+}
+
+/// The identity of a rule a filter may target.
+pub(super) struct FilterTarget<'a> {
+    pub id: Option<&'a str>,
+    pub name: Option<&'a str>,
+    pub title: &'a str,
+    pub logsource: &'a LogSource,
+}
+
+/// References of `filter` that name some rule's `id` or `name`. Such a
+/// reference never falls back to matching a title, so a title cannot capture
+/// a reference that names another rule's stable identity.
+pub(super) fn stable_references(
+    filter: &FilterRule,
+    identities: &[(Option<&str>, Option<&str>)],
+) -> Vec<String> {
+    match &filter.rules {
+        FilterRuleTarget::Any => Vec::new(),
+        FilterRuleTarget::Specific(refs) => refs
+            .iter()
+            .filter(|reference| {
+                identities.iter().any(|(id, name)| {
+                    *id == Some(reference.as_str()) || *name == Some(reference.as_str())
+                })
+            })
+            .cloned()
+            .collect(),
+    }
+}
+
+/// Whether `filter` applies to `rule`: a reference matches its `id` or
+/// `name` (or, deprecated, its title), and the filter's logsource, if any,
+/// is contained in the rule's.
+pub(super) fn filter_targets(
+    filter: &FilterRule,
+    stable_references: &[String],
+    rule: &FilterTarget<'_>,
+) -> bool {
+    let referenced = match &filter.rules {
+        FilterRuleTarget::Any => true,
+        FilterRuleTarget::Specific(refs) => refs.iter().any(|reference| {
+            let identity_match =
+                rule.id == Some(reference.as_str()) || rule.name == Some(reference.as_str());
+            let title_match = !stable_references.contains(reference)
+                && !identity_match
+                && rule.title == reference;
+            if title_match {
+                log::warn!(
+                    "filter '{}' references rule '{}' by title; title references are \
+                     deprecated, use the rule id or name",
+                    filter.title,
+                    reference
+                );
+            }
+            identity_match || title_match
+        }),
+    };
+    referenced
+        && filter
+            .logsource
+            .as_ref()
+            .is_none_or(|filter_ls| filter_logsource_contains(filter_ls, rule.logsource))
+}
+
+/// The filter's condition with its identifiers namespaced under `counter`,
+/// or the AND of its detections when it has no condition.
+pub(super) fn namespaced_filter_condition(filter: &FilterRule, counter: usize) -> ConditionExpr {
+    if let Some(cond_expr) = filter.detection.conditions.first() {
+        return rewrite_condition_identifiers(cond_expr, counter);
+    }
+    let mut names: Vec<&String> = filter.detection.named.keys().collect();
+    names.sort();
+    let mut ids: Vec<ConditionExpr> = names
+        .into_iter()
+        .map(|name| ConditionExpr::Identifier(filter_detection_key(counter, name)))
+        .collect();
+    match ids.len() {
+        1 => ids.remove(0),
+        _ => ConditionExpr::And(ids),
+    }
+}
+
+/// Merge every filter in `collection` into the detection rules it targets and
+/// return the rules, in collection order.
+///
+/// This is how pySigma applies filters when a collection loads: each filter's
+/// detections are added to the rule under namespaced identifiers and each rule
+/// condition becomes `(condition) and (filter condition)`. Apply processing
+/// pipelines to the returned rules afterwards, so field mappings reach the
+/// filter's fields too. Filters target rules the same way
+/// [`Engine::apply_filter`](crate::Engine::apply_filter) does.
+pub fn apply_filters(collection: &SigmaCollection) -> Vec<SigmaRule> {
+    let mut rules = collection.rules.clone();
+    for (counter, filter) in collection.filters.iter().enumerate() {
+        if filter.detection.named.is_empty() {
+            continue;
+        }
+        let identities: Vec<_> = collection
+            .rules
+            .iter()
+            .map(|r| (r.id.as_deref(), r.name.as_deref()))
+            .collect();
+        let stable = stable_references(filter, &identities);
+        let condition = namespaced_filter_condition(filter, counter);
+        for rule in &mut rules {
+            let target = FilterTarget {
+                id: rule.id.as_deref(),
+                name: rule.name.as_deref(),
+                title: &rule.title,
+                logsource: &rule.logsource,
+            };
+            if !filter_targets(filter, &stable, &target) {
+                continue;
+            }
+            for (name, detection) in &filter.detection.named {
+                rule.detection
+                    .named
+                    .insert(filter_detection_key(counter, name), detection.clone());
+            }
+            rule.detection.conditions = rule
+                .detection
+                .conditions
+                .iter()
+                .map(|cond| ConditionExpr::And(vec![cond.clone(), condition.clone()]))
+                .collect();
+            rule.detection.condition_strings = rule
+                .detection
+                .conditions
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+        }
+    }
+    rules
 }
 
 /// Conflict-based compatibility check for hot-path logsource pruning.
@@ -216,6 +354,48 @@ mod tests {
                 pattern: SelectorPattern::Pattern("__filter_2_v_*".to_string()),
             }
         );
+    }
+
+    #[test]
+    fn apply_filters_merges_into_referenced_rules_only() {
+        let collection = rsigma_parser::parse_sigma_yaml(
+            r#"
+title: Whoami
+name: whoami
+logsource: { category: process_creation }
+detection:
+    selection:
+        Image|endswith: '\whoami.exe'
+    condition: selection
+---
+title: Ping
+logsource: { category: process_creation }
+detection:
+    selection:
+        Image|endswith: '\ping.exe'
+    condition: selection
+---
+title: Exclude admins
+filter:
+    rules: [whoami]
+    selection:
+        User: admin
+    condition: not selection
+"#,
+        )
+        .unwrap();
+        let rules = apply_filters(&collection);
+        assert!(
+            rules[0]
+                .detection
+                .named
+                .contains_key("__filter_0_v_selection")
+        );
+        assert_eq!(
+            rules[0].detection.condition_strings,
+            ["(selection and not __filter_0_v_selection)"]
+        );
+        assert_eq!(rules[1].detection, collection.rules[1].detection);
     }
 
     #[test]

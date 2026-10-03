@@ -55,6 +55,12 @@ Correlation methods for 'postgres' (select with -O correlation_method=NAME, defa
   session  - Gaps-and-islands sessionization (requires a gap)
 ```
 
+## Filters
+
+A collection conversion applies [Sigma filters](https://github.com/SigmaHQ/sigma-specification) the way pySigma does: each filter's detections and condition are merged into the detection rules it references (by `id` or `name`, or `rules: any`), and only where the filter's `logsource` is contained in the rule's. Processing pipelines run after the merge, so a field mapping renames the filter's fields too. Pass the filter files alongside the rules, for example `rsigma backend convert rules/ filters/ -t postgres`. {{ added "unreleased" }}
+
+A backend without correlation support (`lynxdb` and `test`) reports each correlation rule as an `UnsupportedCorrelation` error instead of dropping it, so pass `--skip-unsupported` to convert the rest of a mixed ruleset. {{ added "unreleased" }}
+
 ## Encoding modifiers
 
 Every native backend converts the encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) the way pySigma does. Each variant the modifiers produce becomes a plain string match, and the variants are ORed together, so `CommandLine|windash|contains: ' -f '` converts to one `contains` match for each of `-`, `/`, `–`, `—`, and `―`, and `|base64offset|contains` converts to one match for each of the three byte alignments. The OR is grouped under an enclosing AND like any value list. A UTF-16 encoding without a following `base64` or `base64offset` produces NUL characters, which the PostgreSQL and Fibratus backends cannot carry in a query, so those rules fail with `UnsupportedValue`. {{ added "unreleased" }}

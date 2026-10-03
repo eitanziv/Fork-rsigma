@@ -23,6 +23,8 @@ This library is part of [rsigma].
 | `add_compiled_rule(rule: CompiledRule)` | Add a pre-compiled rule directly; folds into engine indexes incrementally (amortized O(1) per rule) |
 | `extend_compiled_rules(rules)` | Batched add of pre-compiled rules; rebuilds engine indexes once |
 | `apply_filter(filter: &FilterRule)` | Inject filter as `AND NOT` into referenced rules |
+
+The free function `apply_filters(collection: &SigmaCollection) -> Vec<SigmaRule>` merges each filter into the detection rules it targets at the AST level, as pySigma does when a collection loads, so processing pipelines applied afterwards transform the filter's fields too. `rsigma-convert` uses it before converting.
 | `evaluate(event: &Event)` | Evaluate all rules against an event |
 | `evaluate_with_logsource(event, logsource)` | Evaluate with subset logsource pre-filtering |
 | `evaluate_pruned(event, logsource)` | Evaluate with a caller-resolved logsource for conflict-based pruning (used by `SchemaRouter`) |

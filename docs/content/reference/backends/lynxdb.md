@@ -171,9 +171,8 @@ The `Action` literal stays in the `search` stage; the CIDR check defers to `wher
 
 | Feature | Status |
 |---------|--------|
-| Multi-table correlations | Not yet implemented. Single-table correlations work via SPL2 `stats`. |
+| Correlation rules | Not supported. Each correlation fails with `UnsupportedCorrelation`; the detection rules it references still convert. {{ added "unreleased" }} |
 | Continuous aggregates | LynxDB-equivalent (scheduled saved queries) lives on the LynxDB side. RSigma emits the SPL2; LynxDB schedules it. |
-| `temporal_ordered` correlation | Not yet implemented. |
 
 ## See also
 

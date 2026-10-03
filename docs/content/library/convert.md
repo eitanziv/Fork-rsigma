@@ -34,7 +34,7 @@ No features. The crate is pure Rust + `regex`.
 | `LynxDbBackend` | The LynxDB backend. Output formats: `default`, `minimal`. |
 | `FibratusBackend` | The Fibratus backend. Output formats: `default`, `expr`, `yaml`, `rule`. |
 | `TextQueryTestBackend` | A backend-neutral text format used by the test suite and useful for debugging how a rule lowers to a generic boolean expression. |
-| `convert_collection(backend, &SigmaCollection, &[Pipeline], output_format)` | Convert a whole collection, applying pipelines per rule. Returns a `ConversionOutput` with per-rule `queries` and per-rule `errors`. |
+| `convert_collection(backend, &SigmaCollection, &[Pipeline], output_format)` | Convert a whole collection, applying pipelines per rule. Returns a `ConversionOutput` with per-rule `queries` and per-rule `errors`. The collection's filters are merged into the rules they target before pipelines run, and each correlation is an `UnsupportedCorrelation` error on a backend without correlation support. {{ added "unreleased" }} |
 | `Backend::convert_rule(rule, output_format, &PipelineState)` | Lower-level single-rule entry point on the trait. |
 | `ConversionOutput`, `ConversionResult`, `ConversionState`, `PipelineState` | Collection/result wrappers, the per-condition conversion state (`ConversionState`), and the per-rule pipeline state (`PipelineState` from `rsigma-eval`). |
 

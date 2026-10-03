@@ -9,9 +9,10 @@ use crate::output::{ConversionOutput, ConversionResult};
 
 /// Convert a collection of Sigma rules using the given backend and pipelines.
 ///
-/// Applies each pipeline to every rule, then delegates to the backend for
-/// conversion. Errors from individual rules are collected rather than aborting
-/// the entire batch.
+/// Merges the collection's filters into the rules they target (see
+/// [`rsigma_eval::apply_filters`]), applies each pipeline to every rule, then
+/// delegates to the backend for conversion. Errors from individual rules are
+/// collected rather than aborting the entire batch.
 ///
 /// For backends that support correlation, a rule-to-table mapping is built from
 /// each detection rule's pipeline state and `postgres.table` custom attribute.
@@ -33,14 +34,13 @@ pub fn convert_collection(
     let mut rule_schema_map: HashMap<String, String> = HashMap::new();
     let mut rule_query_map: HashMap<String, String> = HashMap::new();
 
-    for rule in &collection.rules {
+    for mut rule in rsigma_eval::apply_filters(collection) {
         let emit_standalone = !backend.supports_correlation()
             || should_emit_standalone(
                 rule.id.as_deref(),
                 rule.name.as_deref(),
                 &collection.correlations,
             );
-        let mut rule = rule.clone();
         let pipeline_state = if !pipelines.is_empty() {
             apply_pipelines_with_state(pipelines, &mut rule)?
         } else {
@@ -157,6 +157,13 @@ pub fn convert_collection(
                 }
             }
         }
+    } else {
+        for corr in &collection.correlations {
+            output.errors.push((
+                corr.title.clone(),
+                ConvertError::UnsupportedCorrelation(corr.correlation_type.as_str().into()),
+            ));
+        }
     }
 
     Ok(output)
@@ -210,7 +217,134 @@ pub(crate) fn field_has_positional_index(field: &str) -> bool {
 mod tests {
     use super::{convert_collection, field_has_positional_index, should_emit_standalone};
     use crate::backends::postgres::PostgresBackend;
+    use crate::backends::test::TextQueryTestBackend;
+    use rsigma_eval::pipeline::parse_pipeline;
     use rsigma_parser::parse_sigma_yaml;
+
+    const FILTERED: &str = r#"
+title: Whoami
+name: whoami
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        Image|endswith: '\whoami.exe'
+    condition: selection
+---
+title: Ping
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        Image|endswith: '\ping.exe'
+    condition: selection
+---
+title: Exclude admins
+filter:
+    rules: [whoami]
+    selection:
+        User: admin
+    condition: not selection
+"#;
+
+    fn test_queries(yaml: &str, pipelines: &[rsigma_eval::Pipeline]) -> Vec<String> {
+        let collection = parse_sigma_yaml(yaml).unwrap();
+        let output = convert_collection(
+            &TextQueryTestBackend::new(),
+            &collection,
+            pipelines,
+            "default",
+        )
+        .unwrap();
+        assert!(output.errors.is_empty(), "{:?}", output.errors);
+        output
+            .queries
+            .into_iter()
+            .flat_map(|result| result.queries)
+            .collect()
+    }
+
+    #[test]
+    fn filters_apply_to_the_rules_they_reference() {
+        assert_eq!(
+            test_queries(FILTERED, &[]),
+            [
+                r#"Image endswith "\\whoami.exe" and not User="admin""#,
+                r#"Image endswith "\\ping.exe""#,
+            ]
+        );
+    }
+
+    #[test]
+    fn pipelines_transform_filter_detections() {
+        let pipeline = parse_pipeline(
+            r#"
+name: map user
+transformations:
+    - type: field_name_mapping
+      mapping:
+          User: user_name
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            test_queries(FILTERED, &[pipeline])[0],
+            r#"Image endswith "\\whoami.exe" and not user_name="admin""#
+        );
+    }
+
+    #[test]
+    fn correlations_fail_on_a_backend_without_correlation_support() {
+        let yaml = r#"
+title: Base
+name: base
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Count
+correlation:
+    type: event_count
+    rules: [base]
+    group-by: [User]
+    timespan: 1m
+    condition:
+        gte: 2
+"#;
+        let collection = parse_sigma_yaml(yaml).unwrap();
+        let output =
+            convert_collection(&TextQueryTestBackend::new(), &collection, &[], "default").unwrap();
+        assert_eq!(output.queries.len(), 1);
+        assert_eq!(output.errors.len(), 1);
+        let (title, err) = &output.errors[0];
+        assert_eq!(title, "Count");
+        assert!(
+            matches!(err, crate::ConvertError::UnsupportedCorrelation(t) if t == "event_count"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn filter_logsource_must_be_contained_in_the_rule() {
+        let yaml = FILTERED
+            .replace("    rules: [whoami]", "    rules: any")
+            .replace(
+                "title: Exclude admins\n",
+                "title: Exclude admins\nlogsource:\n    product: linux\n",
+            );
+        assert_eq!(
+            test_queries(&yaml, &[]),
+            [
+                r#"Image endswith "\\whoami.exe""#,
+                r#"Image endswith "\\ping.exe""#,
+            ]
+        );
+    }
 
     #[test]
     fn positional_index_detection_respects_escaping() {
