@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Chained correlations follow Sigma output semantics, and corpus replay counts referenced rules
+### Chained correlations follow Sigma output semantics, and corpus replay counts referenced rules (#541)
 
 In a chain where a detection feeds a correlation that feeds another correlation, `engine eval`, the daemon, the MCP `evaluate_events` tool, and `backend convert` now output only the top correlation, as pySigma does, unless a referencing correlation has top-level `generate: true`. The referenced correlation still updates its parent's state, and `--emit-detections` and `emit_detections` now emit referenced correlations as well as referenced detections. Library users of `CorrelationEngine` see the same change, and `emit_detections: true` restores the previous output. `rule backtest` and `rule hygiene` count fires of rules that a correlation references again, so those rules are no longer reported silent. The deprecated `daemon.correlation.no_detections` config key takes effect again and prints a deprecation warning. `CorrelationEngine::process_batch` keeps the rule identity of events without a timestamp, so name-only rules that share a title still feed their correlations. `rule validate` reports a correlation reference that resolves to more than one rule, through a duplicate `id` or `name` or a `name` that equals another rule's `id`.
 
