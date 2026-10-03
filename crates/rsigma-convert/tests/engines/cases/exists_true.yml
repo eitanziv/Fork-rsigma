@@ -13,10 +13,6 @@ events:
   - {User: null}
 matches: [0, 2, 3]
 known_failures:
-  postgres-jsonb:
-    type: match-mismatch
-    reason: "exists renders as IS NOT NULL on the extracted value, which treats a JSON null as absent"
-    actual: [0, 2]
   postgres-columns:
     type: match-mismatch
     reason: "a typed column stores an absent field and a null value as the same SQL NULL"

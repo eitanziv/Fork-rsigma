@@ -366,6 +366,20 @@ impl PostgresBackend {
         }
     }
 
+    /// A field as a number. JSONB text is cast only when it reads as a number,
+    /// so a string such as `abc` compares as NULL instead of failing the
+    /// query, and a numeric string such as `"4"` matches as the engine does.
+    fn numeric_expr(&self, field: &str) -> Result<String> {
+        let f = self.field_expr(field)?;
+        Ok(match self.json_field {
+            Some(_) => format!(
+                "(CASE WHEN {f} ~ '^[-+]?([0-9]+\\.?[0-9]*|\\.[0-9]+)([eE][-+]?[0-9]+)?$' \
+                 THEN ({f})::numeric END)"
+            ),
+            None => f,
+        })
+    }
+
     /// Escape a string value for use in a SQL single-quoted literal.
     /// PostgreSQL uses `''` to escape single quotes inside string literals.
     fn escape_sql_str(&self, s: &str) -> String {
@@ -773,7 +787,7 @@ impl Backend for PostgresBackend {
         value: f64,
         _state: &mut ConversionState,
     ) -> Result<String> {
-        let f = self.field_expr(field)?;
+        let f = self.numeric_expr(field)?;
         if value.fract() == 0.0 && (i64::MIN as f64..=i64::MAX as f64).contains(&value) {
             Ok(format!("{f} = {}", value as i64))
         } else {
@@ -793,6 +807,9 @@ impl Backend for PostgresBackend {
         } else {
             self.config.bool_false
         };
+        if self.json_field.is_some() {
+            return Ok(format!("{f} ILIKE '{v}'"));
+        }
         Ok(format!("{f} = {v}"))
     }
 
@@ -841,7 +858,7 @@ impl Backend for PostgresBackend {
         value: f64,
         _state: &mut ConversionState,
     ) -> Result<String> {
-        let f = self.field_expr(field)?;
+        let f = self.numeric_expr(field)?;
         let op_token = match op {
             CompareOp::Lt => "<",
             CompareOp::Lte => "<=",
@@ -863,7 +880,12 @@ impl Backend for PostgresBackend {
         exists: bool,
         _state: &mut ConversionState,
     ) -> Result<String> {
-        let f = self.field_expr(field)?;
+        // `->` yields a jsonb `null` for a null value and SQL NULL only when
+        // the key is absent, so it tells a null field from a missing one.
+        let f = match &self.json_field {
+            Some(json_col) => Self::jsonb_path(json_col, field, false)?,
+            None => self.field_expr(field)?,
+        };
         if exists {
             Ok(format!("{f} IS NOT NULL"))
         } else {

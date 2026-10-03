@@ -713,7 +713,77 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE data->'securityContext'->>'isProxy' IS NOT NULL"]
+        vec!["SELECT * FROM security_events WHERE data->'securityContext'->'isProxy' IS NOT NULL"]
+    );
+}
+
+#[test]
+fn test_jsonb_numeric_values_cast_numeric_text() {
+    let queries = convert_json(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    pid:
+        ProcessId: 4
+    port:
+        Port|gt: 1000
+    condition: pid and port
+"#,
+    );
+    let num = |f: &str| {
+        format!(
+            "(CASE WHEN data->>'{f}' ~ '^[-+]?([0-9]+\\.?[0-9]*|\\.[0-9]+)([eE][-+]?[0-9]+)?$' \
+             THEN (data->>'{f}')::numeric END)"
+        )
+    };
+    assert_eq!(
+        queries,
+        vec![format!(
+            "SELECT * FROM security_events WHERE {} = 4 AND {} > 1000",
+            num("ProcessId"),
+            num("Port")
+        )]
+    );
+}
+
+#[test]
+fn test_jsonb_bool_compares_text() {
+    let queries = convert_json(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        Elevated: true
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec!["SELECT * FROM security_events WHERE data->>'Elevated' ILIKE 'true'"]
+    );
+}
+
+#[test]
+fn test_columns_keep_typed_comparisons() {
+    let queries = convert(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        ProcessId|gte: 4
+        Elevated: false
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec![r#"SELECT * FROM security_events WHERE "ProcessId" >= 4 AND "Elevated" = false"#]
     );
 }
 

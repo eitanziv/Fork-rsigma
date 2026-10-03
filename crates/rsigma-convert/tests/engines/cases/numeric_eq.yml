@@ -12,8 +12,3 @@ events:
   - {ProcessId: 14}
   - {Image: 'C:\x.exe'}
 matches: [0]
-known_failures:
-  postgres-jsonb:
-    type: engine-error
-    reason: "comparing the text from ->> with an integer is a SQL type error"
-    contains: "operator does not exist: text = integer"

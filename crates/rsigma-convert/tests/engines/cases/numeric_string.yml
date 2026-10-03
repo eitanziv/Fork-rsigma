@@ -1,0 +1,33 @@
+description: A numeric comparison parses a numeric string and skips a value that is not a number.
+rule:
+  title: numeric string
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      ProcessId|gt: 1000
+    condition: selection
+events:
+  - {ProcessId: '1500'}
+  - {ProcessId: 'abc'}
+  - {ProcessId: 2000}
+  - {ProcessId: '999'}
+  - {ProcessId: 1000.5}
+  - {ProcessId: true}
+matches: [0, 2, 4]
+known_failures:
+  postgres-columns:
+    type: engine-error
+    reason: "the first event types the column as text, and a text column compared with a number is a SQL type error"
+    contains: "operator does not exist: text > integer"
+  lynxdb:
+    type: match-mismatch
+    reason: "a boolean value in the field makes the comparison match nothing, and a non-numeric string compares as greater than a number"
+    actual: []
+  fibratus:
+    type: engine-error
+    reason: "Fibratus types ps.pid as a number, so an event cannot carry a string process ID"
+    contains: "want number, got string"
+  fibratus-nomacros:
+    type: engine-error
+    reason: "Fibratus types ps.pid as a number, so an event cannot carry a string process ID"
+    contains: "want number, got string"

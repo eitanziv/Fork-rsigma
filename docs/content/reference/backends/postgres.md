@@ -33,8 +33,10 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 | `cased` (any of the above) | switches `ILIKE` to `LIKE` (case-sensitive); a plain `cased` equality renders as `"field" = 'value'` |
 | `re` | `"field" ~ 'pattern'` (case-sensitive, as the Sigma specification requires); `~*` with `\|i`. `\|m` adds the `(?w)` embedded option so `^` and `$` match at line breaks. PostgreSQL's `.` matches a line break even without `\|s`, so a regex can over-match a multi-line value but never misses one. {{ added "unreleased" }} |
 | `cidr` | `("field")::inet <<= 'value'::cidr` |
-| `exists: true` | `"field" IS NOT NULL` |
-| `exists: false` | `"field" IS NULL` |
+| `exists: true` | `"field" IS NOT NULL`; `data->'field' IS NOT NULL` in [JSONB mode](#jsonb-mode) |
+| `exists: false` | `"field" IS NULL`; `data->'field' IS NULL` in [JSONB mode](#jsonb-mode) |
+| number, `lt`, `lte`, `gt`, `gte` | `"field" > 1000`; JSONB mode casts the text to `numeric` (see [JSONB mode](#jsonb-mode)) |
+| boolean | `"field" = true`; `data->>'field' ILIKE 'true'` in JSONB mode |
 | `all` | values combined with `AND` instead of the default `OR` |
 | `fieldref` | `lower(("field")::text) = lower(("other")::text)` (case-insensitive); `"field" = "other"` with `cased` |
 | `fieldref` with `contains` | `strpos(lower(("field")::text), lower(("other")::text)) > 0`. `startswith` uses `strpos(...) = 1`. `endswith` uses `right(("field")::text, char_length(("other")::text)) = ("other")::text`. `|cased` drops the `lower()` calls. `%` and `_` in the referenced value stay literal. {{ added "0.23.0" }} |
@@ -143,6 +145,19 @@ data->'securityContext'->>'isProxy'
 -- Sigma field: actor.detail.alternateId
 data->'actor'->'detail'->>'alternateId'
 ```
+
+Typed values need care because `->>` returns text. {{ added "unreleased" }}
+
+- A number or a `lt`/`lte`/`gt`/`gte` comparison casts the text to `numeric` only when it reads as a number, so a JSON number and a numeric string such as `"1500"` both compare numerically, as in the rsigma engine, and a value such as `"abc"` compares as NULL instead of failing the whole query:
+
+```sql
+-- Sigma: ProcessId|gt: 1000
+(CASE WHEN data->>'ProcessId' ~ '^[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$'
+  THEN (data->>'ProcessId')::numeric END) > 1000
+```
+
+- A boolean compares the text case-insensitively (`data->>'Elevated' ILIKE 'true'`), which matches a JSON `true` and the string `"true"`.
+- `exists` tests the `->` (jsonb) form, which is SQL NULL only when the key is absent. A key whose value is JSON `null` exists, as Sigma requires. Flat columns cannot make this distinction, because a typed column stores an absent field and a null value as the same SQL NULL.
 
 Each path segment is validated against the SQL identifier regex (`^[A-Za-z_][A-Za-z0-9_$]*$`) before insertion; malformed segments fail conversion. Single quotes inside path segments are doubled (`don''t`). See [Security Hardening](../security.md#sql-injection-prevention).
 
