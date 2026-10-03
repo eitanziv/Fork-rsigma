@@ -3950,6 +3950,59 @@ level: high
 }
 
 #[test]
+fn test_process_batch_keeps_rule_identity_without_timestamps() {
+    let yaml = r#"
+title: Login
+name: login_a
+logsource:
+    category: auth
+detection:
+    selection:
+        EventType: login
+    condition: selection
+---
+title: Login
+name: login_b
+logsource:
+    category: auth
+detection:
+    selection:
+        EventType: login
+    condition: selection
+---
+title: Count A
+correlation:
+    type: event_count
+    rules:
+        - login_a
+    group-by:
+        - User
+    timespan: 60s
+    condition:
+        gte: 2
+level: high
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    engine.add_collection(&collection).unwrap();
+
+    let event_values: Vec<serde_json::Value> = (0..2)
+        .map(|_| json!({"EventType": "login", "User": "admin"}))
+        .collect();
+    let events: Vec<JsonEvent> = event_values.iter().map(JsonEvent::borrow).collect();
+    let refs: Vec<&JsonEvent> = events.iter().collect();
+    let batch = engine.process_batch(&refs);
+
+    let fired: Vec<&str> = batch
+        .iter()
+        .flatten()
+        .filter(|result| result.is_correlation())
+        .map(|result| result.header.rule_title.as_str())
+        .collect();
+    assert_eq!(fired, vec!["Count A"]);
+}
+
+#[test]
 fn test_correlation_result_custom_attributes() {
     let yaml = r#"
 title: Login

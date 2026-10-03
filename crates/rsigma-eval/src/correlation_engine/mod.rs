@@ -634,23 +634,18 @@ impl CorrelationEngine {
         let mut results = Vec::with_capacity(events.len());
         for ((identified, ts_opt), event) in batch_results.into_iter().zip(events) {
             let (detections, identities) = split_identified(identified);
-            match ts_opt {
-                Some(ts) => {
-                    results.push(
-                        self.process_with_detection_identities(event, detections, identities, ts),
-                    );
-                }
+            let ts = match ts_opt {
+                Some(ts) => ts,
                 None => match self.config.timestamp_fallback {
-                    TimestampFallback::WallClock => {
-                        let ts = Utc::now().timestamp();
-                        results.push(self.process_with_detections(event, detections, ts));
-                    }
+                    TimestampFallback::WallClock => Utc::now().timestamp(),
                     TimestampFallback::Skip => {
                         // Still return detection results, but skip correlation
                         results.push(self.filter_detections(detections, identities));
+                        continue;
                     }
                 },
-            }
+            };
+            results.push(self.process_with_detection_identities(event, detections, identities, ts));
         }
         results
     }
