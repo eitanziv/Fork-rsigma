@@ -20,8 +20,8 @@ Override the threshold with `--fail-level warning` or `--fail-level info`. See [
 | Severity | Rules |
 |----------|------:|
 | `error` | 38 |
-| `warning` | 43 |
-| `info` | 6 |
+| `warning` | 44 |
+| `info` | 7 |
 | `hint` | 0 |
 | Reserved (no production emission) | {{ rsigma.lint.reserved }} |
 | **Total** | **{{ rsigma.lint.total }}** ({{ rsigma.lint.autofix }} of which have safe auto-fixes via `--fix`) |

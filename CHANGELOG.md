@@ -4,6 +4,10 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Filter selectors skip hidden items and generated filters target rule names
+
+A selector with a `*` between two literal parts no longer matches a name where the parts overlap, so `sel*lection` no longer selects `selection` in a detection condition, and `not 1 of *_main` in a filter no longer selects a filter item named `main`. In a filter condition, `them` and patterns that do not start with `_` now skip the filter's `_`-prefixed detection items, as they already did in detection conditions. `rule tune` and the MCP `tune_rules` tool now target a rule by `name` when it has no `id`, instead of writing the title reference that `rule lint` reports as deprecated. `rule lint` resolves filter references against detection rules only, matching the engine, so a correlation `name` no longer hides a filter's title reference.
+
 ### Processing pipelines follow the pySigma condition and transformation dialect (#539)
 
 Processing pipelines now apply pySigma condition linking consistently at rule, detection-item, and field-name scope. The canonical `*_cond_op`, `*_cond_not`, and `*_cond_expr` keys are supported, `rule_cond_expression` remains an alias, condition collections accept lists or identifier-keyed mappings, and list identifiers are one-based. Unknown transformation-item keys, invalid operators, and unresolved expression references now fail pipeline parsing instead of being ignored.
@@ -43,7 +47,7 @@ The Docker workflow now scans both architectures of the published image weekly a
 
 ### Filter selectors and rule references follow Sigma semantics (#537)
 
-Filter condition selectors now remain scoped to the filter's own detection items after those items are namespaced and injected into a target rule. Patterns such as `not 1 of selection_*` and `all of them` no longer resolve against similarly named detection items from the target rule. `filter.rules` now resolves rule `name` values as well as `id`. Exact title matching remains available for compatibility and emits the new `filter_reference_by_title` lint warning so rulesets can migrate to stable identities.
+Filter condition selectors now remain scoped to the filter's own detection items after those items are namespaced and injected into a target rule. Patterns such as `not 1 of selection_*` and `all of them` no longer resolve against similarly named detection items from the target rule. `filter.rules` now resolves rule `name` values as well as `id`. Exact title matching remains available for compatibility and emits the new `filter_reference_by_title` lint warning so rulesets can migrate to stable identities. A title reference previously reported `unknown_rule_reference`, so lint suppressions or tooling keyed on that code should move to `filter_reference_by_title`.
 
 ### Correlation rules follow Sigma identity, validation, grouping, and output semantics (#534)
 
