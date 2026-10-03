@@ -287,11 +287,15 @@ pub fn tune_rule(
         };
     }
 
-    let target = rule.id.as_deref().unwrap_or(&rule.title);
+    let target = rule
+        .id
+        .as_deref()
+        .or(rule.name.as_deref())
+        .unwrap_or(&rule.title);
     let mut warnings = Vec::new();
-    if rule.id.is_none() {
+    if rule.id.is_none() && rule.name.is_none() {
         warnings.push(format!(
-            "target rule has no id; filter targets exact title '{}'",
+            "target rule has no id or name; filter targets exact title '{}'",
             rule.title
         ));
     }
@@ -1060,5 +1064,23 @@ level: medium
                 .iter()
                 .any(|warning| warning.contains("exact title"))
         );
+    }
+
+    #[test]
+    fn name_is_targeted_when_rule_has_no_id() {
+        let mut target = rule();
+        target.id = None;
+        target.name = Some("suspicious_backup_tool".to_string());
+        let fps = vec![
+            json!({"Image": r"C:\Program Files\Veeam\backup.exe", "User": "svc_backup"}),
+            json!({"Image": r"C:\Program Files\Veeam\backup.exe", "User": "svc_backup"}),
+        ];
+        let tps = vec![json!({"Image": r"C:\Temp\backup.exe", "User": "attacker"})];
+
+        let report = tune_rule(&target, &fps, &tps, &config()).unwrap();
+
+        assert!(report.filter_yaml.contains("- suspicious_backup_tool"));
+        assert!(!report.filter_yaml.contains("Suspicious Backup Tool'"));
+        assert!(report.warnings.is_empty());
     }
 }

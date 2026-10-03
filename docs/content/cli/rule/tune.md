@@ -13,7 +13,7 @@ rsigma rule tune --rules <PATH> --from-dispositions <SPOOL_DIR> [OPTIONS]
 
 ## Description
 
-`rule tune` profiles events labeled as false positives against a required set of known true positives and emits a standard Sigma filter rule. The proposal targets one detection rule by id, copies its post-pipeline logsource, and uses `condition: not selection` because the evaluation engine injects a filter condition exactly as written.
+`rule tune` profiles events labeled as false positives against a required set of known true positives and emits a standard Sigma filter rule. The proposal targets one detection rule by id, or by `name` when the rule has no id, and falls back to the exact title with a warning only when the rule has neither. It copies the target's post-pipeline logsource and uses `condition: not selection` because the evaluation engine injects a filter condition exactly as written.
 
 The command verifies two invariants before printing anything. First, every supplied FP and TP must fire the unfiltered target rule; non-firing events are labeling errors. Second, after applying the emitted filter through the real `Engine::add_collection` path, no covered FP may fire and every TP must still fire. The command refuses to emit when no clean separator exists.
 
