@@ -1088,7 +1088,11 @@ mod corpus {
     }
 
     fn build_correlation_engine(collection: &SigmaCollection) -> CorrelationEngine {
-        let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+        // Silence is judged per rule, including rules a correlation references.
+        let mut engine = CorrelationEngine::new(CorrelationConfig {
+            emit_detections: true,
+            ..CorrelationConfig::default()
+        });
         if let Err(e) = engine.add_collection(collection) {
             eprintln!("error compiling rules for corpus replay: {e}");
             std::process::exit(crate::exit_code::RULE_ERROR);

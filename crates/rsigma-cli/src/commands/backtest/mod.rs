@@ -370,7 +370,11 @@ fn build_correlation_engine(
     collection: &SigmaCollection,
     pipelines: &[Pipeline],
 ) -> CorrelationEngine {
-    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    // Backtest counts fires per rule, including rules a correlation references.
+    let mut engine = CorrelationEngine::new(CorrelationConfig {
+        emit_detections: true,
+        ..CorrelationConfig::default()
+    });
     for p in pipelines {
         engine.add_pipeline(p.clone());
     }
