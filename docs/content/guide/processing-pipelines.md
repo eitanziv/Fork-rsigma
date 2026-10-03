@@ -83,7 +83,7 @@ Pipelines compose 26 transformation types. The most common ones in practice are:
 
 | Transformation | What it does |
 |----------------|--------------|
-| `field_name_mapping` | Rename fields one-to-one or one-to-many (`CommandLine: [process.command_line, process.args]`). |
+| `field_name_mapping` | Rename fields and `fieldref` targets one-to-one or one-to-many (`CommandLine: [process.command_line, process.args]`). |
 | `field_name_prefix_mapping` | Rename fields by prefix. |
 | `field_name_prefix`/`field_name_suffix` | Add a static prefix or suffix to every field name. |
 | `field_name_transform` | Case conversion (`lower`, `upper`, `snake_case`, `title`). |
@@ -93,9 +93,9 @@ Pipelines compose 26 transformation types. The most common ones in practice are:
 | `replace_string` | Regex string replacement in values. |
 | `map_string` | Map specific values to replacements. |
 | `set_value` | Replace detection item values. |
-| `set_state` | Store backend-relevant key/value pairs (`table`, `schema`, `index`). |
+| `set_state` | Store backend-relevant key/value pairs (`table`, `schema`, `index`) using `key` and `val` (`value` remains an alias). |
 | `set_custom_attribute` | Set per-rule attributes that engines and backends read (`rsigma.*`, `postgres.*`). |
-| `value_placeholders` | Expand Sigma `%name%` placeholders in detection values (used with pipeline `vars:` and dynamic sources). |
+| `value_placeholders` | Expand Sigma `%name%` placeholders in `|expand` detection values (used with pipeline `vars:` and dynamic sources). |
 | `query_expression_placeholders` | Backend query template envelope (used by `rsigma-convert`). |
 | `nest` | Apply a group of transformations conditionally. |
 
@@ -114,7 +114,7 @@ Apply at the rule level. Common types (the eval README lists every variant):
 | `logsource` | `category`, `product`, `service` |
 | `contains_detection_item` | `field`, optional `value` |
 | `processing_item_applied` | `processing_item_id` (chain to prior steps) |
-| `processing_state` | `key`, `val` |
+| `processing_state` | `key`, `val`, optional `op` (`eq`, `ne`, `gte`, `gt`, `lte`, `lt`) |
 | `is_sigma_rule`/`is_sigma_correlation_rule` | (no args) |
 | `rule_attribute` | `attribute`, `value` |
 | `tag` | `tag` |
@@ -157,6 +157,30 @@ transformations:
       - type: include_fields
         fields: ["TargetUserName", "SourceIp"]
 ```
+
+Each condition collection accepts either a list or a mapping keyed by condition identifier. List conditions receive the identifiers `"1"`, `"2"`, and so on. Use `<scope>_cond_op: and|or` to link a list, `<scope>_cond_not: true` to negate its result, or `<scope>_cond_expr` for an expression over mapped identifiers. The scopes are `rule`, `detection_item`, and `field_name`. `rule_cond_expression` remains an alias for `rule_cond_expr`. Expressions and `_cond_op` are mutually exclusive. Unknown transformation-item keys, invalid operators, and missing expression references are rejected instead of being ignored. {{ added "unreleased" }}
+
+```yaml
+transformations:
+  - type: field_name_mapping
+    mapping:
+      User: user.name
+    rule_conditions:
+      windows:
+        type: logsource
+        product: windows
+      process:
+        type: logsource
+        category: process_creation
+    rule_cond_expr: windows and process
+    field_name_conditions:
+      user:
+        type: include_fields
+        fields: [User]
+    field_name_cond_expr: user
+```
+
+Field-name transformations also rewrite `|fieldref` targets. Placeholder transformations only process values carrying the `|expand` modifier. `value_placeholders` expands the Cartesian product when a value contains several multi-value variables and fails if any variable is unresolved; set `allow_unresolved: true` on that transformation only when rsigma's runtime event-field substitution should handle the remainder. `wildcard_placeholders` replaces every handled placeholder with `*`, regardless of whether the variable is defined. Both placeholder transformations accept mutually exclusive `include` and `exclude` lists that select placeholder names to process. Values without `|expand` and placeholders omitted by the filter remain literal. {{ added "unreleased" }}
 
 ## Chaining pipelines
 
@@ -324,11 +348,11 @@ logsource:
 detection:
     selection:
         Action: 'allow'
-        DestinationIp: '%blocklist%'
+        DestinationIp|expand: '%blocklist%'
     condition: selection
 ```
 
-`${source.<id>}` substitution applies to `vars:` entries and to `include:` directives. Transformation field values such as `add_condition.conditions.<field>` are parsed as typed structures and do **not** substitute dynamic sources directly; route lists of values through `vars` plus `value_placeholders` as shown above. Single scalar substitutions inside transformation fields (such as `set_state.value`) follow the same pattern through `vars`.
+`${source.<id>}` substitution applies to `vars:` entries and to `include:` directives. Transformation field values such as `add_condition.conditions.<field>` are parsed as typed structures and do **not** substitute dynamic sources directly; route lists of values through `vars` plus `value_placeholders` as shown above. Single scalar substitutions inside transformation fields (such as `set_state.val`) follow the same pattern through `vars`.
 
 ### Source types
 

@@ -389,17 +389,20 @@ Each transformation item in a pipeline can have:
 | Field | Description |
 |-------|-------------|
 | `id` | Identifier for `processing_item_applied` conditions |
-| `rule_conditions` | All must match (AND logic) for the transformation to apply |
-| `rule_cond_expression` | Logical expression over rule condition IDs (alternative to `rule_conditions`) |
+| `rule_conditions` | Rule conditions as a list or identifier-keyed mapping |
+| `rule_cond_op` / `rule_cond_not` / `rule_cond_expr` | Link with `and`/`or`, negate the result, or evaluate an identifier expression; `rule_cond_expression` is an alias |
 | `detection_item_conditions` | Conditions on individual detection items |
+| `detection_item_cond_op` / `detection_item_cond_not` / `detection_item_cond_expr` | Detection-item condition linking, negation, and expressions |
 | `field_name_conditions` | Conditions on field names |
-| `field_name_cond_not` | Negate field name conditions |
+| `field_name_cond_op` / `field_name_cond_not` / `field_name_cond_expr` | Field-name condition linking, negation, and expressions |
+
+List conditions have one-based identifiers (`1`, `2`, ...). Condition expressions require every identifier to be defined and referenced. An expression and the corresponding `_cond_op` cannot be used together. Unknown transformation-item keys are rejected.
 
 ### Transformations (26 types)
 
 | Type | Fields | Description |
 |------|--------|-------------|
-| `field_name_mapping` | `mapping: {k: v \| [v1, v2, ...]}` | Rename fields via a mapping dict; list values expand the matched detection item into an OR over the alternatives (one-to-many, pySigma-compatible) |
+| `field_name_mapping` | `mapping: {k: v \| [v1, v2, ...]}` | Rename fields and `fieldref` targets via a mapping dict; list values expand the matched detection item into an OR over the alternatives (one-to-many, pySigma-compatible) |
 | `field_name_prefix_mapping` | `mapping: {prefix: replacement}` | Rename fields matching a prefix |
 | `field_name_prefix` | `prefix` | Add a prefix to all field names |
 | `field_name_suffix` | `suffix` | Add a suffix to all field names |
@@ -411,10 +414,10 @@ Each transformation item in a pipeline can have:
 | `map_string` | `mapping: {k: v \| [v1, v2]}` | Map string values to replacements (supports one-to-many) |
 | `set_value` | `value` | Replace detection item values |
 | `convert_type` | `target_type` (`str`/`int`/`float`/`bool`, default: `str`) | Convert values between types |
-| `value_placeholders` | — | Expand `%placeholder%` in values |
-| `wildcard_placeholders` | — | Expand placeholders to wildcards |
+| `value_placeholders` | `allow_unresolved` (default: `false`), `include`/`exclude` | Expand `%placeholder%` in `|expand` values; multi-value variables produce a Cartesian product and unresolved variables fail unless runtime substitution is explicitly allowed |
+| `wildcard_placeholders` | `include`/`exclude` | Replace handled placeholders with wildcards in `|expand` values |
 | `query_expression_placeholders` | `expression` (default: `""`) | Backend query placeholders (no-op in eval) |
-| `set_state` | `key`, `value` | Store key-value pairs in pipeline state |
+| `set_state` | `key`, `val` (`value` alias) | Store typed key-value pairs in pipeline state |
 | `rule_failure` | `message` (default: `"rule failure"`) | Raise an error for matching rules |
 | `detection_item_failure` | `message` (default: `"detection item failure"`) | Raise an error for matching detection items |
 | `hashes_fields` | `valid_hash_algos`, `field_prefix` (default: `"File"`), `drop_algo_prefix` (default: `false`) | Transform hash field names |
@@ -446,7 +449,7 @@ Each transformation item in a pipeline can have:
 | `logsource` | `category`, `product`, `service` |
 | `contains_detection_item` | `field`, `value` (optional) |
 | `processing_item_applied` | `processing_item_id` |
-| `processing_state` | `key`, `val` |
+| `processing_state` | `key`, `val`, `op` (`eq`/`ne`/`gte`/`gt`/`lte`/`lt`) |
 | `is_sigma_rule` | — |
 | `is_sigma_correlation_rule` | — |
 | `rule_attribute` | `attribute` (`level`/`status`/`author`/`title`/`id`/`date`/`description`), `value` |
@@ -459,7 +462,7 @@ Each transformation item in a pipeline can have:
 | `match_string` | `pattern` (default: `".*"`), `negate` (default: `false`) |
 | `is_null` | `negate` |
 | `processing_item_applied` | `processing_item_id` |
-| `processing_state` | `key`, `val` |
+| `processing_state` | `key`, `val`, `op` (`eq`/`ne`/`gte`/`gt`/`lte`/`lt`) |
 
 #### Field Name Conditions
 
@@ -468,7 +471,7 @@ Each transformation item in a pipeline can have:
 | `include_fields` | `fields`, `match_type` (`plain` or `regex`, default: `plain`) |
 | `exclude_fields` | `fields`, `match_type` |
 | `processing_item_applied` | `processing_item_id` |
-| `processing_state` | `key`, `val` |
+| `processing_state` | `key`, `val`, `op` (`eq`/`ne`/`gte`/`gt`/`lte`/`lt`) |
 
 ### Finalizers (3 types)
 

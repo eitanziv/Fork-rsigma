@@ -291,7 +291,7 @@ transformations:
 # rule
 detection:
     selection:
-        DestinationIp: '%blocklist%'
+        DestinationIp|expand: '%blocklist%'
     condition: selection
 ```
 

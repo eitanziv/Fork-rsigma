@@ -39,9 +39,9 @@ A value with a wildcard cannot be combined with `base64` or `base64offset`, beca
 
 With `|expand`, `%name%` in a value is a placeholder. A backslash escapes `%` as well as `*`, `?`, and itself: `100\%` is a literal percent sign, and `C:\Users\\%user%` is a backslash followed by the `user` placeholder. A placeholder name is non-empty and contains no `*`, `?`, or backslash.
 
-A processing pipeline with a [`value_placeholders`](../guide/processing-pipelines.md) transformation replaces placeholders with the values of its `vars:`. When every placeholder is resolved this way, the value is an ordinary string match: wildcards and string modifiers such as `|contains` apply, and backends convert it like any other value.
+A processing pipeline with a [`value_placeholders`](../guide/processing-pipelines.md) transformation replaces placeholders with the values of its `vars:`. Several multi-value variables in one value expand to their Cartesian product. Every referenced variable must exist; an unresolved variable is a pipeline error unless the transformation sets `allow_unresolved: true` to opt into runtime substitution. When every placeholder is resolved this way, the value is an ordinary string match: wildcards and string modifiers such as `|contains` apply, and backends convert it like any other value. `wildcard_placeholders` replaces every handled placeholder with `*`, whether or not a variable is defined. Pipeline placeholder transformations ignore values without `|expand`. {{ added "unreleased" }}
 
-A placeholder that no pipeline resolves is filled in from the event at match time: `%user%` takes the value of the event's `user` field, or an empty string when that field is missing or not a string. Runtime placeholders are an rsigma extension. Backends cannot convert them, and a value with a runtime placeholder cannot use wildcards or encoding modifiers.
+A placeholder that is not passed through a placeholder transformation is filled in from the event at match time: `%user%` takes the value of the event's `user` field, or an empty string when that field is missing or not a string. Runtime placeholders are an rsigma extension. Backends cannot convert them, and a value with a runtime placeholder cannot use wildcards or encoding modifiers.
 
 ## `exists`
 

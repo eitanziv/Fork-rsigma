@@ -4,6 +4,14 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Processing pipelines follow the pySigma condition and transformation dialect
+
+Processing pipelines now apply pySigma condition linking consistently at rule, detection-item, and field-name scope. The canonical `*_cond_op`, `*_cond_not`, and `*_cond_expr` keys are supported, `rule_cond_expression` remains an alias, condition collections accept lists or identifier-keyed mappings, and list identifiers are one-based. Unknown transformation-item keys, invalid operators, and unresolved expression references now fail pipeline parsing instead of being ignored.
+
+`set_state` reads typed values from `val` while retaining `value` as an alias, and `processing_state` supports `eq`, `ne`, `gte`, `gt`, `lte`, and `lt`. Field-name transformations honor detection-item conditions and also rewrite `fieldref` targets. Placeholder transformations now operate only on `|expand` values, support mutually exclusive `include`/`exclude` filters, expand the Cartesian product of multiple variables, and report unresolved `value_placeholders` variables unless `allow_unresolved: true` explicitly enables runtime substitution; `wildcard_placeholders` replaces every handled placeholder with `*`.
+
+Breaking changes for library users: `TransformationItem` stores each condition scope in `ConditionSet<T>` instead of separate vectors and flags; each `ProcessingState` condition carries a typed `val` and `StateOperator`; `Transformation::SetState.value` is a `serde_json::Value` instead of `String`; and the placeholder transformation variants carry their new options. Access parsed conditions through `.conditions`, use one-based string identifiers for positional conditions, wrap programmatic state strings with `serde_json::Value::String`, set `StateOperator::Eq` for the previous equality behavior, and initialize placeholder options to `false`/`None` for the previous unfiltered behavior. The legacy `NamedRuleCondition` type and `all_rule_conditions_match` helper remain available for callers that only need AND linking.
+
 ### Grype scans keep GitHub code scanning current (#538)
 
 The Docker workflow now scans both architectures of the published image weekly and uploads the results against the default branch. Scheduled scans reuse the existing Grype configuration without rebuilding or republishing the image.
