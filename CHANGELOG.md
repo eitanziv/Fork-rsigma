@@ -4,6 +4,10 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### Chained correlations follow Sigma output semantics, and corpus replay counts referenced rules
+
+In a chain where a detection feeds a correlation that feeds another correlation, `engine eval`, the daemon, the MCP `evaluate_events` tool, and `backend convert` now output only the top correlation, as pySigma does, unless a referencing correlation has top-level `generate: true`. The referenced correlation still updates its parent's state, and `--emit-detections` and `emit_detections` now emit referenced correlations as well as referenced detections. Library users of `CorrelationEngine` see the same change, and `emit_detections: true` restores the previous output. `rule backtest` and `rule hygiene` count fires of rules that a correlation references again, so those rules are no longer reported silent. The deprecated `daemon.correlation.no_detections` config key takes effect again and prints a deprecation warning. `CorrelationEngine::process_batch` keeps the rule identity of events without a timestamp, so name-only rules that share a title still feed their correlations. `rule validate` reports a correlation reference that resolves to more than one rule, through a duplicate `id` or `name` or a `name` that equals another rule's `id`.
+
 ### Filter selectors skip hidden items and generated filters target rule names (#540)
 
 A selector with a `*` between two literal parts no longer matches a name where the parts overlap, so `sel*lection` no longer selects `selection` in a detection condition, and `not 1 of *_main` in a filter no longer selects a filter item named `main`. In a filter condition, `them` and patterns that do not start with `_` now skip the filter's `_`-prefixed detection items, as they already did in detection conditions. `rule tune` and the MCP `tune_rules` tool now target a rule by `name` when it has no `id`, instead of writing the title reference that `rule lint` reports as deprecated. `rule lint` resolves filter references against detection rules only, matching the engine, so a correlation `name` no longer hides a filter's title reference.
@@ -60,6 +64,8 @@ Correlation evaluation, conversion, validation, and linting now agree on Sigma c
 - Referenced detection matches are no longer standalone output by default. Top-level `generate: true` on a correlation emits its referenced detections, while `engine eval` and `engine daemon` accept `--emit-detections` to emit every detection match. The deprecated `--no-detections` flag remains accepted. Daemon configuration uses `correlation.emit_detections`, with the inverse `no_detections` key retained for compatibility. The MCP `evaluate_events` tool exposes the same opt-in behavior.
 - Correlation-capable conversion omits referenced standalone rules unless at least one referencing correlation has `generate: true`.
 - `rule lint` emits the informational `correlation_only_references` hint when a correlation omits `generate: true`.
+
+Breaking changes for library users: `CompiledRule` has a new public `name` field, so struct literals must set it, and `LintRule` has a new `CorrelationOnlyReferences` variant, so exhaustive matches need an arm for it. `GroupKey::extract` and `GroupKey::from_pairs` return `Option<Self>`, which is `None` when a group-by value is missing or not a scalar. `CorrelationConfig::default().emit_detections` is now `false` instead of `true`; set `emit_detections: true` to keep the previous output.
 
 ### Performance regression checks run only for relevant changes (#533)
 
