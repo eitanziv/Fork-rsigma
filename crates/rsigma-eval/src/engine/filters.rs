@@ -22,13 +22,26 @@ pub(super) fn filter_logsource_contains(filter_ls: &LogSource, rule_ls: &LogSour
         && field_matches(&filter_ls.service, &rule_ls.service)
 }
 
-/// Rewrite all `Identifier` nodes in a condition expression tree, prefixing
-/// each name with `__filter_{counter}_` so it references the namespaced
-/// detection keys injected into the target rule.
+/// Key under which a filter detection (or a selector pattern over filter
+/// detections) is injected into the target rule.
+///
+/// Names starting with `_` go under `__filter_{counter}_h_` and all others
+/// under `__filter_{counter}_v_`. Every injected key starts with `_`, so the
+/// selector matcher would otherwise let any rewritten pattern see the filter's
+/// `_` names; the split keeps `them` and patterns that do not start with `_`
+/// away from them, as the Sigma specification requires.
+pub(super) fn filter_detection_key(counter: usize, name: &str) -> String {
+    let scope = if name.starts_with('_') { 'h' } else { 'v' };
+    format!("__filter_{counter}_{scope}_{name}")
+}
+
+/// Rewrite all `Identifier` nodes and selector patterns in a condition
+/// expression tree so they reference the namespaced detection keys injected
+/// into the target rule (see [`filter_detection_key`]).
 pub(super) fn rewrite_condition_identifiers(expr: &ConditionExpr, counter: usize) -> ConditionExpr {
     match expr {
         ConditionExpr::Identifier(name) => {
-            ConditionExpr::Identifier(format!("__filter_{counter}_{name}"))
+            ConditionExpr::Identifier(filter_detection_key(counter, name))
         }
         ConditionExpr::And(children) => ConditionExpr::And(
             children
@@ -50,9 +63,11 @@ pub(super) fn rewrite_condition_identifiers(expr: &ConditionExpr, counter: usize
             pattern,
         } => {
             let pattern = match pattern {
-                SelectorPattern::Them => SelectorPattern::Pattern(format!("__filter_{counter}_*")),
+                SelectorPattern::Them => {
+                    SelectorPattern::Pattern(filter_detection_key(counter, "*"))
+                }
                 SelectorPattern::Pattern(pattern) => {
-                    SelectorPattern::Pattern(format!("__filter_{counter}_{pattern}"))
+                    SelectorPattern::Pattern(filter_detection_key(counter, pattern))
                 }
             };
             ConditionExpr::Selector {
@@ -183,7 +198,7 @@ mod tests {
             rewrite_condition_identifiers(&expression, 3),
             ConditionExpr::Selector {
                 quantifier: Quantifier::Any,
-                pattern: SelectorPattern::Pattern("__filter_3_selection_*".to_string()),
+                pattern: SelectorPattern::Pattern("__filter_3_v_selection_*".to_string()),
             }
         );
     }
@@ -198,8 +213,25 @@ mod tests {
             rewrite_condition_identifiers(&expression, 2),
             ConditionExpr::Selector {
                 quantifier: Quantifier::All,
-                pattern: SelectorPattern::Pattern("__filter_2_*".to_string()),
+                pattern: SelectorPattern::Pattern("__filter_2_v_*".to_string()),
             }
         );
+    }
+
+    #[test]
+    fn underscore_names_and_patterns_use_the_hidden_namespace() {
+        assert_eq!(filter_detection_key(1, "_helper"), "__filter_1_h__helper");
+        assert_eq!(
+            filter_detection_key(1, "selection"),
+            "__filter_1_v_selection"
+        );
+
+        let hidden = SelectorPattern::Pattern(filter_detection_key(1, "_*"));
+        assert!(hidden.matches_detection_name(&filter_detection_key(1, "_helper")));
+        assert!(!hidden.matches_detection_name(&filter_detection_key(1, "selection")));
+
+        let visible = SelectorPattern::Pattern(filter_detection_key(1, "*"));
+        assert!(visible.matches_detection_name(&filter_detection_key(1, "selection")));
+        assert!(!visible.matches_detection_name(&filter_detection_key(1, "_helper")));
     }
 }
