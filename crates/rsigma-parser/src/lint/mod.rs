@@ -108,6 +108,7 @@ pub enum LintRule {
     LogsourceValueNotLowercase,
     ConditionReferencesUnknown,
     DeprecatedAggregationSyntax,
+    DeprecatedDetectionTimeframe,
 
     // ── Correlation rules ────────────────────────────────────────────────
     MissingCorrelation,
@@ -213,6 +214,7 @@ impl fmt::Display for LintRule {
             LintRule::LogsourceValueNotLowercase => "logsource_value_not_lowercase",
             LintRule::ConditionReferencesUnknown => "condition_references_unknown",
             LintRule::DeprecatedAggregationSyntax => "deprecated_aggregation_syntax",
+            LintRule::DeprecatedDetectionTimeframe => "deprecated_detection_timeframe",
             LintRule::MissingCorrelation => "missing_correlation",
             LintRule::MissingCorrelationType => "missing_correlation_type",
             LintRule::InvalidCorrelationType => "invalid_correlation_type",

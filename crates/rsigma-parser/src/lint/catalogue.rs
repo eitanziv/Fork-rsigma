@@ -16,7 +16,7 @@
 //! use rsigma_parser::lint::catalogue::catalogue;
 //!
 //! let entries = catalogue();
-//! assert_eq!(entries.len(), 90);
+//! assert_eq!(entries.len(), 91);
 //! let invalid_status = entries.iter().find(|e| e.name == "invalid_status").unwrap();
 //! assert!(invalid_status.fix.is_some()); // has a safe auto-fix
 //! ```
@@ -105,6 +105,7 @@ lint_catalogue! {
     LogsourceValueNotLowercase => (Severity::Warning, SAFE, "A logsource value is not lowercase."),
     ConditionReferencesUnknown => (Severity::Error, NONE, "The condition references an undefined selection."),
     DeprecatedAggregationSyntax => (Severity::Warning, NONE, "The condition uses deprecated v1.x aggregation syntax."),
+    DeprecatedDetectionTimeframe => (Severity::Warning, NONE, "The detection section has a deprecated v1.x 'timeframe', which has no effect."),
 
     // ── Correlation rules ────────────────────────────────────────────────
     MissingCorrelation => (Severity::Error, NONE, "Correlation rule is missing 'correlation'."),
@@ -251,6 +252,10 @@ const LINT_RULE_NAMES: &[(LintRule, &str)] = &[
         LintRule::DeprecatedAggregationSyntax,
         "deprecated_aggregation_syntax",
     ),
+    (
+        LintRule::DeprecatedDetectionTimeframe,
+        "deprecated_detection_timeframe",
+    ),
     (LintRule::MissingCorrelation, "missing_correlation"),
     (LintRule::MissingCorrelationType, "missing_correlation_type"),
     (LintRule::InvalidCorrelationType, "invalid_correlation_type"),
@@ -354,13 +359,13 @@ mod tests {
 
     #[test]
     fn catalogue_covers_every_rule() {
-        // 90 LintRule variants. The exhaustive `describe` match guarantees a
+        // 91 LintRule variants. The exhaustive `describe` match guarantees a
         // metadata entry per variant at compile time; this asserts the count
         // and the `ALL_LINT_RULES`/`LINT_RULE_NAMES` lists stay in sync.
         let entries = catalogue();
-        assert_eq!(entries.len(), 90, "expected 90 catalogue entries");
-        assert_eq!(ALL_LINT_RULES.len(), 90);
-        assert_eq!(LINT_RULE_NAMES.len(), 90);
+        assert_eq!(entries.len(), 91, "expected 91 catalogue entries");
+        assert_eq!(ALL_LINT_RULES.len(), 91);
+        assert_eq!(LINT_RULE_NAMES.len(), 91);
     }
 
     #[test]

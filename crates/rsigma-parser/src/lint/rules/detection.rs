@@ -79,6 +79,15 @@ pub(crate) fn lint_detection_rule(
                 .filter(|k| *k != "condition" && *k != "timeframe")
                 .collect();
 
+            if det.contains_key(key("timeframe")) {
+                warnings.push(warning(
+                    LintRule::DeprecatedDetectionTimeframe,
+                    "'timeframe' inside detection is deprecated Sigma v1.x syntax and has no \
+                     effect; use a correlation rule with a timespan instead",
+                    "/detection/timeframe",
+                ));
+            }
+
             if !det.contains_key(key("condition")) {
                 warnings.push(err(
                     LintRule::MissingCondition,
@@ -1547,6 +1556,47 @@ level: medium
         );
         assert!(has_rule(&w, LintRule::DeprecatedAggregationSyntax));
         assert!(has_no_rule(&w, LintRule::ConditionReferencesUnknown));
+    }
+
+    #[test]
+    fn deprecated_detection_timeframe() {
+        let w = lint(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+    timeframe: 5m
+level: medium
+"#,
+        );
+        let finding = w
+            .iter()
+            .find(|w| w.rule == LintRule::DeprecatedDetectionTimeframe)
+            .expect("timeframe is flagged");
+        assert_eq!(finding.severity, Severity::Warning);
+        assert_eq!(finding.path, "/detection/timeframe");
+        assert!(has_no_rule(&w, LintRule::ConditionReferencesUnknown));
+    }
+
+    #[test]
+    fn no_deprecated_detection_timeframe_without_timeframe() {
+        let w = lint(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+level: medium
+"#,
+        );
+        assert!(has_no_rule(&w, LintRule::DeprecatedDetectionTimeframe));
     }
 
     #[test]

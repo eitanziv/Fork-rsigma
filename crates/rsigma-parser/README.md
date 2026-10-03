@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/timescale/rsigma/actions/workflows/ci.yml/badge.svg)](https://github.com/timescale/rsigma/actions/workflows/ci.yml)
 
-`rsigma-parser` is a parser for [Sigma](https://github.com/SigmaHQ/sigma) detection rules, correlations, and filters. It parses Sigma YAML into a strongly-typed AST covering the full Sigma 2.0 specification, and includes an 89-rule linter derived from the Sigma v2.1.0 spec.
+`rsigma-parser` is a parser for [Sigma](https://github.com/SigmaHQ/sigma) detection rules, correlations, and filters. It parses Sigma YAML into a strongly-typed AST covering the full Sigma 2.0 specification, and includes a 90-rule linter derived from the Sigma v2.1.0 spec.
 
 This library is part of [rsigma].
 
@@ -285,9 +285,9 @@ filter:
 
 The string must be at least 2 characters (e.g. `1h`). The last character is the unit; the prefix must be a positive integer.
 
-## Linter (89 rules)
+## Linter (90 rules)
 
-89 emitted lint rules (plus the reserved `empty_filter_rules`) derived from the Sigma v2.1.0 specification, including the opt-in ADS detection-strategy checks. Four severity levels: **Error** (spec violation), **Warning** (best-practice issue), **Info** (soft suggestion), **Hint** (stylistic). Info/Hint findings don't cause lint failure.
+90 emitted lint rules (plus the reserved `empty_filter_rules`) derived from the Sigma v2.1.0 specification, including the opt-in ADS detection-strategy checks. Four severity levels: **Error** (spec violation), **Warning** (best-practice issue), **Info** (soft suggestion), **Hint** (stylistic). Info/Hint findings don't cause lint failure.
 
 The linter operates on raw YAML values to catch issues the parser silently ignores.
 
@@ -321,7 +321,7 @@ The linter operates on raw YAML values to catch issues the parser silently ignor
 | `taxonomy_too_long` | Warning | | `taxonomy` exceeds 256 characters |
 | `non_lowercase_key` | Warning | Yes | Top-level key is not lowercase |
 
-### Detection Rules (18)
+### Detection Rules (19)
 
 | Rule | Severity | Fix | Trigger |
 |------|----------|-----|---------|
@@ -343,6 +343,7 @@ The linter operates on raw YAML values to catch issues the parser silently ignor
 | `logsource_value_not_lowercase` | Warning | Yes | Logsource `category`/`product`/`service` not lowercase |
 | `condition_references_unknown` | Error | | Condition references non-existent detection identifier |
 | `deprecated_aggregation_syntax` | Warning | | Condition uses deprecated Sigma v1.x pipe-aggregation syntax (`\| count/min/max/avg/sum/near`); use a correlation rule instead |
+| `deprecated_detection_timeframe` | Warning | | `timeframe` inside `detection` is deprecated Sigma v1.x syntax and has no effect; use a correlation rule with a timespan instead |
 
 ### Correlation Rules (17)
 

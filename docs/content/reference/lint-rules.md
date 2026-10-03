@@ -20,7 +20,7 @@ Override the threshold with `--fail-level warning` or `--fail-level info`. See [
 | Severity | Rules |
 |----------|------:|
 | `error` | 38 |
-| `warning` | 44 |
+| `warning` | 45 |
 | `info` | 7 |
 | `hint` | 0 |
 | Reserved (no production emission) | {{ rsigma.lint.reserved }} |
@@ -82,7 +82,7 @@ Apply to detection, correlation, and filter rules alike.
 | `non_lowercase_key` | `warning` | yes | A top-level key uses non-lowercase characters (e.g. `Title:` instead of `title:`). The fix lowercases the key. |
 | `unknown_key` | `info` | yes | An unrecognized top-level key. The fix suggests the closest known key when the edit distance is small (e.g. `descirption` → `description`). |
 
-## Detection rules (18)
+## Detection rules (19)
 
 Apply to detection rules (`detection:` block + `condition:`).
 
@@ -105,6 +105,7 @@ Apply to detection rules (`detection:` block + `condition:`).
 | `empty_value_list` | `warning` | none | A detection item with a list value is empty. |
 | `condition_references_unknown` | `error` | none | The `condition:` expression references a selection name that is not in `detection:`. |
 | `deprecated_aggregation_syntax` | `warning` | none | The condition uses the deprecated aggregation pipe syntax (`condition: selection \| count() > 5`). Use the modern `correlation:` block instead. |
+| `deprecated_detection_timeframe` | `warning` | none | The `detection:` block has a v1.x `timeframe:` key, which has no effect. Use a correlation rule with a `timespan` instead. {{ added "unreleased" }} |
 | `flattened_array_correlation` | `warning` | none | Two or more sibling keys share a quantified array prefix (e.g. `connections[any].protocol` and `connections[any].ip`). Each opens an independent scope, so they do **not** correlate on the same array element. Use an object-scope block (`connections[any]:` with the fields nested) to require one element to satisfy all of them. See [Array Matching](../guide/array-matching.md). |
 
 ## Correlation rules (18)
@@ -342,6 +343,22 @@ correlation:
 ```
 
 No auto-fix because the migration is structural (split into a base detection plus a correlation document).
+
+### `deprecated_detection_timeframe`
+
+{{ added "unreleased" }}
+
+Trigger:
+
+```yaml
+detection:
+    selection:
+        EventID: 4625
+    condition: selection
+    timeframe: 5m
+```
+
+Sigma v1.x paired `timeframe:` with the aggregation pipe syntax to bound a count. On its own it never limited matching, and RSigma ignores it. Express the time window with a `correlation:` block and its `timespan:`, as in the [`deprecated_aggregation_syntax`](#deprecated_aggregation_syntax) example. No auto-fix because the replacement is structural.
 
 ### `duplicate_fields`
 
