@@ -1,0 +1,55 @@
+name: pysigma_parameters
+transformations:
+  - id: hashes
+    type: hashes_fields
+    valid_hash_algos: [MD5, SHA1, SHA256]
+    field_prefix: File
+    drop_algo_prefix: false
+    field_to_parse: [Hashes, Hash]
+  - id: rename
+    type: field_name_mapping
+    mapping:
+      Image: [process.executable, process.name]
+    field_name_conditions:
+      - type: include_fields
+        mode: re
+        fields: ["Im.*"]
+    detection_item_conditions:
+      - type: match_string
+        pattern: "\\*whoami"
+        negate: true
+        cond: all
+      - type: is_null
+        negate: true
+        cond: any
+  - type: add_condition
+    name: added
+    template: true
+    conditions:
+      Channel: "$product/$service"
+  - type: replace_string
+    regex: "^C:"
+    replacement: "*"
+    interpret_special: true
+    field_name_conditions:
+      - type: processing_item_applied
+        processing_item_id: rename
+  - type: set_value
+    value: "4688"
+    force_type: num
+    detection_item_conditions:
+      - type: processing_item_applied
+        processing_item_id: hashes
+  - type: regex
+    method: ignore_case_brackets
+  - type: field_name_transform
+    transform_func: lower
+    apply_keyword: false
+  - type: nest
+    items:
+      - type: field_name_suffix
+        suffix: .keyword
+        field_name_conditions:
+          - type: exclude_fields
+            mode: plain
+            fields: [process.name]
