@@ -122,8 +122,19 @@ mod tests {
     use super::*;
     use crate::tools::{VALID_RULE, handler};
 
+    async fn validate(yaml: &str) -> Result<Value, McpError> {
+        handler()
+            .run_validate_rules(ValidateInput {
+                yaml: Some(yaml.to_string()),
+                path: None,
+                pipelines: vec![],
+                resolve_sources: false,
+            })
+            .await
+    }
+
     #[tokio::test]
-    async fn validate_rules_ok_and_compile_error() {
+    async fn validate_rules_ok_parse_error_and_compile_error() {
         let ok = handler()
             .run_validate_rules(ValidateInput {
                 yaml: Some(VALID_RULE.to_string()),
@@ -135,16 +146,13 @@ mod tests {
             .unwrap();
         assert_eq!(ok["ok"], true);
 
-        let bad_yaml = "title: T\nlogsource:\n  category: test\ndetection:\n  sel:\n    a: b\n  condition: missing_ref\n";
-        let bad = handler()
-            .run_validate_rules(ValidateInput {
-                yaml: Some(bad_yaml.to_string()),
-                path: None,
-                pipelines: vec![],
-                resolve_sources: false,
-            })
-            .await
-            .unwrap();
+        let unparsable = "title: T\nlogsource:\n  category: test\ndetection:\n  sel:\n    a: b\n  condition: missing_ref\n";
+        let bad = validate(unparsable).await.unwrap();
+        assert_eq!(bad["ok"], false);
+        assert!(!bad["parse_errors"].as_array().unwrap().is_empty());
+
+        let uncompilable = "title: T\nlogsource:\n  category: test\ndetection:\n  sel:\n    a|re: '(?<!x)y'\n  condition: sel\n";
+        let bad = validate(uncompilable).await.unwrap();
         assert_eq!(bad["ok"], false);
         assert!(!bad["compile_errors"].as_array().unwrap().is_empty());
     }

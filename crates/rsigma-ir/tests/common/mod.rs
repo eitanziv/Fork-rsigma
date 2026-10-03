@@ -8,7 +8,10 @@
 #![allow(dead_code)]
 
 use rsigma_eval::{CompiledRule, Engine, EvaluationResult, JsonEvent, compile_rule, evaluate_rule};
-use rsigma_parser::{CorrelationRule, FilterRule, SigmaCollection, SigmaRule, parse_sigma_yaml};
+use rsigma_parser::{
+    CorrelationRule, Detection, FilterRule, SigmaCollection, SigmaRule, SigmaString, SigmaValue,
+    parse_condition, parse_sigma_yaml,
+};
 use serde_json::Value;
 
 /// Parse a full Sigma collection (rules + correlations + filters).
@@ -58,10 +61,41 @@ pub fn engine_from(yaml: &str) -> Engine {
     engine
 }
 
-/// Attempt to compile; used by contradiction fixtures that expect Err.
-pub fn try_compile(yaml: &str) -> Result<(), rsigma_eval::EvalError> {
+/// Parse and compile, returning the first parse or compile error; used by
+/// contradiction fixtures that expect Err whichever layer rejects them.
+pub fn try_compile(yaml: &str) -> Result<(), String> {
     let collection = parse_sigma_yaml(yaml).expect("fixture YAML must parse");
-    Engine::new().add_collection(&collection)
+    if let Some(err) = collection.errors.first() {
+        return Err(err.clone());
+    }
+    Engine::new()
+        .add_collection(&collection)
+        .map_err(|e| e.to_string())
+}
+
+/// A parsed rule whose `selection` item is rewritten afterwards, as a pipeline
+/// can, to exercise the checks lowering repeats for items the parser never
+/// validated.
+pub fn rule_with_item(modifiers: &[&str], value: &str) -> SigmaRule {
+    let mut rule = rule_from(
+        "title: T\nlogsource: { category: test }\ndetection:\n    selection:\n        Field: x\n    condition: selection\n",
+    );
+    let Some(Detection::AllOf(items)) = rule.detection.named.get_mut("selection") else {
+        unreachable!("the selection is a single mapping");
+    };
+    items[0].field.modifiers = modifiers.iter().map(|m| m.parse().unwrap()).collect();
+    items[0].values = vec![SigmaValue::String(SigmaString::new(value))];
+    rule
+}
+
+/// A parsed rule with a single `filter_main` detection whose condition is
+/// replaced afterwards, so lowering sees identifiers the parser never checked.
+pub fn rule_with_condition(condition: &str) -> SigmaRule {
+    let mut rule = rule_from(
+        "title: T\nlogsource: { category: test }\ndetection:\n    filter_main:\n        Image: 'notepad.exe'\n    condition: filter_main\n",
+    );
+    rule.detection.conditions = vec![parse_condition(condition).unwrap()];
+    rule
 }
 
 /// Sorted matching rule titles for stable assertions.

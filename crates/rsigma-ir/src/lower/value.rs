@@ -6,8 +6,7 @@
 //! compile regexes, or expand encodings; eval does those when it compiles a
 //! rule, and convert expands encodings before rendering.
 
-use std::net::IpAddr;
-
+use rsigma_parser::validate::check_cidr;
 use rsigma_parser::value::{SpecialChar, StringPart};
 use rsigma_parser::{SigmaString, SigmaValue};
 
@@ -30,32 +29,6 @@ fn pattern_from_sigma(s: &SigmaString) -> IrPattern {
         })
         .collect();
     IrPattern { parts }
-}
-
-/// Reject a CIDR that is not `address/prefix` or has host bits set, as
-/// pySigma does, so eval and every backend refuse the same values.
-fn check_cidr(cidr: &str) -> Result<()> {
-    let invalid = |reason: &str| {
-        IrError::IncompatibleValue(format!("invalid CIDR expression '{cidr}': {reason}"))
-    };
-    let (addr, prefix) = cidr
-        .split_once('/')
-        .ok_or_else(|| invalid("expected address/prefix"))?;
-    let addr: IpAddr = addr.parse().map_err(|_| invalid("invalid IP address"))?;
-    let (bits, width) = match addr {
-        IpAddr::V4(a) => (u128::from(u32::from(a)), 32),
-        IpAddr::V6(a) => (u128::from(a), 128),
-    };
-    let prefix: u32 = prefix
-        .parse()
-        .ok()
-        .filter(|p| *p <= width)
-        .ok_or_else(|| invalid("invalid prefix length"))?;
-    let host_mask = u128::MAX.checked_shr(128 - width + prefix).unwrap_or(0);
-    if bits & host_mask != 0 {
-        return Err(invalid("host bits set"));
-    }
-    Ok(())
 }
 
 fn plain_pattern(s: &str) -> IrPattern {
@@ -171,7 +144,7 @@ pub(super) fn lower_value(value: &SigmaValue, ctx: &ModCtx) -> Result<IrMatcher>
 
     if ctx.cidr {
         let cidr_str = value_to_plain_string(value)?;
-        check_cidr(&cidr_str)?;
+        check_cidr(&cidr_str).map_err(IrError::IncompatibleValue)?;
         return Ok(IrMatcher::Cidr { network: cidr_str });
     }
 

@@ -1826,16 +1826,23 @@ fn sigma_version_parsed_as_major() {
 #[test]
 fn array_brackets_are_literal_below_v3() {
     // Without sigma-version (floor major 2), a quantifier selector is NOT a
-    // selector: `connections[any]` is a literal field name (escaped), and the
-    // detection stays a plain item rather than an ArrayMatch.
+    // selector: `connections[any]` is a literal field name (escaped), so a
+    // block body under it is a mapping value, which no field accepts.
     let yaml = "title: T\nlogsource:\n    category: test\ndetection:\n    selection:\n        connections[any]:\n            protocol: \"TCP\"\n    condition: selection\n";
     let collection = parse_sigma_yaml(yaml).unwrap();
-    assert_eq!(collection.rules.len(), 1, "errors: {:?}", collection.errors);
-    let det = collection.rules[0].detection.named["selection"].clone();
+    assert!(collection.rules.is_empty());
     assert!(
-        !matches!(det, Detection::ArrayMatch { .. }),
-        "brackets must not be a selector below v3, got {det:?}"
+        collection.errors[0].contains("'connections\\[any\\]' takes a value or a list of values"),
+        "{:?}",
+        collection.errors
     );
+
+    let scalar = "title: T\nlogsource:\n    category: test\ndetection:\n    selection:\n        connections[any]: TCP\n    condition: selection\n";
+    let det = parse_sigma_yaml(scalar).unwrap().rules[0].detection.named["selection"].clone();
+    let Detection::AllOf(items) = det else {
+        panic!("brackets must not be a selector below v3, got {det:?}");
+    };
+    assert_eq!(items[0].field.name.as_deref(), Some("connections\\[any\\]"));
 }
 
 #[test]

@@ -10,7 +10,7 @@
 
 mod common;
 
-use common::{collection_from, rule_from};
+use common::{collection_from, rule_from, rule_with_condition, rule_with_item};
 use rsigma_eval::{JsonEvent, compile_rule, evaluate_rule};
 use serde_json::{Value, json};
 
@@ -47,17 +47,9 @@ detection:
 #[test]
 fn all_of_zero_matches_does_not_compile() {
     // `all of selection_*` matches zero detection names here, which has no
-    // defined result.
-    let rule = rule_from(
-        r#"
-title: Vacuous All Of Zero
-logsource: { category: test }
-detection:
-    filter_main:
-        Image: 'notepad.exe'
-    condition: all of selection_*
-"#,
-    );
+    // defined result. The parser rejects it; compile repeats the check for
+    // conditions rewritten after parsing.
+    let rule = rule_with_condition("all of selection_*");
     assert!(compile_rule(&rule).is_err());
 }
 
@@ -159,15 +151,7 @@ rsigma.include_event: "true"
 
 #[test]
 fn modifier_contradiction_is_rejected() {
-    let yaml = r#"
-title: Cidr Contains
-logsource: { category: test }
-detection:
-    selection:
-        Address|cidr|contains: "192.168.0.0/16"
-    condition: selection
-"#;
-    let rule = rule_from(yaml);
+    let rule = rule_with_item(&["cidr", "contains"], "192.168.0.0/16");
     assert!(compile_rule(&rule).is_err());
 }
 

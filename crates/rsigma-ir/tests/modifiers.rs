@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{engine_from, matches, titles_for, try_compile};
+use common::{engine_from, matches, rule_with_item, titles_for, try_compile};
 use serde_json::json;
 
 // =============================================================================
@@ -30,11 +30,10 @@ detection:
 #[test]
 fn cidr_requires_a_network_address() {
     let lower = |cidr: &str| {
-        let yaml = format!(
-            "title: T\nlogsource: {{ category: test }}\ndetection:\n    selection:\n        Address|cidr: '{cidr}'\n    condition: selection\n"
-        );
-        let collection = rsigma_parser::parse_sigma_yaml(&yaml).unwrap();
-        rsigma_ir::lower_rule(&collection.rules[0], &rsigma_ir::LowerOptions::default())
+        rsigma_ir::lower_rule(
+            &rule_with_item(&["cidr"], cidr),
+            &rsigma_ir::LowerOptions::default(),
+        )
     };
     for ok in [
         "10.0.0.0/8",
@@ -161,6 +160,25 @@ detection:
 "#,
     );
     assert!(err.is_err(), "|all on a single value should fail: {err:?}");
+}
+
+#[test]
+fn lowering_rejects_contradictions_on_rewritten_items() {
+    for modifiers in [
+        &["cidr", "contains"][..],
+        &["re", "contains"],
+        &["base64", "base64offset"],
+        &["wide", "utf16"],
+        &["multiline"],
+        &["contains", "fieldref"],
+    ] {
+        let rule = rule_with_item(modifiers, "x");
+        let err = rsigma_ir::lower_rule(&rule, &rsigma_ir::LowerOptions::default());
+        assert!(
+            matches!(err, Err(rsigma_ir::IrError::InvalidModifiers(_))),
+            "{modifiers:?}: {err:?}"
+        );
+    }
 }
 
 // =============================================================================

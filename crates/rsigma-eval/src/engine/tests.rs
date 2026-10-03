@@ -1902,13 +1902,13 @@ detection:
     condition: selection
 "#;
     let bad = r#"
-title: Broken Reference
+title: Lookbehind
 logsource:
     product: windows
 detection:
     selection:
-        EventType: 'x'
-    condition: unknown_identifier
+        EventType|re: '(?<!x)y'
+    condition: selection
 "#;
     let good_rule = parse_sigma_yaml(good).unwrap().rules.remove(0);
     let bad_rule = parse_sigma_yaml(bad).unwrap().rules.remove(0);

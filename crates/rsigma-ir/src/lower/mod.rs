@@ -11,6 +11,7 @@ mod value;
 
 use std::collections::HashMap;
 
+use rsigma_parser::validate::{check_modifiers, exists_flag};
 use rsigma_parser::{
     ConditionExpr, CorrelationRule, Detection, DetectionItem, Detections, FilterRule, SigmaRule,
     SigmaValue,
@@ -23,7 +24,7 @@ use crate::{
 };
 
 use helpers::{Result, yaml_to_json_map};
-use mod_ctx::{ModCtx, validate_modifiers};
+use mod_ctx::ModCtx;
 use value::{lower_value, lower_value_keywords};
 
 /// Options controlling the lowering strictness.
@@ -161,18 +162,19 @@ pub fn lower_detection_item(item: &DetectionItem, opts: &LowerOptions) -> Result
     }
 
     let ctx = ModCtx::from_modifiers(&item.field.modifiers);
-    validate_modifiers(&ctx, &item.field.modifiers)?;
+    check_modifiers(&item.field.modifiers).map_err(IrError::InvalidModifiers)?;
 
     if ctx.exists {
-        let expect = match item.values.first() {
-            Some(SigmaValue::Bool(b)) => *b,
-            Some(SigmaValue::String(s)) => match s.as_plain().as_deref() {
-                Some("true") | Some("yes") => true,
-                Some("false") | Some("no") => false,
-                _ => true,
-            },
-            _ => true,
-        };
+        if item.field.name.is_none() {
+            return Err(IrError::IncompatibleValue(
+                "|exists must be applied to a field".into(),
+            ));
+        }
+        let expect = match item.values.as_slice() {
+            [value] => exists_flag(value),
+            _ => None,
+        }
+        .ok_or_else(|| IrError::IncompatibleValue("|exists takes a single boolean value".into()))?;
         return Ok(IrDetectionItem {
             field: item.field.name.clone(),
             matcher: IrMatcher::Exists(expect),

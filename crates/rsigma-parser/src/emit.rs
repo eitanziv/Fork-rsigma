@@ -547,7 +547,7 @@ fn field_key(field: &str, modifiers: &[Modifier]) -> String {
     key
 }
 
-fn modifier_str(modifier: Modifier) -> &'static str {
+pub(crate) fn modifier_str(modifier: Modifier) -> &'static str {
     match modifier {
         Modifier::Contains => "contains",
         Modifier::StartsWith => "startswith",

@@ -1,21 +1,46 @@
 use rsigma_eval::{CorrelationConfig, CorrelationEngine, Engine, EvalError};
-use rsigma_parser::parse_sigma_yaml;
+use rsigma_parser::{
+    Detection, SigmaRule, SigmaString, SigmaValue, parse_condition, parse_sigma_yaml,
+};
 
-#[test]
-fn invalid_regex_surfaces_at_compile_time() {
+/// A parsed rule whose `selection` item is rewritten afterwards, as a pipeline
+/// can, so the compiler's own checks run on an item the parser never validated.
+fn rule_with_item(modifiers: &[&str], value: &str) -> SigmaRule {
     let yaml = r#"
-title: Bad Regex
+title: Rewritten
 logsource:
     product: test
 detection:
     selection:
-        CommandLine|re: '[unclosed'
+        Field: x
+    condition: selection
+"#;
+    let mut rule = parse_sigma_yaml(yaml).unwrap().rules.remove(0);
+    let Some(Detection::AllOf(items)) = rule.detection.named.get_mut("selection") else {
+        unreachable!("the selection is a single mapping");
+    };
+    items[0].field.modifiers = modifiers.iter().map(|m| m.parse().unwrap()).collect();
+    items[0].values = vec![SigmaValue::String(SigmaString::new(value))];
+    rule
+}
+
+#[test]
+fn regex_the_evaluator_cannot_run_surfaces_at_compile_time() {
+    // Lookbehind is valid Sigma regex syntax, so the parser accepts it, but
+    // the evaluator's regex engine cannot run it.
+    let yaml = r#"
+title: Lookbehind
+logsource:
+    product: test
+detection:
+    selection:
+        CommandLine|re: '(?<!\\)cmd'
     condition: selection
 level: low
 "#;
     let collection = parse_sigma_yaml(yaml).unwrap();
-    let mut engine = Engine::new();
-    let err = engine.add_collection(&collection).unwrap_err();
+    assert!(collection.errors.is_empty(), "{:?}", collection.errors);
+    let err = Engine::new().add_collection(&collection).unwrap_err();
     assert!(
         matches!(err, EvalError::InvalidRegex(_)),
         "expected InvalidRegex, got: {err}"
@@ -23,61 +48,38 @@ level: low
 }
 
 #[test]
-fn invalid_cidr_surfaces_at_compile_time() {
-    let yaml = r#"
-title: Bad CIDR
-logsource:
-    product: test
-detection:
-    selection:
-        SourceIP|cidr: 'not-a-cidr'
-    condition: selection
-level: low
-"#;
-    let collection = parse_sigma_yaml(yaml).unwrap();
-    let mut engine = Engine::new();
-    let err = engine.add_collection(&collection).unwrap_err();
+fn invalid_regex_is_rejected_at_compile_time() {
+    let err = Engine::new()
+        .add_rule(&rule_with_item(&["re"], "[unclosed"))
+        .unwrap_err();
     assert!(
-        matches!(err, EvalError::IncompatibleValue(_)),
-        "expected IncompatibleValue, got: {err}"
+        matches!(err, EvalError::InvalidRegex(_)),
+        "expected InvalidRegex, got: {err}"
     );
 }
 
 #[test]
-fn cidr_with_host_bits_is_rejected() {
-    for cidr in ["10.1.2.3/8", "2001:db8::1/32"] {
-        let yaml = format!(
-            r#"
-title: Host Bits
-logsource:
-    product: test
-detection:
-    selection:
-        SourceIP|cidr: '{cidr}'
-    condition: selection
-"#
+fn invalid_cidr_is_rejected_at_compile_time() {
+    for (cidr, expected) in [
+        ("not-a-cidr", "expected address/prefix"),
+        ("10.1.2.3/8", "host bits set"),
+        ("2001:db8::1/32", "host bits set"),
+    ] {
+        let err = Engine::new()
+            .add_rule(&rule_with_item(&["cidr"], cidr))
+            .unwrap_err();
+        assert!(
+            matches!(err, EvalError::IncompatibleValue(_)) && err.to_string().contains(expected),
+            "{cidr}: {err}"
         );
-        let collection = parse_sigma_yaml(&yaml).unwrap();
-        let err = Engine::new().add_collection(&collection).unwrap_err();
-        assert!(err.to_string().contains("host bits set"), "{cidr}: {err}");
     }
 }
 
 #[test]
 fn timestamp_part_with_non_numeric_string_is_incompatible() {
-    let yaml = r#"
-title: Bad Timestamp
-logsource:
-    product: test
-detection:
-    selection:
-        EventTime|hour: three
-    condition: selection
-level: low
-"#;
-    let collection = parse_sigma_yaml(yaml).unwrap();
-    let mut engine = Engine::new();
-    let err = engine.add_collection(&collection).unwrap_err();
+    let err = Engine::new()
+        .add_rule(&rule_with_item(&["hour"], "three"))
+        .unwrap_err();
     assert!(
         matches!(err, EvalError::IncompatibleValue(_)),
         "expected IncompatibleValue, got: {err}"
@@ -86,22 +88,23 @@ level: low
 
 #[test]
 fn numeric_comparison_with_non_numeric_value() {
-    let yaml = r#"
-title: Bad Numeric
-logsource:
-    product: test
-detection:
-    selection:
-        Score|gt: not_a_number
-    condition: selection
-level: low
-"#;
-    let collection = parse_sigma_yaml(yaml).unwrap();
-    let mut engine = Engine::new();
-    let err = engine.add_collection(&collection).unwrap_err();
+    let err = Engine::new()
+        .add_rule(&rule_with_item(&["gt"], "not_a_number"))
+        .unwrap_err();
     assert!(
         matches!(err, EvalError::ExpectedNumeric(_)),
         "expected ExpectedNumeric, got: {err}"
+    );
+}
+
+#[test]
+fn unknown_detection_in_condition_errors_at_compile_time() {
+    let mut rule = rule_with_item(&[], "x");
+    rule.detection.conditions = vec![parse_condition("selection and selection_b").unwrap()];
+    let err = Engine::new().add_rule(&rule).unwrap_err();
+    assert!(
+        matches!(err, EvalError::UnknownDetection(ref name) if name == "selection_b"),
+        "expected UnknownDetection(\"selection_b\"), got: {err}"
     );
 }
 
@@ -208,27 +211,6 @@ level: high
     assert!(
         matches!(err, EvalError::CorrelationCycle(_)),
         "expected CorrelationCycle, got: {err}"
-    );
-}
-
-#[test]
-fn unknown_detection_in_condition_errors_at_compile_time() {
-    let yaml = r#"
-title: Ghost Reference
-logsource:
-    product: test
-detection:
-    selection_a:
-        EventType: test
-    condition: selection_a and selection_b
-level: low
-"#;
-    let collection = parse_sigma_yaml(yaml).unwrap();
-    let mut engine = Engine::new();
-    let err = engine.add_collection(&collection).unwrap_err();
-    assert!(
-        matches!(err, EvalError::UnknownDetection(ref name) if name == "selection_b"),
-        "expected UnknownDetection(\"selection_b\"), got: {err}"
     );
 }
 
