@@ -15,7 +15,7 @@ The crate provides a generic conversion framework that any backend can plug into
 - **Condition tree walker** that recursively converts `ConditionExpr` nodes into query strings with selector/quantifier support.
 - **Orchestrator** via `convert_collection()`, which merges filters into the rules they target, applies pipelines, converts each rule, and collects results and errors. A backend without correlation support reports each correlation as an `UnsupportedCorrelation` error.
 - **Deferred expressions** through the `DeferredExpression` trait and `DeferredTextExpression` for backends that need post-query appendages (e.g. Splunk `| regex`, `| where`).
-- **Test backend** with `TextQueryTestBackend` and `MandatoryPipelineTestBackend` for backend-neutral foundation testing.
+- **Test backend** with `TextQueryTestBackend` and `MandatoryPipelineTestBackend` for backend-neutral foundation testing. Its output matches pySigma's `TextQueryTestBackend`: values are escaped and quoted the same way, the expression follows the value's wildcard shape, values of one field become `in` and `contains-all` lists, and CIDR matches render as `cidrmatch('Field', "cidr")`.
 - **PostgreSQL/TimescaleDB backend** with native `ILIKE`, regex (`~`, `~*` with `|i`), CIDR (`inet`/`cidr`), full-text search (`tsvector`/`tsquery`), JSONB field access, correlation via CTEs and window functions, and TimescaleDB-specific output formats (continuous aggregates, `time_bucket` queries, view generation).
 - **LynxDB backend** generating SPL2-compatible `FROM <index> | search ...` queries with glob wildcards and correct parenthesization for LynxDB's non-standard boolean precedence (`NOT > OR > AND`), and `FROM <index> | where ...` queries for rules whose values `search` cannot match exactly.
 

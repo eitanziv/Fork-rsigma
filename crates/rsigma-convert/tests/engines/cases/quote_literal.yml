@@ -17,6 +17,6 @@ matches: [0, 2]
 known_failures:
   test-pysigma:
     type: output-difference
-    reason: "values of one field are not rendered as an in-list"
-    actual: ["CommandLine contains \"say \\\"hi\\\"\" or CommandLine contains \"it's\""]
+    reason: "selector operands are ordered by name instead of definition"
+    actual: ["CommandLine in (\"*say \\\"hi\\\"*\", \"*it's*\")"]
     reference: ["CommandLine in (\"*it's*\", \"*say \\\"hi\\\"*\")"]

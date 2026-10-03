@@ -11,9 +11,3 @@ events:
   - {CommandLine: 'x aZZb y'}
   - {CommandLine: 'x ab y'}
 matches: [0]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "the escape of a literal * is dropped"
-    actual: ["CommandLine contains \"a*b\""]
-    reference: ["CommandLine contains \"a\\*b\""]

@@ -271,8 +271,8 @@ filter:
         assert_eq!(
             test_queries(FILTERED, &[]),
             [
-                r#"Image endswith "\\whoami.exe" and not User="admin""#,
-                r#"Image endswith "\\ping.exe""#,
+                r#"Image endswith "\whoami.exe" and not User="admin""#,
+                r#"Image endswith "\ping.exe""#,
             ]
         );
     }
@@ -291,7 +291,7 @@ transformations:
         .unwrap();
         assert_eq!(
             test_queries(FILTERED, &[pipeline])[0],
-            r#"Image endswith "\\whoami.exe" and not user_name="admin""#
+            r#"Image endswith "\whoami.exe" and not user_name="admin""#
         );
     }
 
@@ -340,8 +340,8 @@ correlation:
         assert_eq!(
             test_queries(&yaml, &[]),
             [
-                r#"Image endswith "\\whoami.exe""#,
-                r#"Image endswith "\\ping.exe""#,
+                r#"Image endswith "\whoami.exe""#,
+                r#"Image endswith "\ping.exe""#,
             ]
         );
     }

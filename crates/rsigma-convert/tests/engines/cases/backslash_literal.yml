@@ -12,9 +12,3 @@ events:
   - {CommandLine: 'copy C:/Temp/x.dll'}
   - {CommandLine: 'copy C:\\Temp\\x.dll'}
 matches: [0]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "backslashes in values are doubled"
-    actual: ["CommandLine contains \"C\\:\\\\Temp\\\\x\""]
-    reference: ["CommandLine contains \"C\\:\\Temp\\x\""]

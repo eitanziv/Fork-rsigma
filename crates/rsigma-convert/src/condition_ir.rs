@@ -127,7 +127,17 @@ pub fn convert_rule_via_ir(
     pipeline_state: &PipelineState,
 ) -> Result<Vec<String>> {
     let ir = lower_rule_for_conversion(rule)?;
+    convert_lowered_rule(backend, rule, &ir, output_format, pipeline_state)
+}
 
+/// Convert every condition of an already lowered rule.
+pub(crate) fn convert_lowered_rule(
+    backend: &dyn Backend,
+    rule: &SigmaRule,
+    ir: &IrRule,
+    output_format: &str,
+    pipeline_state: &PipelineState,
+) -> Result<Vec<String>> {
     let mut queries = Vec::with_capacity(ir.conditions.len());
     for (idx, cond) in ir.conditions.iter().enumerate() {
         let mut state = condition_state(pipeline_state, output_format);

@@ -33,7 +33,7 @@ The crate is sync-only (no tokio/reqwest).
 | `IrRule` / `IrDetection` / `IrMatcher` / `IrCondition` | Detection-rule HIR. `IrCondition::Selector` keeps the quantifier and name pattern. |
 | `IrMatcher::Str` + `IrPattern` | Faithful, wildcard-aware, original-case string match. |
 | `IrMatcher::Encoded` + `IrEncoding` | Explicit encoding transforms (`base64`, `wide`, `windash`, …) over a wildcard-aware `pattern`. {{ added "unreleased" }} |
-| `encoding::expand_encoded` / `encoding::expand_encoded_detections` | Replay an `Encoded` matcher into the plain string matches its encodings produce (windash variants, UTF-16, base64 and base64offset). Eval compiles them and conversion renders them, so both agree on the variants. `encoding::MAX_WINDASH_DASHES` caps windash expansion. {{ added "unreleased" }} |
+| `encoding::expand_encoded` / `encoding::expand_encoded_detections` / `encoding::expand_encoded_matcher` | Replay an `Encoded` matcher into the plain string matches its encodings produce (windash variants, UTF-16, base64 and base64offset), for one value, a whole detection map, or one matcher. Eval compiles them and conversion renders them, so both agree on the variants. `encoding::MAX_WINDASH_DASHES` caps windash expansion. {{ added "unreleased" }} |
 | `IrMatcher::Expand` | A `\|expand` value with placeholders left for match time, with the string operator in `op`. {{ added "unreleased" }} |
 | `IrCorrelation` / `IrFilter` | Correlation and filter HIR. |
 | `IrRuleMetadata` | Metadata superset used when projecting eval `RuleHeader`. |

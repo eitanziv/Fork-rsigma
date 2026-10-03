@@ -12,9 +12,3 @@ events:
   - {CommandLine: 'barfoo'}
   - {CommandLine: 'fooba'}
 matches: [0, 1]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "match values are not quoted"
-    actual: ["CommandLine match *foo*bar*"]
-    reference: ["CommandLine match \"*foo*bar*\""]

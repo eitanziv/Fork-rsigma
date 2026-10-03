@@ -13,9 +13,3 @@ events:
   - {Image: 'C:\cmd.exe', User: 'admin'}
   - {Image: 'C:\cmd.exe', User: ''}
 matches: [0, 1]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "backslashes in values are doubled"
-    actual: ["Image endswith \"\\\\cmd.exe\" and User is null"]
-    reference: ["Image endswith \"\\cmd.exe\" and User is null"]

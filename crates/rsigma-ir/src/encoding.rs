@@ -34,17 +34,20 @@ fn expand_detection(det: &mut IrDetection) -> Result<(), IrError> {
     match det {
         IrDetection::AllOf(items) => items
             .iter_mut()
-            .try_for_each(|item| expand_matcher(&mut item.matcher)),
+            .try_for_each(|item| expand_encoded_matcher(&mut item.matcher)),
         IrDetection::AnyOf(dets) | IrDetection::And(dets) => {
             dets.iter_mut().try_for_each(expand_detection)
         }
-        IrDetection::Keywords(matcher) => expand_matcher(matcher),
+        IrDetection::Keywords(matcher) => expand_encoded_matcher(matcher),
         IrDetection::ArrayMatch { body, .. } => expand_detection(body),
         IrDetection::Conditional { named, .. } => expand_encoded_detections(named),
     }
 }
 
-fn expand_matcher(matcher: &mut IrMatcher) -> Result<(), IrError> {
+/// Replace every [`IrMatcher::Encoded`] in `matcher` with the plain string
+/// matches its encodings produce, as [`expand_encoded_detections`] does for a
+/// whole detection map.
+pub fn expand_encoded_matcher(matcher: &mut IrMatcher) -> Result<(), IrError> {
     match matcher {
         IrMatcher::Encoded {
             encodings,
@@ -67,8 +70,12 @@ fn expand_matcher(matcher: &mut IrMatcher) -> Result<(), IrError> {
             };
             Ok(())
         }
-        IrMatcher::Not(inner) | IrMatcher::TimestampPart { inner, .. } => expand_matcher(inner),
-        IrMatcher::AnyOf(ms) | IrMatcher::AllOf(ms) => ms.iter_mut().try_for_each(expand_matcher),
+        IrMatcher::Not(inner) | IrMatcher::TimestampPart { inner, .. } => {
+            expand_encoded_matcher(inner)
+        }
+        IrMatcher::AnyOf(ms) | IrMatcher::AllOf(ms) => {
+            ms.iter_mut().try_for_each(expand_encoded_matcher)
+        }
         _ => Ok(()),
     }
 }

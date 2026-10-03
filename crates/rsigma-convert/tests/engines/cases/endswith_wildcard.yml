@@ -14,9 +14,3 @@ events:
   - {Image: 'C:\Tools\mon.exe'}
   - {CommandLine: 'x'}
 matches: [0, 1, 2]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "endswith with a wildcard is not rendered as a match with a leading wildcard"
-    actual: ["Image endswith sys*.exe"]
-    reference: ["Image match \"*sys*.exe\""]

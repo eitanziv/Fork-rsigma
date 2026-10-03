@@ -91,6 +91,15 @@ pub(crate) fn matcher_op(matcher: &IrMatcher) -> Option<TokenType> {
         IrMatcher::AnyOf(ms) => list_op(ms, TokenType::OR, matcher_op),
         IrMatcher::AllOf(ms) => list_op(ms, TokenType::AND, matcher_op),
         IrMatcher::Not(_) => Some(TokenType::NOT),
+        IrMatcher::Encoded {
+            encodings,
+            op,
+            pattern,
+            ..
+        } => match rsigma_ir::encoding::expand_encoded(encodings, *op, pattern) {
+            Ok(variants) if variants.len() > 1 => Some(TokenType::OR),
+            _ => None,
+        },
         _ => None,
     }
 }

@@ -16,9 +16,3 @@ events:
   - {Image: 'C:\certutil.exe', CommandLine: 'certutil ~decode a b'}
   - {Image: 'C:\cmd.exe', CommandLine: 'certutil -decode a b'}
 matches: [0, 1, 2, 3, 4]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "backslashes in values are doubled"
-    actual: ["Image endswith \"\\\\certutil.exe\" and (CommandLine contains \" -decode \" or CommandLine contains \" /decode \" or CommandLine contains \" –decode \" or CommandLine contains \" —decode \" or CommandLine contains \" ―decode \")"]
-    reference: ["Image endswith \"\\certutil.exe\" and (CommandLine contains \" -decode \" or CommandLine contains \" /decode \" or CommandLine contains \" –decode \" or CommandLine contains \" —decode \" or CommandLine contains \" ―decode \")"]

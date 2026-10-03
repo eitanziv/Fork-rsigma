@@ -16,9 +16,3 @@ events:
   - {Image: 'C:\cmd.exe', CommandLine: 'x', ParentImage: 'C:\explorer.exe'}
   - {Image: 'C:\pwsh.exe', CommandLine: 'x', ParentImage: 'C:\explorer.exe'}
 matches: [0]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "backslashes in values are doubled"
-    actual: ["Image endswith \"\\\\cmd.exe\" and not (CommandLine contains \"shell32\" or ParentImage endswith \"\\\\explorer.exe\")"]
-    reference: ["Image endswith \"\\cmd.exe\" and not (CommandLine contains \"shell32\" or ParentImage endswith \"\\explorer.exe\")"]

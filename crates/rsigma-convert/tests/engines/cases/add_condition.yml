@@ -27,6 +27,6 @@ matches: [1, 3]
 known_failures:
   test-pysigma:
     type: output-difference
-    reason: "the added condition is appended instead of prepended; selector operands are ordered by name instead of definition; values of one field are not rendered as an in-list"
-    actual: ["(CommandLine contains \"whoami\" or Image endswith \"cmd.exe\") and (User=\"alice\" or User=\"bob\")"]
+    reason: "the added condition is appended instead of prepended; selector operands are ordered by name instead of definition"
+    actual: ["(CommandLine contains \"whoami\" or Image endswith \"cmd.exe\") and (User in (\"alice\", \"bob\"))"]
     reference: ["(User in (\"alice\", \"bob\")) and (Image endswith \"cmd.exe\" or CommandLine contains \"whoami\")"]

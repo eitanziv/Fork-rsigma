@@ -14,9 +14,3 @@ events:
   - {CommandLine: 'net group'}
   - {Image: 'x'}
 matches: [0, 1, 2]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "startswith with a wildcard is not rendered as a match with a trailing wildcard"
-    actual: ["CommandLine startswith net*user"]
-    reference: ["CommandLine match \"net*user*\""]

@@ -4,13 +4,23 @@
 //! Used to validate the `Backend` trait, `TextQueryConfig`, condition walker,
 //! value escaping, modifier handling, and output formats.
 
+use std::collections::HashMap;
+
 use rsigma_eval::pipeline::state::PipelineState;
-use rsigma_ir::{IrPattern, IrStrOp};
+use rsigma_ir::encoding::expand_encoded_matcher;
+use rsigma_ir::{
+    IrCondition, IrDetection, IrDetectionItem, IrMatcher, IrNumber, IrPattern, IrPatternPart,
+    IrRule, IrStrOp,
+};
 use rsigma_parser::*;
 
 use crate::backend::*;
-use crate::condition_ir::convert_rule_via_ir;
+use crate::condition_ir::{convert_lowered_rule, ir_err};
 use crate::error::{ConvertError, Result};
+use crate::ir_convert::{
+    Operand, default_convert_ir_detection, default_convert_ir_detection_item, join, matcher_op,
+    negate, selected_detections,
+};
 use crate::state::{ConversionState, ConvertResult};
 
 // =============================================================================
@@ -68,9 +78,9 @@ pub static TEXT_QUERY_TEST_CONFIG: TextQueryConfig = TextQueryConfig {
     not_re_expression: None,
     re_escape_char: Some("\\"),
     re_escape: &["/"],
-    re_escape_escape_char: None,
+    re_escape_escape_char: Some("\\"),
 
-    cidr_expression: Some("cidrmatch(\"{value}\", {field})"),
+    cidr_expression: Some("cidrmatch('{field}', \"{value}\")"),
     not_cidr_expression: None,
 
     field_null_expression: "{field} is null",
@@ -133,6 +143,309 @@ impl Default for TextQueryTestBackend {
     }
 }
 
+/// pySigma's value for a string match: the pattern with the operator's
+/// wildcards added, unless it already starts or ends with one.
+fn full_value(op: IrStrOp, pattern: &IrPattern) -> Vec<IrPatternPart> {
+    let mut parts = pattern.parts.clone();
+    let lead = matches!(op, IrStrOp::Contains | IrStrOp::EndsWith);
+    let trail = matches!(op, IrStrOp::Contains | IrStrOp::StartsWith);
+    if lead && parts.first() != Some(&IrPatternPart::WildcardMulti) {
+        parts.insert(0, IrPatternPart::WildcardMulti);
+    }
+    if trail && parts.last() != Some(&IrPatternPart::WildcardMulti) {
+        parts.push(IrPatternPart::WildcardMulti);
+    }
+    parts
+}
+
+fn has_wildcard(parts: &[IrPatternPart]) -> bool {
+    parts
+        .iter()
+        .any(|p| !matches!(p, IrPatternPart::Literal(_)))
+}
+
+fn is_char(s: &str, c: char) -> bool {
+    let mut chars = s.chars();
+    chars.next() == Some(c) && chars.next().is_none()
+}
+
+/// Quote a value the way pySigma's `convert_value_str` does: wildcards,
+/// the quote, and `add_escaped` are escaped when literal, the escape
+/// character itself is not, and `filter_chars` are dropped.
+fn quote_value(config: &TextQueryConfig, parts: &[IrPatternPart]) -> String {
+    let mut out = String::from(config.str_quote);
+    for part in parts {
+        match part {
+            IrPatternPart::Literal(s) => {
+                for c in s.chars() {
+                    if config.filter_chars.iter().any(|f| is_char(f, c)) {
+                        continue;
+                    }
+                    if is_char(config.wildcard_multi, c)
+                        || is_char(config.wildcard_single, c)
+                        || is_char(config.str_quote, c)
+                        || config.add_escaped.iter().any(|e| is_char(e, c))
+                    {
+                        out.push_str(config.escape_char);
+                    }
+                    out.push(c);
+                }
+            }
+            IrPatternPart::WildcardMulti => out.push_str(config.wildcard_multi),
+            IrPatternPart::WildcardSingle => out.push_str(config.wildcard_single),
+        }
+    }
+    out.push_str(config.str_quote);
+    out
+}
+
+fn format_num(value: f64) -> String {
+    if value.fract() == 0.0 {
+        (value as i64).to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn has_encoded(matcher: &IrMatcher) -> bool {
+    match matcher {
+        IrMatcher::Encoded { .. } => true,
+        IrMatcher::Not(inner) | IrMatcher::TimestampPart { inner, .. } => has_encoded(inner),
+        IrMatcher::AnyOf(ms) | IrMatcher::AllOf(ms) => ms.iter().any(has_encoded),
+        _ => false,
+    }
+}
+
+fn expression(expr: Option<&'static str>, what: &str) -> Result<&'static str> {
+    expr.ok_or_else(|| ConvertError::UnsupportedModifier(what.into()))
+}
+
+/// The field and value of an item that holds a single value an in-list can
+/// carry: a case-insensitive string or a number.
+fn list_item(item: &IrDetectionItem) -> Option<(&str, &IrMatcher)> {
+    let field = item.field.as_deref()?;
+    match &item.matcher {
+        m @ (IrMatcher::Str {
+            case_insensitive: true,
+            ..
+        }
+        | IrMatcher::NumericEq(IrNumber::Literal(_))) => Some((field, m)),
+        _ => None,
+    }
+}
+
+/// The single list item of a detection with one item.
+fn single_list_item(det: &IrDetection) -> Option<&IrDetectionItem> {
+    match det {
+        IrDetection::AllOf(items) if items.len() == 1 => list_item(&items[0]).map(|_| &items[0]),
+        _ => None,
+    }
+}
+
+/// Rewrite the conditions of `ir` so that an AND or OR whose operands are
+/// detections holding one value of the same field each refers to a single
+/// detection of those items, which renders as an in-list as in pySigma.
+/// Selectors are expanded into explicit operands first.
+fn merge_condition_lists(ir: &mut IrRule) {
+    let mut merged = Vec::new();
+    for cond in &mut ir.conditions {
+        expand_selectors(cond, &ir.detections);
+        merge_condition(cond, &ir.detections, &mut merged);
+    }
+    ir.detections.extend(merged);
+}
+
+fn expand_selectors(cond: &mut IrCondition, detections: &HashMap<String, IrDetection>) {
+    match cond {
+        IrCondition::And(exprs) | IrCondition::Or(exprs) => exprs
+            .iter_mut()
+            .for_each(|e| expand_selectors(e, detections)),
+        IrCondition::Not(inner) => expand_selectors(inner, detections),
+        IrCondition::Selector {
+            quantifier,
+            pattern,
+        } => {
+            let names = selected_detections(detections, pattern);
+            if names.is_empty() {
+                return;
+            }
+            let operands = names
+                .into_iter()
+                .map(|n| IrCondition::Detection(n.clone()))
+                .collect();
+            match quantifier {
+                Quantifier::Any | Quantifier::Count(1) => *cond = IrCondition::Or(operands),
+                Quantifier::All => *cond = IrCondition::And(operands),
+                Quantifier::Count(_) => {}
+            }
+        }
+        IrCondition::Detection(_) => {}
+    }
+}
+
+fn merge_condition(
+    cond: &mut IrCondition,
+    detections: &HashMap<String, IrDetection>,
+    merged: &mut Vec<(String, IrDetection)>,
+) {
+    let all = match cond {
+        IrCondition::And(_) => true,
+        IrCondition::Or(_) => false,
+        IrCondition::Not(inner) => return merge_condition(inner, detections, merged),
+        _ => return,
+    };
+    let (IrCondition::And(exprs) | IrCondition::Or(exprs)) = cond else {
+        return;
+    };
+    exprs
+        .iter_mut()
+        .for_each(|e| merge_condition(e, detections, merged));
+    let Some(items) = exprs
+        .iter()
+        .map(|e| match e {
+            IrCondition::Detection(name) => detections.get(name).and_then(single_list_item),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return;
+    };
+    if items.len() < 2 || items.iter().any(|i| i.field != items[0].field) {
+        return;
+    }
+    let items = items.into_iter().cloned();
+    let det = if all {
+        IrDetection::AllOf(items.collect())
+    } else {
+        IrDetection::AnyOf(items.map(|i| IrDetection::AllOf(vec![i])).collect())
+    };
+    let name = (merged.len()..)
+        .map(|n| format!("_rsigma_in_list_{n}"))
+        .find(|n| !detections.contains_key(n))
+        .expect("an unused detection name");
+    merged.push((name.clone(), det));
+    *cond = IrCondition::Detection(name);
+}
+
+impl TextQueryTestBackend {
+    /// Render values of one field as `in` (OR, `all` false) or
+    /// `contains-all` (AND) when there are several and every one is a
+    /// case-insensitive string or a number.
+    fn in_list<'a>(
+        &self,
+        field: &str,
+        values: impl ExactSizeIterator<Item = &'a IrMatcher>,
+        all: bool,
+    ) -> Option<String> {
+        let c = self.config;
+        let (enabled, op) = if all {
+            (c.convert_and_as_in, c.and_in_operator)
+        } else {
+            (c.convert_or_as_in, c.or_in_operator)
+        };
+        if !enabled || values.len() < 2 {
+            return None;
+        }
+        let list = values
+            .map(|m| match m {
+                IrMatcher::Str {
+                    op,
+                    pattern,
+                    case_insensitive: true,
+                } => Some(quote_value(c, &full_value(*op, pattern))),
+                IrMatcher::NumericEq(IrNumber::Literal(n)) => Some(format_num(*n)),
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(
+            c.field_in_list_expression?
+                .replace("{field}", &text_escape_and_quote_field(c, field))
+                .replace("{op}", op?)
+                .replace("{list}", &list.join(c.list_separator)),
+        )
+    }
+
+    /// A value list of one item as an in-list.
+    fn matcher_in_list(&self, field: &str, matcher: &IrMatcher) -> Option<String> {
+        match matcher {
+            IrMatcher::AnyOf(ms) => self.in_list(field, ms.iter(), false),
+            IrMatcher::AllOf(ms) => self.in_list(field, ms.iter(), true),
+            _ => None,
+        }
+    }
+
+    /// A detection whose operands are single values of one field as an
+    /// in-list: the items of one selection (AND), or a list of selections
+    /// with one item each (OR).
+    fn detection_in_list(&self, det: &IrDetection) -> Option<String> {
+        let (items, all): (Vec<&IrDetectionItem>, bool) = match det {
+            IrDetection::AllOf(items) => (items.iter().collect(), true),
+            IrDetection::AnyOf(dets) => (
+                dets.iter()
+                    .map(|d| match d {
+                        IrDetection::AllOf(items) if items.len() == 1 => Some(&items[0]),
+                        _ => None,
+                    })
+                    .collect::<Option<_>>()?,
+                false,
+            ),
+            _ => return None,
+        };
+        let leaves = items
+            .into_iter()
+            .map(list_item)
+            .collect::<Option<Vec<_>>>()?;
+        let field = leaves.first()?.0;
+        if leaves.iter().any(|(f, _)| *f != field) {
+            return None;
+        }
+        self.in_list(field, leaves.iter().map(|(_, m)| *m), all)
+    }
+
+    /// Convert the matcher of a field item, rendering value lists as
+    /// in-lists where they qualify and every other matcher as the default
+    /// item conversion does.
+    fn convert_values(
+        &self,
+        item: &IrDetectionItem,
+        field: &str,
+        matcher: &IrMatcher,
+        state: &mut ConversionState,
+    ) -> Result<String> {
+        if let Some(list) = self.matcher_in_list(field, matcher) {
+            return Ok(list);
+        }
+        match matcher {
+            IrMatcher::Not(inner) => {
+                if let Some(list) = self.matcher_in_list(field, inner) {
+                    return negate(self, Operand::new(list, matcher_op(inner)));
+                }
+            }
+            IrMatcher::AnyOf(ms) | IrMatcher::AllOf(ms) => {
+                let mut parts = Vec::with_capacity(ms.len());
+                for m in ms {
+                    let expr = self.convert_values(item, field, m, state)?;
+                    if !expr.is_empty() {
+                        parts.push(Operand::new(expr, matcher_op(m)));
+                    }
+                }
+                return match parts.len() {
+                    0 => Ok(String::new()),
+                    1 => Ok(parts.remove(0).expr),
+                    _ => join(self, matches!(matcher, IrMatcher::AllOf(_)), parts),
+                };
+            }
+            _ => {}
+        }
+        let leaf = IrDetectionItem {
+            field: item.field.clone(),
+            matcher: matcher.clone(),
+            exists: item.exists,
+        };
+        default_convert_ir_detection_item(self, &leaf, state)
+    }
+}
+
 impl Backend for TextQueryTestBackend {
     fn name(&self) -> &str {
         "test"
@@ -159,7 +472,49 @@ impl Backend for TextQueryTestBackend {
         output_format: &str,
         pipeline_state: &PipelineState,
     ) -> Result<Vec<String>> {
-        convert_rule_via_ir(self, rule, output_format, pipeline_state)
+        // Encodings stay unexpanded until an item is converted, so their
+        // variants render as an OR rather than an in-list, as in pySigma.
+        let mut ir =
+            rsigma_ir::lower_rule(rule, &rsigma_ir::LowerOptions::default()).map_err(ir_err)?;
+        merge_condition_lists(&mut ir);
+        convert_lowered_rule(self, rule, &ir, output_format, pipeline_state)
+    }
+
+    fn convert_ir_detection(
+        &self,
+        det: &IrDetection,
+        state: &mut ConversionState,
+    ) -> Result<String> {
+        match det {
+            IrDetection::Keywords(matcher) if has_encoded(matcher) => {
+                let mut matcher = matcher.clone();
+                expand_encoded_matcher(&mut matcher).map_err(ir_err)?;
+                default_convert_ir_detection(self, &IrDetection::Keywords(matcher), state)
+            }
+            _ => match self.detection_in_list(det) {
+                Some(list) => Ok(list),
+                None => default_convert_ir_detection(self, det, state),
+            },
+        }
+    }
+
+    fn convert_ir_detection_item(
+        &self,
+        item: &IrDetectionItem,
+        state: &mut ConversionState,
+    ) -> Result<String> {
+        if has_encoded(&item.matcher) {
+            let mut item = item.clone();
+            expand_encoded_matcher(&mut item.matcher).map_err(ir_err)?;
+            return default_convert_ir_detection_item(self, &item, state);
+        }
+        match (item.field.as_deref(), &item.matcher) {
+            (
+                Some(field),
+                matcher @ (IrMatcher::AnyOf(_) | IrMatcher::AllOf(_) | IrMatcher::Not(_)),
+            ) => self.convert_values(item, field, matcher, state),
+            _ => default_convert_ir_detection_item(self, item, state),
+        }
     }
 
     // --- Condition combinators ---
@@ -206,7 +561,55 @@ impl Backend for TextQueryTestBackend {
         case_insensitive: bool,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
-        text_convert_field_str_ir(self.config, field, op, pattern, case_insensitive)
+        // pySigma picks the expression from the value's shape once the
+        // operator's wildcards are added, not from the operator.
+        let c = self.config;
+        let value = full_value(op, pattern);
+        let n = value.len();
+        let multi = |p: Option<&IrPatternPart>| p == Some(&IrPatternPart::WildcardMulti);
+        let ci = case_insensitive;
+        let (expr, value) = if multi(value.last()) && !has_wildcard(&value[..n - 1]) {
+            let expr = if ci {
+                c.startswith_expression
+            } else {
+                c.case_sensitive_startswith_expression
+            };
+            (expression(expr, "startswith")?, &value[..n - 1])
+        } else if multi(value.first()) && !has_wildcard(&value[1..]) {
+            let expr = if ci {
+                c.endswith_expression
+            } else {
+                c.case_sensitive_endswith_expression
+            };
+            (expression(expr, "endswith")?, &value[1..])
+        } else if n >= 2
+            && multi(value.first())
+            && multi(value.last())
+            && !has_wildcard(&value[1..n - 1])
+        {
+            let expr = if ci {
+                c.contains_expression
+            } else {
+                c.case_sensitive_contains_expression
+            };
+            (expression(expr, "contains")?, &value[1..n - 1])
+        } else if !ci {
+            (
+                expression(c.case_sensitive_match_expression, "cased")?,
+                &value[..],
+            )
+        } else if has_wildcard(&value) {
+            (
+                expression(c.wildcard_match_expression, "wildcard")?,
+                &value[..],
+            )
+        } else {
+            ("{field}={value}", &value[..])
+        };
+        Ok(ConvertResult::Query(
+            expr.replace("{field}", &text_escape_and_quote_field(c, field))
+                .replace("{value}", &quote_value(c, value)),
+        ))
     }
 
     fn convert_field_eq_num(
@@ -276,13 +679,12 @@ impl Backend for TextQueryTestBackend {
         cidr: &str,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
-        let f = text_escape_and_quote_field(self.config, field);
         let expr = self
             .config
             .cidr_expression
             .ok_or_else(|| ConvertError::UnsupportedModifier("cidr".into()))?;
         Ok(ConvertResult::Query(
-            expr.replace("{field}", &f).replace("{value}", cidr),
+            expr.replace("{field}", field).replace("{value}", cidr),
         ))
     }
 
@@ -401,7 +803,7 @@ impl Backend for TextQueryTestBackend {
         pattern: &IrPattern,
         _state: &mut ConversionState,
     ) -> Result<String> {
-        let v = text_convert_ir_pattern(self.config, pattern);
+        let v = quote_value(self.config, &pattern.parts);
         let expr = self
             .config
             .unbound_value_str_expression
@@ -814,7 +1216,7 @@ detection:
     condition: selection
 "#,
         );
-        assert_eq!(queries, vec!["CommandLine match *whoami*"]);
+        assert_eq!(queries, vec!["CommandLine contains \"whoami\""]);
     }
 
     #[test]
@@ -926,7 +1328,7 @@ detection:
     condition: selection
 "#,
         );
-        assert_eq!(queries, vec!["cidrmatch(\"10.0.0.0/8\", SourceIP)"]);
+        assert_eq!(queries, vec!["cidrmatch('SourceIP', \"10.0.0.0/8\")"]);
     }
 
     #[test]
@@ -960,10 +1362,7 @@ detection:
     condition: selection
 "#,
         );
-        assert_eq!(
-            queries,
-            vec!["CommandLine=\"whoami\" or CommandLine=\"ipconfig\""]
-        );
+        assert_eq!(queries, vec!["CommandLine in (\"whoami\", \"ipconfig\")"]);
     }
 
     #[test]
@@ -983,7 +1382,7 @@ detection:
         );
         assert_eq!(
             queries,
-            vec!["CommandLine=\"whoami\" and CommandLine=\"ipconfig\""]
+            vec!["CommandLine contains-all (\"whoami\", \"ipconfig\")"]
         );
     }
 
@@ -1005,7 +1404,7 @@ detection:
         );
         assert_eq!(
             queries,
-            vec!["(Image=\"a\" or Image=\"b\") and CommandLine=\"x\""]
+            vec!["(Image in (\"a\", \"b\")) and CommandLine=\"x\""]
         );
     }
 
@@ -1341,7 +1740,7 @@ detection:
         assert_eq!(
             queries,
             vec![
-                r#"Image endswith "\\x.exe" and (CommandLine contains " -f " or CommandLine contains " /f " or CommandLine contains " –f " or CommandLine contains " —f " or CommandLine contains " ―f ")"#
+                r#"Image endswith "\x.exe" and (CommandLine contains " -f " or CommandLine contains " /f " or CommandLine contains " –f " or CommandLine contains " —f " or CommandLine contains " ―f ")"#
             ]
         );
     }
@@ -1494,6 +1893,122 @@ detection:
                 "expected UnsupportedModifier for `{modifier}`, got: {err}",
             );
         }
+    }
+
+    #[test]
+    fn renders_like_pysigma_text_query_test_backend() {
+        let cases = [
+            ("A|endswith: 'x?y'", r#"A match "*x?y""#),
+            (r"A: 'a\*b'", r#"A="a\*b""#),
+            (r#"A|contains: 'a"b:c'"#, r#"A contains "a\"b\:c""#),
+            ("A: 'x&y'", r#"A="xy""#),
+            ("A: '*'", r#"A startswith """#),
+            ("A: ''", r#"A="""#),
+            (
+                r"A|startswith: 'C:\Windows\'",
+                r#"A startswith "C\:\Windows\""#,
+            ),
+            ("A|startswith: 'net*user'", r#"A match "net*user*""#),
+            ("A|neq: ['x', 'y']", r#"not (A in ("x", "y"))"#),
+            ("A: [1, 2]", "A in (1, 2)"),
+            ("A|contains: ['a*b', 'c']", r#"A in ("*a*b*", "*c*")"#),
+            (
+                "A|contains|all: ['x', 'y']",
+                r#"A contains-all ("*x*", "*y*")"#,
+            ),
+            ("A|cidr: '10.0.0.0/8'", r#"cidrmatch('A', "10.0.0.0/8")"#),
+            (r"A|re: 'a\sb/c'", r"A=/a\\sb\/c/"),
+            (
+                "A|base64offset|contains: 'abc'",
+                r#"A contains "YWJj" or A contains "FiY" or A contains "hYm""#,
+            ),
+        ];
+        for (item, expected) in cases {
+            let yaml = format!(
+                "title: t\nlogsource:\n    category: test\ndetection:\n    sel:\n        {item}\n    condition: sel\n"
+            );
+            assert_eq!(convert_rule_yaml(&yaml), vec![expected], "for `{item}`");
+        }
+    }
+
+    #[test]
+    fn same_field_items_of_a_selection_render_as_contains_all() {
+        let queries = convert_rule_yaml(
+            r#"
+title: t
+logsource:
+    category: test
+detection:
+    sel:
+        A|endswith: x
+        A|contains: y
+    condition: sel
+"#,
+        );
+        assert_eq!(queries, vec![r#"A contains-all ("*x", "*y*")"#]);
+    }
+
+    #[test]
+    fn same_field_selections_in_a_condition_render_as_an_in_list() {
+        let queries = convert_rule_yaml(
+            r#"
+title: t
+logsource:
+    category: test
+detection:
+    sel1:
+        A: x
+    sel2:
+        A: 'y*'
+    list:
+        - A: x
+        - A: 5
+    condition: (sel1 or sel2) and not list
+"#,
+        );
+        assert_eq!(
+            queries,
+            vec![r#"(A in ("x", "y*")) and not (A in ("x", 5))"#]
+        );
+    }
+
+    #[test]
+    fn selectors_never_match_merged_in_lists() {
+        let queries = convert_rule_yaml(
+            r#"
+title: t
+logsource:
+    category: test
+detection:
+    sel1:
+        A: x
+    sel2:
+        A: y
+    _hidden:
+        B: z
+    condition: (sel1 or sel2) and 1 of _*
+"#,
+        );
+        assert_eq!(queries, vec![r#"(A in ("x", "y")) and B="z""#]);
+    }
+
+    #[test]
+    fn cased_values_stay_out_of_in_lists() {
+        let queries = convert_rule_yaml(
+            r#"
+title: t
+logsource:
+    category: test
+detection:
+    sel:
+        A|cased: ['Ab', 'c*']
+    condition: sel
+"#,
+        );
+        assert_eq!(
+            queries,
+            vec![r#"A casematch "Ab" or A startswith_cased "c""#]
+        );
     }
 
     #[test]
