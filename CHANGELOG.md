@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Converted queries match what the engine evaluates
+### Converted queries match what the engine evaluates (#542)
 
 Every native backend now converts the encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) into an OR of one plain match per encoded variant, as pySigma does, instead of failing with `UnsupportedModifier`. The OR stays grouped under an enclosing AND, and eval and conversion share the expansion through the new `rsigma_ir::encoding` module, so both agree on the variants a rule matches. A UTF-16 encoding without a following `base64` or `base64offset` produces NUL characters, which the PostgreSQL and Fibratus backends reject with `UnsupportedValue`. An `expand` value with placeholders no pipeline resolved now names the placeholders in its conversion error.
 
