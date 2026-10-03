@@ -18,9 +18,9 @@ known_failures:
     actual: [1, 2]
   fibratus:
     type: match-mismatch
-    reason: "Fibratus events have no null values, so a field whose value is null is absent"
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so a null value counts as absent"
     actual: [1, 2]
   fibratus-nomacros:
     type: match-mismatch
-    reason: "Fibratus events have no null values, so a field whose value is null is absent"
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so a null value counts as absent"
     actual: [1, 2]

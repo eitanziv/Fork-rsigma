@@ -1,1 +1,1 @@
-(ps.name ~= 'cmd.exe') = false and (ps.exe ~= ps.parent.name) = false and (ps.username iin ('root', 'admin')) = false
+not (ps.name ~= 'cmd.exe') and not (ps.exe ~= ps.parent.name) and not (ps.username iin ('root', 'admin'))

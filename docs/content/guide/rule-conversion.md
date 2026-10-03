@@ -370,9 +370,9 @@ The Fibratus backend produces Fibratus rule YAML — the format consumed by [Fib
 | Regex (`re` modifier) | `regex(field, 'pattern') = true` (multi-value: one variadic call) |
 | CIDR (`cidr` modifier) | `cidr_contains(field, '10.0.0.0/8')` (multi-value: one variadic call) |
 | Numeric compare | `field > N`, `field >= N`, ... |
-| `exists` / `null` | `(field = false) = false` / `field = false`; a `null` value compares `field = false` |
+| `exists` / `null` | `field != ''` / `field = ''`; a `null` value compares `field = ''`, since an absent field reads as an empty string |
 | Fieldref | `field1 = field2` (native) |
-| Boolean AND/OR/NOT | Lowercase tokens, with OR groups inside AND explicitly parenthesized; `NOT` renders as `(expr) = false`, so a negated detection holds for an event that lacks the field |
+| Boolean AND/OR/NOT | Lowercase tokens, with OR groups inside AND explicitly parenthesized |
 
 Always pair the backend with the bundled `fibratus_windows` pipeline so Sigma's PascalCase fields (`Image`, `CommandLine`, `TargetFilename`, `TargetObject`, `DestinationIp`, ...) map to Fibratus's lowercase-dotted vocabulary (`ps.exe`, `ps.cmdline`, `file.path`, `registry.path`, `net.dip`) and so each logsource category is rewritten with the matching `evt.name` discriminator (`process_creation` -> `CreateProcess`, `network_connection` -> `Connect`, `dns_query` -> `QueryDns`, ...):
 

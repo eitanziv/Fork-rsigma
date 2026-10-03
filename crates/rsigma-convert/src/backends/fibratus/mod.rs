@@ -144,14 +144,15 @@ pub static FIBRATUS_CONFIG: TextQueryConfig = TextQueryConfig {
     cidr_expression: None,
     not_cidr_expression: None,
 
-    // Fibratus has no `null` token, and an event has no null values. An
-    // absent field compared with a boolean reads as `false`, so `= false`
-    // is true for an absent field and false for a string or number. A
-    // Sigma `field: null` and `|exists: false` both test absence; the
-    // negated form tests presence.
-    field_null_expression: "{field} = false",
-    field_exists_expression: Some("({field} = false) = false"),
-    field_not_exists_expression: Some("{field} = false"),
+    // Fibratus has no `null` token, and the rule engine resolves a field
+    // the event lacks to its type's zero value, so absence is only
+    // observable as an empty string. A Sigma `field: null` and
+    // `|exists: false` both compare with `''`; the negated form tests
+    // presence. Absence on a numeric, boolean, or IP field is not
+    // expressible.
+    field_null_expression: "{field} = ''",
+    field_exists_expression: Some("{field} != ''"),
+    field_not_exists_expression: Some("{field} = ''"),
 
     compare_op_expression: Some("{field} {op} {value}"),
     compare_ops: &[("lt", "<"), ("lte", "<="), ("gt", ">"), ("gte", ">=")],
@@ -399,20 +400,19 @@ impl Backend for FibratusBackend {
         }
     }
 
-    /// `not` over a comparison on an absent field is null, which drops the
-    /// event, while Sigma treats the negated detection as true. Comparing
-    /// the group with `false` reads null as `false`, so the negation holds.
     fn convert_condition_not(&self, expr: &str) -> Result<String> {
+        // Fibratus has a native `not` operator; no De Morgan push-down
+        // is required. Wrap in parens so precedence is unambiguous.
         if expr.is_empty() {
             return Ok(String::new());
         }
-        Ok(format!("({expr}) = false"))
+        Ok(format!("not ({expr})"))
     }
 
-    /// Fibratus groups in its own combinators: a negation parenthesizes its
-    /// operand, OR groups are always parenthesized, and a value list
-    /// collapses into a single list clause, so walker grouping would only
-    /// add redundant parentheses.
+    /// Fibratus groups in its own combinators: unary `not` only accepts a
+    /// parenthesized expression, OR groups are always parenthesized, and a
+    /// value list collapses into a single list clause, so walker grouping
+    /// would only add redundant parentheses.
     fn convert_condition_group(
         &self,
         expr: &str,

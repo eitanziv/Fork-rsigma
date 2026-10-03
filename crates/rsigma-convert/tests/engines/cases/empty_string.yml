@@ -11,3 +11,12 @@ events:
   - {CommandLine: 'x'}
   - {Image: 'C:\x.exe'}
 matches: [0]
+known_failures:
+  fibratus:
+    type: match-mismatch
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so an absent field equals ''"
+    actual: [0, 2]
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so an absent field equals ''"
+    actual: [0, 2]

@@ -13,3 +13,12 @@ events:
   - {Image: 'C:\cmd.exe', User: 'admin'}
   - {Image: 'C:\cmd.exe', User: ''}
 matches: [0, 1]
+known_failures:
+  fibratus:
+    type: match-mismatch
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so the null test also matches a present empty value"
+    actual: [0, 1, 3]
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so the null test also matches a present empty value"
+    actual: [0, 1, 3]

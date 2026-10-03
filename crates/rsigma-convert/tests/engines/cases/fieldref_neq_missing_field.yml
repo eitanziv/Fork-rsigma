@@ -14,3 +14,12 @@ events:
   - {ParentImage: 'a.exe'}
   - {CommandLine: 'x'}
 matches: [1, 2, 3, 4]
+known_failures:
+  fibratus:
+    type: match-mismatch
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so two absent fields compare equal"
+    actual: [1, 2, 3]
+  fibratus-nomacros:
+    type: match-mismatch
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so two absent fields compare equal"
+    actual: [1, 2, 3]
