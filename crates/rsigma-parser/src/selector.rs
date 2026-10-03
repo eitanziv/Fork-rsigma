@@ -42,7 +42,9 @@ pub fn detection_name_matches(pattern: &str, name: &str) -> bool {
         return name.ends_with(suffix);
     }
     if let Some((prefix, suffix)) = pattern.split_once('*') {
-        return name.starts_with(prefix) && name.ends_with(suffix);
+        return name.len() >= prefix.len() + suffix.len()
+            && name.starts_with(prefix)
+            && name.ends_with(suffix);
     }
     pattern == name
 }
@@ -97,6 +99,14 @@ mod tests {
         assert!(detection_name_matches("sel*main", "selection_main"));
         assert!(!detection_name_matches("sel*main", "filter_main"));
         assert!(!detection_name_matches("sel*main", "selection_alt"));
+    }
+
+    #[test]
+    fn star_middle_prefix_and_suffix_do_not_overlap() {
+        assert!(!detection_name_matches("sel*lection", "selection"));
+        assert!(detection_name_matches("sel*lection", "sellection"));
+        assert!(!detection_name_matches("a_*_main", "a_main"));
+        assert!(detection_name_matches("a_*_main", "a__main"));
     }
 
     #[test]
