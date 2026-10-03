@@ -201,7 +201,7 @@ Run [`rsigma config init`](../cli/config/init.md) to scaffold a full, commented 
 | `hygiene` | `rule hygiene` | `rules`, the optional sources (`metrics`, `metrics_window`, `fields`), the thresholds (`silent_threshold`, `stale_threshold`, `noisy_threshold`), and `fail_on`. See [Rule Hygiene](../guide/rule-hygiene.md). |
 | `mcp` | `mcp serve` | `mcp.http_addr` (the `--http` bind address; unset means stdio), `mcp.lint_config`, `mcp.rules_dir`, `mcp.allow_sigma_cli` (let `convert_rules` delegate non-native targets to an installed sigma-cli; off by default), `mcp.daemon_url`, `mcp.daemon_ca`, and `mcp.allow_operate_writes`. The MCP HTTP auth token and the daemon token are secrets and stay flag/env-only. Inert unless built with the `mcp` feature. |
 
-`daemon.correlation.emit_detections` defaults to `false`, so detections referenced only by correlations do not produce standalone output unless the correlation has top-level `generate: true`. The inverse `daemon.correlation.no_detections` key remains accepted for compatibility but is deprecated. {{ added "unreleased" }}
+`daemon.correlation.emit_detections` defaults to `false`, so detections referenced only by correlations do not produce standalone output unless the correlation has top-level `generate: true`. The inverse `daemon.correlation.no_detections` key remains accepted for compatibility but is deprecated, and the daemon prints a warning when it is set. A layer that sets only `no_detections` overrides `emit_detections` from lower layers, while `emit_detections` wins when one layer sets both. {{ added "unreleased" }}
 
 ### Secrets policy
 

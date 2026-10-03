@@ -1486,6 +1486,11 @@ fn apply_daemon_config(
         {
             args.timestamp_fallback = v;
         }
+        if correlation.no_detections.is_some() {
+            eprintln!(
+                "warning: daemon.correlation.no_detections is deprecated; use daemon.correlation.emit_detections"
+            );
+        }
         if !explicit("emit_detections") && !explicit("no_detections") {
             if let Some(v) = correlation.emit_detections {
                 args.emit_detections = v;
@@ -2080,6 +2085,49 @@ mod tests {
         apply_daemon_config(&mut args, &matches, base);
         assert!(!args.emit_detections);
         assert!(args.no_detections);
+    }
+
+    #[test]
+    fn legacy_no_detections_key_survives_the_defaults_layer() {
+        use config::Merge;
+
+        let layered = |file: &str| config::defaults::defaults_partial().merge(partial(file));
+
+        let (mut args, matches) = parse(&["daemon"]);
+        apply_daemon_config(&mut args, &matches, config::defaults::defaults_partial());
+        assert!(!args.emit_detections);
+
+        let (mut args, matches) = parse(&["daemon"]);
+        let base = layered("daemon:\n  correlation:\n    no_detections: false\n");
+        apply_daemon_config(&mut args, &matches, base);
+        assert!(args.emit_detections);
+
+        let (mut args, matches) = parse(&["daemon"]);
+        let base = layered("daemon:\n  correlation:\n    no_detections: true\n");
+        apply_daemon_config(&mut args, &matches, base);
+        assert!(!args.emit_detections);
+
+        // The current key wins when one layer sets both.
+        let (mut args, matches) = parse(&["daemon"]);
+        let base = layered(
+            "daemon:\n  correlation:\n    emit_detections: false\n    no_detections: false\n",
+        );
+        apply_daemon_config(&mut args, &matches, base);
+        assert!(!args.emit_detections);
+
+        // A higher layer's `emit_detections` beats a lower layer's legacy key.
+        let (mut args, matches) = parse(&["daemon"]);
+        let base = layered("daemon:\n  correlation:\n    no_detections: false\n").merge(partial(
+            "daemon:\n  correlation:\n    emit_detections: false\n",
+        ));
+        apply_daemon_config(&mut args, &matches, base);
+        assert!(!args.emit_detections);
+
+        // CLI flags still beat both keys.
+        let (mut args, matches) = parse(&["daemon", "--no-detections"]);
+        let base = layered("daemon:\n  correlation:\n    no_detections: false\n");
+        apply_daemon_config(&mut args, &matches, base);
+        assert!(!args.emit_detections);
     }
 
     #[test]

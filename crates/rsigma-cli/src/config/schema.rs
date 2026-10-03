@@ -479,7 +479,12 @@ impl Merge for CorrelationPartial {
             max_group_entries: over.max_group_entries.or(self.max_group_entries),
             timestamp_fields: over.timestamp_fields.or(self.timestamp_fields),
             timestamp_fallback: over.timestamp_fallback.or(self.timestamp_fallback),
-            emit_detections: over.emit_detections.or(self.emit_detections),
+            // A layer that only sets the legacy inverse key still overrides
+            // `emit_detections` from lower layers, including the default.
+            emit_detections: over
+                .emit_detections
+                .or(over.no_detections.map(|v| !v))
+                .or(self.emit_detections),
             no_detections: over.no_detections.or(self.no_detections),
         }
     }
