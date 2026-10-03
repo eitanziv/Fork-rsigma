@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Processing pipelines follow the pySigma condition and transformation dialect
+### Processing pipelines follow the pySigma condition and transformation dialect (#539)
 
 Processing pipelines now apply pySigma condition linking consistently at rule, detection-item, and field-name scope. The canonical `*_cond_op`, `*_cond_not`, and `*_cond_expr` keys are supported, `rule_cond_expression` remains an alias, condition collections accept lists or identifier-keyed mappings, and list identifiers are one-based. Unknown transformation-item keys, invalid operators, and unresolved expression references now fail pipeline parsing instead of being ignored.
 
