@@ -1,4 +1,6 @@
 title: Fieldref
+logsource:
+  category: test
 detection:
   s:
     ps.name|fieldref: ps.exe

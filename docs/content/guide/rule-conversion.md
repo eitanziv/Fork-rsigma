@@ -409,6 +409,8 @@ When a Sigma rule lists `fields:`, the PostgreSQL backend emits `SELECT field1, 
 
 ```yaml
 title: Sad Puppy in Dog Supply Line
+logsource:
+    category: dog_supply
 detection:
     selection:
         status: "sad"

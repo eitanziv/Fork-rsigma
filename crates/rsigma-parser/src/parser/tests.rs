@@ -1370,6 +1370,8 @@ detection:
 level: low
 ---
 title: Invalid Rule
+logsource:
+    category: test
 detection:
     selection:
         field: value

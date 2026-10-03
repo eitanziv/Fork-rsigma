@@ -210,3 +210,37 @@ fn parse_error_any(yaml: &str) -> String {
     assert!(collection.is_empty(), "expected a parse error for:\n{yaml}");
     collection.errors.join("\n")
 }
+
+#[test]
+fn requires_a_logsource() {
+    let detection = "detection:\n    sel:\n        F: x\n    condition: sel\n";
+    for (logsource, expected) in [
+        ("", "Missing required field 'logsource'"),
+        (
+            "logsource: {}\n",
+            "at least one of category, product, or service",
+        ),
+        (
+            "logsource:\n    definition: d\n",
+            "at least one of category, product, or service",
+        ),
+        (
+            "logsource:\n    category: 5\n",
+            "logsource category must be a string",
+        ),
+        ("logsource: windows\n", "logsource must be a mapping"),
+    ] {
+        let err = parse_error(&format!("title: T\n{logsource}{detection}"));
+        assert!(err.contains(expected), "{logsource:?}: {err}");
+    }
+    for logsource in [
+        "logsource:\n    product: windows\n",
+        "logsource:\n    service: sysmon\n    category: null\n",
+    ] {
+        assert_parses(&format!("title: T\n{logsource}{detection}"));
+    }
+
+    let filter =
+        "title: F\nfilter:\n    rules: any\n    sel:\n        F: x\n    condition: not sel\n";
+    assert!(parse_error_any(filter).contains("Missing required field 'logsource'"));
+}

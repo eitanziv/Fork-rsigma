@@ -71,10 +71,10 @@ pub(super) fn parse_filter_rule(value: &Value, warnings: &mut Vec<String>) -> Re
         return Err(SigmaParserError::MissingField("filter".into()));
     };
 
-    let logsource = m
-        .get(val_key("logsource"))
-        .map(parse_logsource)
-        .transpose()?;
+    let logsource = Some(parse_logsource(
+        m.get(val_key("logsource"))
+            .ok_or_else(|| SigmaParserError::MissingField("logsource".into()))?,
+    )?);
 
     let standard_filter_keys: &[&str] = &[
         "author",

@@ -127,6 +127,16 @@ pub(crate) fn cmd_reverse(args: ReverseArgs, ctx: OutputCtx) {
         process::exit(crate::exit_code::CONFIG_ERROR);
     }
 
+    if args.logsource_product.is_none()
+        && args.logsource_category.is_none()
+        && args.logsource_service.is_none()
+    {
+        eprintln!(
+            "A Sigma rule needs a logsource; pass --logsource-product, --logsource-category, or --logsource-service"
+        );
+        process::exit(crate::exit_code::CONFIG_ERROR);
+    }
+
     let level = parse_enum::<Level>(args.level.as_deref(), "level");
     let status = parse_enum::<Status>(args.status.as_deref(), "status");
     let single = queries.len() == 1;

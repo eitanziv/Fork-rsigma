@@ -672,6 +672,8 @@ detection:
         let (_, index) = build(
             r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         process.command_line|contains: 'whoami'
@@ -696,6 +698,8 @@ detection:
         let (_, index) = build(
             r#"
 title: Nested
+logsource:
+    category: test
 detection:
     selection:
         actor.id: 'user123'
@@ -717,6 +721,8 @@ detection:
         let (_, index) = build(
             r#"
 title: Contains
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains: 'whoami'
@@ -736,6 +742,8 @@ detection:
         let (_, index) = build(
             r#"
 title: Keywords
+logsource:
+    category: test
 detection:
     keywords:
         - 'vssadmin delete shadows'
@@ -767,6 +775,8 @@ detection:
                 "ci-contains-upper",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains: 'whoami'
@@ -779,6 +789,8 @@ detection:
                 "ci-contains-lower",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains: 'whoami'
@@ -791,6 +803,8 @@ detection:
                 "ci-contains-miss",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains: 'whoami'
@@ -803,6 +817,8 @@ detection:
                 "cased-contains-exact",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains|cased: 'WhoAmi'
@@ -815,6 +831,8 @@ detection:
                 "cased-contains-wrong-case",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains|cased: 'WhoAmi'
@@ -827,6 +845,8 @@ detection:
                 "ci-keyword-upper",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     keywords:
         - 'mimikatz'
@@ -839,6 +859,8 @@ detection:
                 "ci-keyword-lower",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     keywords:
         - 'mimikatz'
@@ -851,6 +873,8 @@ detection:
                 "ci-unicode-contains",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         User|contains: 'Ärzte'
@@ -863,6 +887,8 @@ detection:
                 "ci-unicode-contains-folded-haystack",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         User|contains: 'ärzte'
@@ -875,6 +901,8 @@ detection:
                 "ci-exact-mixed-case",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         Image: 'Cmd.EXE'
@@ -887,6 +915,8 @@ detection:
                 "cased-exact-match",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         Image|cased: 'Cmd.exe'
@@ -899,6 +929,8 @@ detection:
                 "cased-exact-wrong-case",
                 r#"
 title: T
+logsource:
+    category: test
 detection:
     selection:
         Image|cased: 'Cmd.exe'
@@ -938,7 +970,7 @@ detection:
             "        EventID|gte: 4000\n",
         ] {
             let yaml = format!(
-                "title: T\ndetection:\n    selection:\n{detection}    condition: selection\n"
+                "title: T\nlogsource:\n    category: test\ndetection:\n    selection:\n{detection}    condition: selection\n"
             );
             let (_, index) = build(&yaml);
             assert_eq!(index.always_count(), 0, "for {detection}");
@@ -951,6 +983,8 @@ detection:
         let (_, index) = build(
             r#"
 title: Cidr
+logsource:
+    category: test
 detection:
     selection:
         DestinationIp|cidr: '10.0.0.0/8'
@@ -969,6 +1003,8 @@ detection:
         let (_, index) = build(
             r#"
 title: Negated
+logsource:
+    category: test
 detection:
     selection:
         Image: 'cmd.exe'
@@ -986,6 +1022,8 @@ detection:
         let (_, index) = build(
             r#"
 title: Either
+logsource:
+    category: test
 detection:
     selection:
         - Image|endswith: '\wmic.exe'
@@ -1010,12 +1048,16 @@ detection:
         let (_, index) = build(
             r#"
 title: Numbers
+logsource:
+    category: test
 detection:
     selection:
         EventID: 4688
     condition: selection
 ---
 title: Arrays
+logsource:
+    category: test
 detection:
     selection:
         Image|endswith: '\wmic.exe'
@@ -1035,6 +1077,8 @@ detection:
         let (_, index) = build(
             r#"
 title: A
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains:
@@ -1043,12 +1087,16 @@ detection:
     condition: selection
 ---
 title: B
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains: 'alpha'
     condition: selection
 ---
 title: C
+logsource:
+    category: test
 detection:
     selection:
         Image: 'x'
@@ -1072,24 +1120,32 @@ detection:
     fn append_rule_never_selects_less_than_build() {
         let yaml = r#"
 title: Exact
+logsource:
+    category: test
 detection:
     selection:
         EventType: 'login'
     condition: selection
 ---
 title: Contains
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains: 'whoami'
     condition: selection
 ---
 title: Keywords
+logsource:
+    category: test
 detection:
     keywords:
         - 'mimikatz'
     condition: keywords
 ---
 title: Negated
+logsource:
+    category: test
 detection:
     selection:
         Image: 'cmd.exe'
@@ -1136,6 +1192,8 @@ detection:
             let collection = parse_sigma_yaml(
                 r#"
 title: Contains
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains: 'whoami'
@@ -1175,6 +1233,8 @@ detection:
     condition: selection or not filter
 ---
 title: Product Less Negated
+logsource:
+    category: test
 detection:
     selection:
         a: 'b'

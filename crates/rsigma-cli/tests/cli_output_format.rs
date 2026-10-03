@@ -618,6 +618,8 @@ fn reverse_csv_warns_and_keeps_yaml() {
             "--from",
             "lucene",
             "EventID:1",
+            "--logsource-product",
+            "windows",
             "--output-format",
             "csv",
         ])

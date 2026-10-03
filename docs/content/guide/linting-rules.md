@@ -148,6 +148,8 @@ For one-off cases inside a single rule, use comments. These work both as full-li
 ```yaml
 # rsigma-disable
 title: A rule we know breaks one check
+logsource:
+    category: process_creation
 detection:
     selection:
         # rsigma-disable-next-line wildcard_only_value

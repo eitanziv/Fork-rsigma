@@ -1,4 +1,6 @@
 title: Fieldref substring
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|fieldref|contains: ps.exe

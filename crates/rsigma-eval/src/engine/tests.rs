@@ -460,6 +460,9 @@ detection:
 level: high
 ---
 title: Filter SYSTEM
+logsource:
+    product: windows
+    category: process_creation
 filter:
     rules:
         - rule-001
@@ -499,6 +502,8 @@ detection:
     condition: sel
 ---
 title: Filter Out Test Env
+logsource:
+    product: windows
 filter:
     rules: []
     selection:
@@ -569,6 +574,8 @@ detection:
 level: critical
 ---
 title: Exclude Admin Tools
+logsource:
+    product: windows
 filter:
     rules:
         - Detect Mimikatz
@@ -605,6 +612,8 @@ detection:
 level: critical
 ---
 title: Exclude Admin Tools
+logsource:
+    product: windows
 filter:
     rules:
         - detect_mimikatz
@@ -644,6 +653,8 @@ detection:
     condition: selection
 ---
 title: Exclude Admin
+logsource:
+    category: test
 filter:
     rules: [target]
     selection:
@@ -680,6 +691,8 @@ detection:
     condition: sel_target
 ---
 title: Exclude Known Users
+logsource:
+    category: test
 filter:
     rules:
         - 00000000-0000-4000-8000-000000000001
@@ -715,6 +728,8 @@ detection:
     condition: selection
 ---
 title: Exclude Bob
+logsource:
+    category: test
 filter:
     rules: [user_activity]
     main:
@@ -747,6 +762,8 @@ detection:
     condition: selection
 ---
 title: Exclude Alice
+logsource:
+    category: test
 filter:
     rules: [user_activity]
     selection:
@@ -756,6 +773,8 @@ filter:
     condition: not all of them
 ---
 title: Exclude Helper Host
+logsource:
+    category: test
 filter:
     rules: [user_activity]
     _helper:
@@ -795,6 +814,8 @@ detection:
 level: medium
 ---
 title: Exclude Trusted
+logsource:
+    product: windows
 filter:
     rules:
         - net-001
@@ -847,6 +868,8 @@ detection:
     condition: sel
 ---
 title: Exclude Test
+logsource:
+    product: windows
 filter:
     rules: []
     selection:

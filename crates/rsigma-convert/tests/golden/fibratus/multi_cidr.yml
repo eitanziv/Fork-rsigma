@@ -1,4 +1,6 @@
 title: Multi Cidr
+logsource:
+  category: test
 detection:
   s:
     net.dip|cidr:

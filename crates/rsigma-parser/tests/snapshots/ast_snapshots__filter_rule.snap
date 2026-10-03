@@ -21,7 +21,17 @@ FilterRule {
     falsepositives: [],
     level: None,
     scope: [],
-    logsource: None,
+    logsource: Some(
+        LogSource {
+            category: Some(
+                "test",
+            ),
+            product: None,
+            service: None,
+            definition: None,
+            custom: {},
+        },
+    ),
     rules: Specific(
         [
             "12345678-1234-1234-1234-123456789012",

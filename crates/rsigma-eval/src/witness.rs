@@ -530,7 +530,7 @@ mod tests {
     }
 
     fn rule(detection: &str) -> String {
-        format!("title: T\ndetection:\n{detection}")
+        format!("title: T\nlogsource:\n    category: test\ndetection:\n{detection}")
     }
 
     #[test]

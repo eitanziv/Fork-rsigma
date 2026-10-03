@@ -335,6 +335,8 @@ detection:
     condition: selection
 ---
 title: Filter
+logsource:
+    category: test
 filter:
     rules:
         - non-existent

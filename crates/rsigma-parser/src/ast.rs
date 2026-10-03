@@ -804,6 +804,9 @@ pub struct FilterRule {
     pub falsepositives: Vec<String>,
     pub level: Option<Level>,
     pub scope: Vec<String>,
+    /// The log source the filter applies to. The parser always sets it, as the
+    /// Sigma filter specification requires; `None` on a filter built in code
+    /// applies it to rules of any log source.
     pub logsource: Option<LogSource>,
 
     /// Rules this filter applies to (by ID or name), or all rules.

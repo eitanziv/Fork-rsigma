@@ -1848,6 +1848,8 @@ detection:
     condition: selection
 ---
 title: Exclude Service Accounts
+logsource:
+    category: auth
 filter:
     rules:
         - failed-auth

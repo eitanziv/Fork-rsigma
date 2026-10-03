@@ -1,4 +1,6 @@
 title: String List In
+logsource:
+  category: test
 detection:
   s:
     ps.name:

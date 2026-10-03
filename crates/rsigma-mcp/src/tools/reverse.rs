@@ -53,7 +53,7 @@ pub struct ReverseInput {
 impl RsigmaMcp {
     /// Convert a SIEM query into a draft Sigma rule.
     #[tool(
-        description = "Reverse-convert a SIEM query into a draft Sigma rule (YAML). `dialect` selects the source query language (`lucene` today, the Lucene / Elasticsearch query_string subset: field:value with wildcards, quoted phrases, /regex/, [a TO b] ranges, comparison shorthand, field:(a OR b) groups, _exists_, keyword terms, and AND/OR/NOT with grouping). A query carries no metadata, so pass title/id/level/status and logsource_product/category/service; the result is a reviewable skeleton. Boosting, fuzzy/proximity, and non-numeric ranges are reported as errors."
+        description = "Reverse-convert a SIEM query into a draft Sigma rule (YAML). `dialect` selects the source query language (`lucene` today, the Lucene / Elasticsearch query_string subset: field:value with wildcards, quoted phrases, /regex/, [a TO b] ranges, comparison shorthand, field:(a OR b) groups, _exists_, keyword terms, and AND/OR/NOT with grouping). A query carries no metadata, so pass title/id/level/status and at least one of logsource_product/category/service, which a Sigma rule requires; the result is a reviewable skeleton. Boosting, fuzzy/proximity, and non-numeric ranges are reported as errors."
     )]
     async fn reverse_convert(
         &self,
@@ -155,6 +155,15 @@ mod tests {
             .unwrap();
         assert_eq!(v["ok"], false, "envelope: {v}");
         assert!(v["error"].as_str().unwrap().contains("boost"));
+    }
+
+    #[test]
+    fn missing_logsource_reports_error_envelope() {
+        let mut i = input("EventID:1");
+        i.logsource_product = None;
+        let v = handler().run_reverse_convert(i).unwrap();
+        assert_eq!(v["ok"], false, "envelope: {v}");
+        assert!(v["error"].as_str().unwrap().contains("logsource"), "{v}");
     }
 
     #[test]

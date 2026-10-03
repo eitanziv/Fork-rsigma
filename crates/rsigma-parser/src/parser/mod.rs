@@ -267,8 +267,27 @@ pub(super) fn parse_logsource(value: &Value) -> Result<LogSource> {
         .as_mapping()
         .ok_or_else(|| SigmaParserError::InvalidRule("logsource must be a mapping".into()))?;
 
-    let mut custom = HashMap::new();
     let known_keys = ["category", "product", "service", "definition"];
+    for key in known_keys {
+        if let Some(v) = m.get(val_key(key))
+            && !v.is_string()
+            && !v.is_null()
+        {
+            return Err(SigmaParserError::InvalidRule(format!(
+                "logsource {key} must be a string"
+            )));
+        }
+    }
+    if ["category", "product", "service"]
+        .iter()
+        .all(|key| get_str(m, key).is_none())
+    {
+        return Err(SigmaParserError::InvalidRule(
+            "logsource must set at least one of category, product, or service".into(),
+        ));
+    }
+
+    let mut custom = HashMap::new();
 
     for (k, v) in m {
         let key_str = k.as_str().unwrap_or("");

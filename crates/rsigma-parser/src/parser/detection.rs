@@ -45,11 +45,10 @@ pub(super) fn parse_detection_rule(value: &Value, warnings: &mut Vec<String>) ->
         crate::version::array_matching_enabled(sigma_version),
     )?;
 
-    let logsource = m
-        .get(val_key("logsource"))
-        .map(parse_logsource)
-        .transpose()?
-        .unwrap_or_default();
+    let logsource = parse_logsource(
+        m.get(val_key("logsource"))
+            .ok_or_else(|| SigmaParserError::MissingField("logsource".into()))?,
+    )?;
 
     // Custom attributes: merge arbitrary top-level keys and the entries of the
     // dedicated `custom_attributes:` mapping. Entries in `custom_attributes:`

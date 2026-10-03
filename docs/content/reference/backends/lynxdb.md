@@ -107,6 +107,8 @@ LynxDB's `search` evaluates Boolean operators in the order `NOT > OR > AND`, whi
 
 ```yaml
 title: Whoami
+logsource:
+    category: process_creation
 detection:
     selection:
         CommandLine|contains: 'whoami'

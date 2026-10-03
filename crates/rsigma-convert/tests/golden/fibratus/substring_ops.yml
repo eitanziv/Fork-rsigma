@@ -1,4 +1,6 @@
 title: Substring Ops
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|contains: mimikatz

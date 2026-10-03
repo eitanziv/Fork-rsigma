@@ -80,6 +80,8 @@ level: high
 fn filter_rule() {
     let yaml = r#"
 title: Exclude Known Good
+logsource:
+    category: test
 filter:
     rules:
         - 12345678-1234-1234-1234-123456789012

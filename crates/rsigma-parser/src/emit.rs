@@ -136,8 +136,9 @@ fn emit_related(out: &mut String, related: &[Related]) {
 }
 
 fn emit_logsource(out: &mut String, logsource: &LogSource) {
-    // An empty `logsource:` key parses as null, which the parser rejects (it
-    // must be a mapping); emit an explicit empty mapping instead.
+    // An empty `logsource:` key parses as null, which the parser reports as
+    // not being a mapping; an explicit empty mapping gets the clearer error
+    // that no log source field is set.
     if logsource.category.is_none()
         && logsource.product.is_none()
         && logsource.service.is_none()
@@ -702,11 +703,21 @@ mod tests {
     }
 
     #[test]
-    fn empty_logsource_emits_a_mapping_that_reparses() {
-        let emitted = assert_round_trips(
-            "title: No Logsource\nlogsource: {}\ndetection:\n    selection:\n        Field: value\n    condition: selection\n",
-        );
+    fn empty_logsource_emits_a_mapping_the_parser_rejects() {
+        let mut rule = parse_sigma_yaml(
+            "title: No Logsource\nlogsource:\n    category: test\ndetection:\n    selection:\n        Field: value\n    condition: selection\n",
+        )
+        .unwrap()
+        .rules
+        .remove(0);
+        rule.logsource = LogSource::default();
+        let emitted = emit_rule_yaml(&rule);
         assert!(emitted.contains("logsource: {}"), "{emitted}");
+        let errors = parse_sigma_yaml(&emitted).unwrap().errors;
+        assert!(
+            errors[0].contains("at least one of category, product, or service"),
+            "{errors:?}"
+        );
     }
 
     #[test]

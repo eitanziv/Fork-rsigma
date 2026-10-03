@@ -681,6 +681,8 @@ mod tests {
         let q = run(r#"
 title: First Stage
 id: 00000000-0000-0000-0000-000000000001
+logsource:
+  category: test
 detection:
   s:
     evt.name: Connect
@@ -688,6 +690,8 @@ detection:
 ---
 title: Second Stage
 id: 00000000-0000-0000-0000-000000000002
+logsource:
+  category: test
 detection:
   s:
     evt.name: CreateProcess
@@ -721,6 +725,8 @@ correlation:
         let q = run(r#"
 title: First
 id: 00000000-0000-0000-0000-00000000000a
+logsource:
+  category: test
 detection:
   s:
     evt.name: Connect
@@ -728,6 +734,8 @@ detection:
 ---
 title: Second
 id: 00000000-0000-0000-0000-00000000000b
+logsource:
+  category: test
 detection:
   s:
     evt.name: CreateProcess
@@ -768,6 +776,8 @@ correlation:
         let q = run(r#"
 title: R1
 id: 00000000-0000-0000-0000-000000000010
+logsource:
+  category: test
 detection:
   s:
     evt.name: A
@@ -775,6 +785,8 @@ detection:
 ---
 title: R2
 id: 00000000-0000-0000-0000-000000000011
+logsource:
+  category: test
 detection:
   s:
     evt.name: B
@@ -802,6 +814,8 @@ correlation:
             r#"
 title: R1
 id: 00000000-0000-0000-0000-000000000010
+logsource:
+  category: test
 detection:
   s:
     evt.name: A
@@ -809,6 +823,8 @@ detection:
 ---
 title: R2
 id: 00000000-0000-0000-0000-000000000011
+logsource:
+  category: test
 detection:
   s:
     evt.name: B
@@ -852,6 +868,8 @@ correlation:
             r#"
 title: R1
 id: 00000000-0000-0000-0000-000000000020
+logsource:
+  category: test
 detection:
   s:
     evt.name: A
@@ -859,6 +877,8 @@ detection:
 ---
 title: R2
 id: 00000000-0000-0000-0000-000000000021
+logsource:
+  category: test
 detection:
   s:
     evt.name: B
@@ -866,6 +886,8 @@ detection:
 ---
 title: R3
 id: 00000000-0000-0000-0000-000000000022
+logsource:
+  category: test
 detection:
   s:
     evt.name: C
@@ -906,6 +928,8 @@ correlation:
         let yaml = r#"
 title: R1
 id: 00000000-0000-0000-0000-000000000030
+logsource:
+  category: test
 detection:
   s:
     evt.name: A
@@ -913,6 +937,8 @@ detection:
 ---
 title: R2
 id: 00000000-0000-0000-0000-000000000031
+logsource:
+  category: test
 detection:
   s:
     evt.name: B
@@ -920,6 +946,8 @@ detection:
 ---
 title: R3
 id: 00000000-0000-0000-0000-000000000032
+logsource:
+  category: test
 detection:
   s:
     evt.name: C
@@ -927,6 +955,8 @@ detection:
 ---
 title: R4
 id: 00000000-0000-0000-0000-000000000033
+logsource:
+  category: test
 detection:
   s:
     evt.name: D
@@ -1006,6 +1036,8 @@ correlation:
     const TWO_RULE_TEMPORAL: &str = r#"
 title: R1
 id: 00000000-0000-0000-0000-000000000050
+logsource:
+  category: test
 detection:
   s:
     evt.name: A
@@ -1013,6 +1045,8 @@ detection:
 ---
 title: R2
 id: 00000000-0000-0000-0000-000000000051
+logsource:
+  category: test
 detection:
   s:
     evt.name: B
@@ -1236,6 +1270,8 @@ correlation:
             r#"
 title: R1
 id: 00000000-0000-0000-0000-000000000040
+logsource:
+  category: test
 detection:
   s:
     evt.name: A
@@ -1243,6 +1279,8 @@ detection:
 ---
 title: R2
 id: 00000000-0000-0000-0000-000000000041
+logsource:
+  category: test
 detection:
   s:
     evt.name: B
@@ -1274,6 +1312,8 @@ correlation:
         let q = run(r#"
 title: Failed Auth
 id: 00000000-0000-0000-0000-000000000020
+logsource:
+  category: test
 detection:
   s:
     evt.name: AuthFail
@@ -1305,6 +1345,8 @@ correlation:
         let err = run(r#"
 title: R
 id: 00000000-0000-0000-0000-000000000030
+logsource:
+  category: test
 detection:
   s:
     evt.name: X
@@ -1331,6 +1373,8 @@ correlation:
         let q = run(r#"
 title: R
 id: 00000000-0000-0000-0000-000000000035
+logsource:
+  category: test
 detection:
   s:
     evt.name: X
@@ -1362,6 +1406,8 @@ correlation:
         let q = run(r#"
 title: AuthFail
 id: 00000000-0000-0000-0000-000000000040
+logsource:
+  category: test
 detection:
   s:
     evt.name: AuthFail
@@ -1402,6 +1448,8 @@ correlation:
             r#"
 title: R
 id: 00000000-0000-0000-0000-000000000050
+logsource:
+  category: test
 detection:
   s:
     evt.name: X
@@ -1440,6 +1488,8 @@ correlation:
             r#"
 title: R
 id: 00000000-0000-0000-0000-000000000060
+logsource:
+  category: test
 detection:
   s:
     evt.name: X

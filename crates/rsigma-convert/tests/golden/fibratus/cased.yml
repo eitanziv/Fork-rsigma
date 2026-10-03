@@ -1,4 +1,6 @@
 title: Cased
+logsource:
+  category: test
 detection:
   s:
     ps.name|cased: Cmd.exe

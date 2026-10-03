@@ -1,4 +1,6 @@
 title: Field Eq
+logsource:
+  category: test
 detection:
   s:
     ps.name: cmd.exe
