@@ -234,7 +234,7 @@ GROUP BY "User", session_id
 HAVING COUNT(*) >= 3 AND (MAX(time) - MIN(time)) <= INTERVAL '3600 seconds'
 ```
 
-The `gap` is honored exactly. The `timespan` cap is enforced as the trailing `HAVING` filter, which drops sessions longer than the cap rather than splitting them mid-session as the runtime engine does; `rsigma backend convert` prints a warning to stderr noting this. Tumbling and session apply to every correlation type. For `temporal`/`temporal_ordered`, the combined detections (the `matched` CTE) are bucketed or sessionized and each window counts the distinct referenced rules with `COUNT(DISTINCT rule_name)`; order is not enforced for `temporal_ordered`, the same limitation as the default temporal path.
+The `gap` is honored exactly. The `timespan` cap is enforced as the trailing `HAVING` filter, which drops sessions longer than the cap rather than splitting them mid-session as the runtime engine does; `rsigma backend convert` prints a warning to stderr noting this. Tumbling and session apply to every correlation type. For `temporal`/`temporal_ordered`, the combined detections (the `matched` CTE) are bucketed or sessionized and each window counts the distinct referenced rules with `COUNT(DISTINCT rule_name)`. `temporal_ordered` also requires the rules to hit in `rules` order within the window. {{ added "unreleased" }}
 
 #### Choosing the strategy at conversion time
 

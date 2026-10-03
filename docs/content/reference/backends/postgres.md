@@ -220,8 +220,8 @@ The backend handles every aggregation type:
 | `value_avg` | `GROUP BY ... HAVING AVG(<field>) >= N`. |
 | `value_percentile` | `GROUP BY ... HAVING PERCENTILE_CONT(p) WITHIN GROUP (ORDER BY <field>) >= N`. |
 | `value_median` | Same as `value_percentile` with `p = 0.5`. |
-| `temporal` | CTE: base detections matched in one `WITH combined_events AS (...)`, then a `SELECT <group-by>, COUNT(DISTINCT rule_name) AS distinct_rules FROM combined HAVING ... >= N`. |
-| `temporal_ordered` | Same CTE shape as `temporal`. Order among referenced rules is not enforced. |
+| `temporal` | CTE: the referenced rules' hits selected from the source table in `WITH matched AS (SELECT * FROM <table> WHERE rule_name IN (...))`, then a `SELECT <group-by>, COUNT(DISTINCT rule_name) AS distinct_rules FROM matched HAVING ... >= N`. |
+| `temporal_ordered` | The `temporal` query plus one CTE per referenced rule that takes the earliest hit of that rule at or after the previous rule's step, per group (`MIN(CASE WHEN rule_name = '<rule>' AND <ts> >= __step_<n-1> THEN <ts> END) OVER (PARTITION BY <group-by>)`). `HAVING ... AND MAX(__step_<last>) IS NOT NULL` keeps a group only when the rules hit in `rules` order; equal timestamps count as in order. {{ added "unreleased" }} |
 
 Non-temporal correlations that reference detection rules in the same collection auto-wrap the detection logic in `WITH combined_events AS (q1 UNION ALL q2 ...)`. A non-temporal correlation that references another correlation, or a detection rule that failed to convert, fails to convert, because there is no detection query to embed. {{ added "unreleased" }} Multi-table temporal correlations (where referenced detection rules target different tables via pipeline routing) generate `UNION ALL` CTEs with a `rule_name` discriminator column.
 
@@ -235,7 +235,7 @@ A correlation rule's `window` attribute selects the windowing strategy, independ
 | `tumbling` | Boundary-aligned buckets sized to the rule's `timespan`: `time_bucket('<timespan> seconds', <ts>)` on TimescaleDB, `date_bin('<timespan> seconds', <ts>, TIMESTAMPTZ 'epoch')` on plain PostgreSQL, added to the `GROUP BY`. |
 | `session` | Gaps-and-islands: `LAG` marks the first event of each session (gap larger than `gap`), a running `SUM` assigns a per-group `session_id`, and the aggregate is grouped per session. |
 
-Tumbling and session apply to every correlation type. For the aggregate types (`event_count`, `value_count`, `value_sum`, `value_avg`, `value_percentile`, `value_median`) the per-window aggregate is computed over the events; for `temporal`/`temporal_ordered` the combined detections are bucketed (tumbling) or sessionized (session) and each window counts the distinct referenced rules. Order is not enforced for `temporal_ordered`, matching the default temporal path.
+Tumbling and session apply to every correlation type. For the aggregate types (`event_count`, `value_count`, `value_sum`, `value_avg`, `value_percentile`, `value_median`) the per-window aggregate is computed over the events; for `temporal`/`temporal_ordered` the combined detections are bucketed (tumbling) or sessionized (session) and each window counts the distinct referenced rules. `temporal_ordered` enforces the order within each bucket or session. {{ added "unreleased" }}
 
 For session windows the `gap` is honored exactly, but the `timespan` cap is enforced as a `HAVING (MAX(<ts>) - MIN(<ts>)) <= INTERVAL '<timespan> seconds'` filter, which drops sessions longer than the cap rather than splitting them mid-session as the runtime engine does. `rsigma backend convert` emits a stderr warning noting this approximation.
 

@@ -18,6 +18,8 @@ PostgreSQL renders negation as `(expr) IS NOT TRUE` instead of `NOT expr`. A com
 
 PostgreSQL JSONB mode compares typed values correctly. A number or a `lt`/`lte`/`gt`/`gte` comparison casts the `->>` text to `numeric` when it reads as a number, instead of comparing text with an integer, which PostgreSQL rejected with "operator does not exist: text = integer". A boolean compares the text with `ILIKE 'true'` instead of failing on `text = boolean`. `exists` tests key presence through `->`, so a field whose value is JSON `null` now exists.
 
+PostgreSQL `temporal_ordered` correlations now enforce the order of `rules`, which they previously ignored, rendering the same query as `temporal`. One CTE per referenced rule takes the earliest hit of that rule at or after the previous rule's hit, per group, and the query keeps a group only when the chain completes, in the sliding, tumbling, and session window modes. Single-table `temporal` and `temporal_ordered` queries also select `*` instead of `*, rule_name`, which duplicated the column and made PostgreSQL reject the query as ambiguous.
+
 Conversion now applies Sigma filters, as pySigma does when a collection loads: `convert_collection`, and so `backend convert`, `hunt`, and the MCP `convert_rules` tool, merges each filter into the detection rules it references before pipelines run, so field mappings reach the filter's fields. The new `rsigma_eval::apply_filters` performs the merge and targets rules the same way `Engine::apply_filter` does. A correlation rule converted with a backend that has no correlation support (`lynxdb` and `test`) is now an `UnsupportedCorrelation` error instead of being dropped silently; pass `--skip-unsupported` to convert the rest.
 
 Migration notes:

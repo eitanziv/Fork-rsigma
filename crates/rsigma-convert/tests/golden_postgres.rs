@@ -136,6 +136,11 @@ fn golden_temporal_default_condition() {
 }
 
 #[test]
+fn golden_temporal_ordered() {
+    run_golden("temporal_ordered");
+}
+
+#[test]
 fn golden_chained_correlation() {
     run_golden("chained_correlation");
 }

@@ -386,21 +386,6 @@ impl super::PostgresBackend {
         }
     }
 
-    /// Build a temporal or temporal_ordered correlation query.
-    ///
-    /// When all referenced rules target the same table, produces a single-table
-    /// CTE filtering on `rule_name IN (...)`. When rules target different tables
-    /// (from `_rule_tables` pipeline state), produces a `UNION ALL` CTE with one
-    /// leg per rule.
-    ///
-    /// **Schema compatibility requirement:** The multi-table path uses
-    /// `SELECT * ... UNION ALL SELECT * ...`. PostgreSQL requires all legs of a
-    /// `UNION ALL` to produce the same number of columns with compatible types.
-    /// This works when all referenced tables share an identical schema (e.g. a
-    /// normalized event schema). If the tables have different column layouts the
-    /// query will fail at execution time. Callers should ensure that pipeline
-    /// field-mappings normalize the schemas, or use a single-table approach with
-    /// a discriminator column instead.
     /// Build the inner SELECT for the temporal `matched` CTE (the SQL between
     /// `matched AS (` and `)`), tagging each row with a `rule_name`.
     ///
@@ -443,14 +428,19 @@ impl super::PostgresBackend {
         }
 
         if table_to_rules.len() <= 1 {
-            let rule_names = rule.rules.join("', '");
+            let rule_names = rule
+                .rules
+                .iter()
+                .map(|r| r.replace('\'', "''"))
+                .collect::<Vec<_>>()
+                .join("', '");
             let time_filter = if include_time_filter {
                 format!(" AND {ts} >= NOW() - INTERVAL '{window_secs} seconds'")
             } else {
                 String::new()
             };
             Ok(format!(
-                "SELECT *, rule_name FROM {default_table} \
+                "SELECT * FROM {default_table} \
                  WHERE rule_name IN ('{rule_names}'){time_filter}"
             ))
         } else {
@@ -470,6 +460,47 @@ impl super::PostgresBackend {
                 .collect();
             Ok(union_parts.join(" UNION ALL "))
         }
+    }
+
+    /// The CTEs that enforce `temporal_ordered`, chained after `source`.
+    ///
+    /// Each step takes the earliest hit of the next referenced rule at or after
+    /// the previous step, within the window `partition`. A non-decreasing chain
+    /// of hits in `rules` order exists exactly when the last step is not NULL,
+    /// which is the returned `HAVING` predicate. Returns `None` for `temporal`.
+    pub(super) fn temporal_order_steps(
+        rule: &CorrelationRule,
+        source: &str,
+        ts: &str,
+        partition: &[String],
+    ) -> Option<(String, String, String)> {
+        if rule.correlation_type != CorrelationType::TemporalOrdered || rule.rules.is_empty() {
+            return None;
+        }
+        let over = if partition.is_empty() {
+            "()".to_string()
+        } else {
+            format!("(PARTITION BY {})", partition.join(", "))
+        };
+        let mut ctes = String::new();
+        let mut prev = source.to_string();
+        for (i, rule_ref) in rule.rules.iter().enumerate() {
+            let step = i + 1;
+            let name = rule_ref.replace('\'', "''");
+            let after = if i == 0 {
+                String::new()
+            } else {
+                format!(" AND {ts} >= __step_{i}")
+            };
+            ctes.push_str(&format!(
+                ", ordered_{step} AS (SELECT *, \
+                 MIN(CASE WHEN rule_name = '{name}'{after} THEN {ts} END) OVER {over} \
+                 AS __step_{step} FROM {prev})"
+            ));
+            prev = format!("ordered_{step}");
+        }
+        let having = format!(" AND MAX(__step_{}) IS NOT NULL", rule.rules.len());
+        Some((ctes, prev, having))
     }
 
     /// Build a temporal or temporal_ordered correlation query.
@@ -511,17 +542,25 @@ impl super::PostgresBackend {
             pipeline_state,
             true,
         )?;
+        let group_exprs: Vec<String> = rule
+            .group_by
+            .iter()
+            .map(|g| self.field_expr(g))
+            .collect::<Result<_>>()?;
+        let (steps, source, order_having) =
+            Self::temporal_order_steps(rule, "matched", ts, &group_exprs)
+                .unwrap_or_else(|| (String::new(), "matched".to_string(), String::new()));
 
         Ok(format!(
             "WITH matched AS (\
              {inner}\
-             ) \
+             ){steps} \
              SELECT {group_by_select}\
              {agg} AS distinct_rules, \
              MIN({ts}) AS first_seen, MAX({ts}) AS last_seen \
-             FROM matched\
+             FROM {source}\
              {group_by_clause} \
-             HAVING {having}"
+             HAVING {having}{order_having}"
         ))
     }
 
@@ -530,9 +569,8 @@ impl super::PostgresBackend {
     /// `window_secs`, and each bucket counts the distinct referenced rules that
     /// fired.
     ///
-    /// Like the default temporal path, this counts distinct `rule_name`s and
-    /// does not enforce the firing order, so `temporal` and `temporal_ordered`
-    /// render identically (see the backend's ordering limitation).
+    /// Like the default temporal path, this counts distinct `rule_name`s, and
+    /// `temporal_ordered` adds the ordering steps within each bucket.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn build_temporal_tumbling(
         &self,
@@ -574,17 +612,19 @@ impl super::PostgresBackend {
         let mut gb = vec![bucket_expr.clone()];
         gb.extend(group_exprs);
         let group_by_clause = format!(" GROUP BY {}", gb.join(", "));
+        let (steps, source, order_having) = Self::temporal_order_steps(rule, "matched", ts, &gb)
+            .unwrap_or_else(|| (String::new(), "matched".to_string(), String::new()));
 
         Ok(format!(
             "WITH matched AS (\
              {inner}\
-             ) \
+             ){steps} \
              SELECT {bucket_expr} AS correlation_bucket, {group_by_select}\
              {agg} AS distinct_rules, \
              MIN({ts}) AS first_seen, MAX({ts}) AS last_seen \
-             FROM matched\
+             FROM {source}\
              {group_by_clause} \
-             HAVING {having}"
+             HAVING {having}{order_having}"
         ))
     }
 
@@ -593,8 +633,8 @@ impl super::PostgresBackend {
     /// each session counts the distinct referenced rules that fired.
     ///
     /// The `gap` is honored exactly; the `timespan` cap is a post-aggregation
-    /// filter (recorded in `warnings`). Order is not enforced, matching the
-    /// backend's other temporal paths.
+    /// filter (recorded in `warnings`). `temporal_ordered` adds the ordering
+    /// steps within each session.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn build_temporal_session(
         &self,
@@ -637,6 +677,9 @@ impl super::PostgresBackend {
         let mut final_group = group_exprs;
         final_group.push("session_id".to_string());
         let final_group_clause = final_group.join(", ");
+        let (steps, source, order_having) =
+            Self::temporal_order_steps(rule, "sessions", ts, &final_group)
+                .unwrap_or_else(|| (String::new(), "sessions".to_string(), String::new()));
 
         warnings.push(format!(
             "PostgreSQL session window: the {gap_secs}s gap is exact, but the {window_secs}s \
@@ -662,12 +705,12 @@ impl super::PostgresBackend {
              {partition}ORDER BY {ts} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\
              ) AS session_id \
              FROM marked\
-             ) \
+             ){steps} \
              SELECT {group_by_select}session_id, {agg} AS distinct_rules, \
              MIN({ts}) AS first_seen, MAX({ts}) AS last_seen \
-             FROM sessions \
+             FROM {source} \
              GROUP BY {final_group_clause} \
-             HAVING {having}{cap_clause}"
+             HAVING {having}{cap_clause}{order_having}"
         ))
     }
 }

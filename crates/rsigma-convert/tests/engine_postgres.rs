@@ -187,6 +187,106 @@ async fn postgres_executes_cases() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+const TEMPORAL_ORDERED_RULES: &str = r#"
+title: a
+name: a
+logsource: {category: test}
+detection: {sel: {E: a}, condition: sel}
+---
+title: b
+name: b
+logsource: {category: test}
+detection: {sel: {E: b}, condition: sel}
+---
+title: c
+name: c
+logsource: {category: test}
+detection: {sel: {E: c}, condition: sel}
+---
+title: ordered
+correlation:
+  type: temporal_ordered
+  rules: [a, b, c]
+  group-by: [User]
+  timespan: 1h
+"#;
+
+/// Per group, the rule hits as `(rule, seconds after the window start)`.
+const TEMPORAL_ORDERED_HITS: &[(&str, &[(&str, i64)])] = &[
+    ("in_order", &[("a", 10), ("b", 20), ("c", 30)]),
+    ("reversed", &[("c", 10), ("b", 20), ("a", 30)]),
+    ("interleaved", &[("b", 3), ("a", 5), ("b", 10), ("c", 11)]),
+    ("tied", &[("a", 5), ("b", 5), ("c", 5)]),
+    ("incomplete", &[("a", 5), ("b", 6)]),
+    ("swapped_start", &[("b", 5), ("a", 6), ("c", 7)]),
+];
+
+/// `temporal_ordered` matches a group only when its rules hit in `rules`
+/// order, in every window mode, and agrees with eval on which groups fire.
+#[tokio::test]
+#[ignore = "engine test: needs Docker; run by the PostgreSQL engine workflow"]
+async fn postgres_temporal_ordered_agrees_with_eval() {
+    use rsigma_eval::{CorrelationConfig, CorrelationEngine, JsonEvent};
+    use std::collections::BTreeSet;
+
+    let collection = rsigma_parser::parse_sigma_yaml(TEMPORAL_ORDERED_RULES).unwrap();
+    let mut hits: Vec<(i64, &str, &str)> = TEMPORAL_ORDERED_HITS
+        .iter()
+        .flat_map(|(group, hits)| hits.iter().map(move |(rule, t)| (*t, *rule, *group)))
+        .collect();
+    hits.sort();
+
+    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    engine.add_collection(&collection).unwrap();
+    let mut eval_groups = BTreeSet::new();
+    for (t, rule, group) in &hits {
+        let event = serde_json::json!({"E": rule, "User": group});
+        for result in engine.process_event_at(&JsonEvent::borrow(&event), 1_000_000 + t) {
+            if let Some(c) = result.as_correlation() {
+                eval_groups.extend(c.group_key.iter().map(|(_, v)| v.clone()));
+            }
+        }
+    }
+    let expected: BTreeSet<String> = ["in_order", "interleaved", "tied"].map(String::from).into();
+    assert_eq!(eval_groups, expected, "eval");
+
+    let (_container, client) = start_postgres().await;
+    client
+        .batch_execute(
+            r#"CREATE TABLE ordered (time TIMESTAMPTZ NOT NULL, rule_name TEXT, "User" TEXT)"#,
+        )
+        .await
+        .unwrap();
+    for (t, rule, group) in &hits {
+        client
+            .execute(
+                "INSERT INTO ordered VALUES \
+                 (date_bin('3600 seconds', now(), TIMESTAMPTZ 'epoch') + make_interval(secs => $1), $2, $3)",
+                &[&(*t as f64), rule, group],
+            )
+            .await
+            .unwrap();
+    }
+    for method in ["sliding", "tumbling", "session"] {
+        let backend = PostgresBackend::from_options(&HashMap::from([
+            ("table".to_string(), "ordered".to_string()),
+            ("correlation_method".to_string(), method.to_string()),
+            ("gap".to_string(), "1h".to_string()),
+        ]));
+        let output =
+            rsigma_convert::convert_collection(&backend, &collection, &[], "default").unwrap();
+        assert!(output.errors.is_empty(), "{method}: {:?}", output.errors);
+        let queries: Vec<&String> = output.queries.iter().flat_map(|r| &r.queries).collect();
+        assert_eq!(queries.len(), 1, "{method}: {queries:?}");
+        let rows = client
+            .query(queries[0].as_str(), &[])
+            .await
+            .unwrap_or_else(|e| panic!("{method}: {}\n{}", db_error(&e), queries[0]));
+        let groups: BTreeSet<String> = rows.iter().map(|r| r.get("User")).collect();
+        assert_eq!(groups, expected, "{method}: {}", queries[0]);
+    }
+}
+
 /// Differential test against eval over the SigmaHQ rules whose conditions
 /// need grouping (see `engines::corpus`).
 #[tokio::test]
