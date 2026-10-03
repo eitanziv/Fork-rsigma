@@ -1427,6 +1427,15 @@ level: high
 // Chaining: event_count -> temporal_ordered
 // =========================================================================
 
+/// Chaining tests assert on intermediate correlations, which are referenced
+/// by their parents and therefore only output with `emit_detections`.
+fn emit_every_hop() -> CorrelationConfig {
+    CorrelationConfig {
+        emit_detections: true,
+        ..CorrelationConfig::default()
+    }
+}
+
 #[test]
 fn test_chaining_event_count_to_temporal() {
     // Reproduces the spec's "failed logins followed by successful login" example.
@@ -1495,18 +1504,10 @@ level: critical
         let event = JsonEvent::borrow(&v);
         let r = engine.process_event_at(&event, ts + i);
         if i == 2 {
-            // The event_count correlation should fire
-            assert!(
-                r.correlations()
-                    .any(|c| c.header.rule_title == "Multiple failed logins"),
-                "Expected event_count correlation to fire"
-            );
-            // temporal_ordered still needs the successful-login detection
-            assert!(
-                r.correlations()
-                    .all(|c| c.header.rule_title != "Brute Force Followed by Login"),
-                "temporal_ordered must not fire before the success detection"
-            );
+            // The event_count correlation fires, but its parent references it
+            // without `generate: true`, so it is not output, and
+            // temporal_ordered still needs the successful-login detection.
+            assert_eq!(r.correlation_count(), 0);
         }
     }
 
@@ -2834,7 +2835,7 @@ correlation:
 level: medium
 "#;
     let collection = parse_sigma_yaml(yaml).unwrap();
-    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    let mut engine = CorrelationEngine::new(emit_every_hop());
     engine.add_collection(&collection).unwrap();
 
     let ts = 1_000i64;
@@ -2909,7 +2910,7 @@ correlation:
 level: high
 "#;
     let collection = parse_sigma_yaml(yaml).unwrap();
-    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    let mut engine = CorrelationEngine::new(emit_every_hop());
     engine.add_collection(&collection).unwrap();
 
     let ts = 1_000i64;
@@ -2977,7 +2978,7 @@ correlation:
 level: high
 "#;
     let collection = parse_sigma_yaml(yaml).unwrap();
-    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    let mut engine = CorrelationEngine::new(emit_every_hop());
     engine.add_collection(&collection).unwrap();
 
     let ts = 1_000i64;
@@ -3052,7 +3053,7 @@ fn process_one_click(engine: &mut CorrelationEngine) -> Vec<String> {
 fn test_chaining_ten_levels_all_emit() {
     let levels = MAX_CHAIN_DEPTH;
     let collection = parse_sigma_yaml(&nested_event_count_chain_yaml(levels)).unwrap();
-    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    let mut engine = CorrelationEngine::new(emit_every_hop());
     engine.add_collection(&collection).unwrap();
     assert_eq!(engine.correlation_rule_count(), levels);
 
@@ -3073,7 +3074,7 @@ fn test_chaining_eleventh_hop_is_dropped() {
     // corr-11 is the leftover hop past MAX_CHAIN_DEPTH: no emit, no window.
     let levels = MAX_CHAIN_DEPTH + 2;
     let collection = parse_sigma_yaml(&nested_event_count_chain_yaml(levels)).unwrap();
-    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    let mut engine = CorrelationEngine::new(emit_every_hop());
     engine.add_collection(&collection).unwrap();
     assert_eq!(engine.correlation_rule_count(), levels);
 

@@ -129,7 +129,7 @@ Apply to correlation rules (`correlation:` block).
 | `condition_value_not_numeric` | `error` | none | The numeric threshold in `correlation.condition` is not a number. |
 | `missing_group_by` | `error` | none | `correlation:` has no `group-by:` (required once `type:` is set). |
 | `generate_not_boolean` | `error` | none | The `generate:` field is not a boolean. |
-| `correlation_only_references` | `info` | none | The correlation omits `generate: true`, so referenced detections produce no standalone output. {{ added "unreleased" }} |
+| `correlation_only_references` | `info` | none | The correlation omits `generate: true`, so referenced rules, detections or correlations, produce no standalone output. {{ added "unreleased" }} |
 | `invalid_condition_operator` | `error` | none | A key in `correlation.condition` is not one of `gt`, `gte`, `lt`, `lte`, `eq`, `neq` (the `field` key is exempt). |
 
 ## Filter rules (9 IDs, 8 emitted)

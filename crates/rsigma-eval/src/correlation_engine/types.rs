@@ -148,11 +148,12 @@ pub struct CorrelationConfig {
     /// Can be overridden per-correlation via the `rsigma.action` custom attribute.
     pub action_on_match: CorrelationAction,
 
-    /// Whether to emit detection-level matches for rules that are only
-    /// referenced by correlations (where `generate: false`).
+    /// Whether to emit matches for rules that are only referenced by
+    /// correlations (where `generate: false`). This covers detection rules
+    /// and correlations referenced by another correlation in a chain.
     ///
     /// Default: `false`, following Sigma's correlation-only output semantics.
-    /// Set to `true` to emit every detection match.
+    /// Set to `true` to emit every detection and correlation match.
     pub emit_detections: bool,
 
     /// How to include contributing events in correlation results.

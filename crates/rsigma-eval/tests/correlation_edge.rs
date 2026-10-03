@@ -175,9 +175,7 @@ correlation:
     assert_eq!(result.correlation_count(), 1);
 }
 
-#[test]
-fn correlation_name_without_id_feeds_parent() {
-    let yaml = r#"
+const CHAINED_BY_NAME_YAML: &str = r#"
 title: Base
 name: base
 logsource:
@@ -206,13 +204,56 @@ correlation:
     condition:
         gte: 1
 "#;
-    let mut engine = corr_engine(yaml);
-    let result = process(&mut engine, json!({"EventID": 1, "Host": "h1"}), 1000);
-    let titles: Vec<_> = result
-        .correlations()
-        .map(|result| result.header.rule_title.as_str())
+
+fn chained_titles(engine: &mut CorrelationEngine) -> Vec<String> {
+    process(engine, json!({"EventID": 1, "Host": "h1"}), 1000)
+        .iter()
+        .map(|result| result.header.rule_title.clone())
+        .collect()
+}
+
+#[test]
+fn correlation_name_without_id_feeds_parent() {
+    // The child is referenced by the parent without `generate: true`, so only
+    // the parent is output, as for a referenced detection rule.
+    let mut engine = corr_engine(CHAINED_BY_NAME_YAML);
+    assert_eq!(chained_titles(&mut engine), ["Parent"]);
+}
+
+#[test]
+fn chained_child_is_output_when_parent_generates() {
+    let yaml = CHAINED_BY_NAME_YAML.replace(
+        "title: Parent\ncorrelation:",
+        "title: Parent\ncorrelation:\n    generate: true",
+    );
+    let mut engine = corr_engine(&yaml);
+    assert_eq!(chained_titles(&mut engine), ["Child", "Parent"]);
+}
+
+#[test]
+fn chained_child_is_output_with_emit_detections() {
+    let config = CorrelationConfig {
+        emit_detections: true,
+        ..CorrelationConfig::default()
+    };
+    let mut engine = corr_engine_with_config(CHAINED_BY_NAME_YAML, config);
+    assert_eq!(chained_titles(&mut engine), ["Base", "Child", "Parent"]);
+}
+
+#[test]
+fn chained_child_is_suppressed_in_batches_without_timestamps() {
+    let collection = parse_sigma_yaml(CHAINED_BY_NAME_YAML).unwrap();
+    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    engine.add_collection(&collection).unwrap();
+    let value = json!({"EventID": 1, "Host": "h1"});
+    let event = JsonEvent::borrow(&value);
+    let titles: Vec<_> = engine
+        .process_batch(&[&event])
+        .iter()
+        .flatten()
+        .map(|result| result.header.rule_title.clone())
         .collect();
-    assert_eq!(titles, ["Child", "Parent"]);
+    assert_eq!(titles, ["Parent"]);
 }
 
 #[test]

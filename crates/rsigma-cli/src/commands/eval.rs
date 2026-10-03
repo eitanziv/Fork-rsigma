@@ -76,7 +76,8 @@ pub(crate) struct EvalArgs {
     #[arg(long = "action", value_parser = ["alert", "reset"])]
     pub action: Option<String>,
 
-    /// Emit detection-level output for rules referenced by correlations.
+    /// Emit output for rules referenced by correlations, including
+    /// correlations that feed another correlation.
     #[arg(long = "emit-detections")]
     pub emit_detections: bool,
 

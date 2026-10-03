@@ -460,7 +460,8 @@ pub(crate) struct CorrelationPartial {
     /// Behavior when no timestamp is found: `wallclock` or `skip`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timestamp_fallback: Option<String>,
-    /// Emit detection output for rules referenced by correlations.
+    /// Emit output for rules referenced by correlations, including
+    /// correlations that feed another correlation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub emit_detections: Option<bool>,
     /// Deprecated inverse of `emit_detections`.

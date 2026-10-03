@@ -76,9 +76,9 @@ pub struct CorrelationEngine {
     event_buffers: HashMap<(usize, GroupKey), EventBuffer>,
     /// Per-(correlation_index, group_key) event reference buffer (`Refs` mode).
     event_ref_buffers: HashMap<(usize, GroupKey), EventRefBuffer>,
-    /// Set of detection rule IDs/names that are "correlation-only"
-    /// (referenced by correlations where `generate == false`).
-    /// Used to filter detection output when `config.emit_detections == false`.
+    /// Set of rule IDs/names (detections or correlations) that are
+    /// "correlation-only" (referenced by correlations where `generate == false`).
+    /// Used to filter their output when `config.emit_detections == false`.
     correlation_only_rules: std::collections::HashSet<String>,
     /// Rules referenced by at least one correlation with `generate: true`.
     /// Such a reference wins over correlation-only references.
@@ -572,12 +572,31 @@ impl CorrelationEngine {
         // Chain — parent firings go into a separate vec so we do not
         // alias `correlations` as both the input slice and the output.
         let mut chained = Vec::new();
-        self.chain_correlations(&correlations, &fired_indices, timestamp_secs, &mut chained);
+        let mut chained_indices = Vec::new();
+        self.chain_correlations(
+            &correlations,
+            &fired_indices,
+            timestamp_secs,
+            &mut chained,
+            &mut chained_indices,
+        );
         correlations.extend(chained);
+        fired_indices.extend(chained_indices);
 
-        // Filter detections by generate flag, then append the correlations.
+        // Filter detections and correlations by the generate flag of the
+        // correlations that reference them.
         let mut out = self.filter_detections(all_detections, identities);
-        out.extend(correlations);
+        out.extend(
+            correlations
+                .into_iter()
+                .zip(fired_indices)
+                .filter(|(_, idx)| {
+                    let corr = &self.correlations[*idx];
+                    let identities = corr.id.as_deref().into_iter().chain(corr.name.as_deref());
+                    !self.is_correlation_only(identities)
+                })
+                .map(|(result, _)| result),
+        );
         out
     }
 
@@ -664,18 +683,27 @@ impl CorrelationEngine {
                 .into_iter()
                 .zip(identities)
                 .filter_map(|(detection, (id, name))| {
-                    let mut identities = id.as_ref().into_iter().chain(name.as_ref());
-                    let generated = identities
-                        .clone()
-                        .any(|identity| self.generated_rules.contains(identity));
-                    let correlation_only =
-                        identities.any(|identity| self.correlation_only_rules.contains(identity));
-                    (generated || !correlation_only).then_some(detection)
+                    let identities = id.as_deref().into_iter().chain(name.as_deref());
+                    (!self.is_correlation_only(identities)).then_some(detection)
                 })
                 .collect()
         } else {
             all_detections
         }
+    }
+
+    /// Whether output for a rule (detection or correlation) with these
+    /// identities is suppressed: only correlations without `generate: true`
+    /// reference it, and `emit_detections` is off.
+    fn is_correlation_only<'a>(
+        &self,
+        mut identities: impl Iterator<Item = &'a str> + Clone,
+    ) -> bool {
+        !self.config.emit_detections
+            && identities
+                .clone()
+                .any(|identity| self.correlation_only_rules.contains(identity))
+            && !identities.any(|identity| self.generated_rules.contains(identity))
     }
 
     /// Feed detection matches into correlation window states.
@@ -1006,14 +1034,16 @@ impl CorrelationEngine {
     /// Propagate correlation results to higher-level correlations (chaining).
     ///
     /// When a correlation fires, any correlation that references it (by ID or name)
-    /// is updated. Newly fired parents are appended to `out` and become the next
-    /// `pending` set. Limits chain depth to 10 to prevent infinite loops.
+    /// is updated. Newly fired parents are appended to `out`, with their
+    /// correlation indices in `out_indices`, and become the next `pending`
+    /// set. Limits chain depth to 10 to prevent infinite loops.
     fn chain_correlations(
         &mut self,
         fired: &[EvaluationResult],
         fired_indices: &[usize],
         ts: i64,
         out: &mut Vec<EvaluationResult>,
+        out_indices: &mut Vec<usize>,
     ) {
         debug_assert_eq!(fired.len(), fired_indices.len());
         let mut pending: Vec<(usize, EvaluationResult)> = fired_indices
@@ -1137,6 +1167,7 @@ impl CorrelationEngine {
                     };
                     next_pending.push((corr_idx, result.clone()));
                     out.push(result);
+                    out_indices.push(corr_idx);
                     self.last_alert.insert(alert_key.clone(), ts);
 
                     if action == CorrelationAction::Reset

@@ -315,7 +315,12 @@ fn run_correlation(
             }],
         });
     };
-    let mut engine = CorrelationEngine::new(CorrelationConfig::default());
+    // The target may be referenced by another correlation, which suppresses
+    // its output by default.
+    let mut engine = CorrelationEngine::new(CorrelationConfig {
+        emit_detections: true,
+        ..CorrelationConfig::default()
+    });
     for pipeline in pipelines {
         engine.add_pipeline(pipeline.clone());
     }
@@ -650,6 +655,54 @@ custom_attributes:
         assert!(report.all_passed(), "{report:?}");
         assert_eq!(report.missing.len(), 1);
         assert_eq!(report.missing[0].rule_title, "Login");
+    }
+
+    #[test]
+    fn correlation_referenced_by_another_correlation() {
+        let yaml = r#"
+title: Login
+id: login-rule
+logsource:
+    category: auth
+detection:
+    selection:
+        EventType: login
+    condition: selection
+---
+title: Many Logins
+id: many-logins
+correlation:
+    type: event_count
+    rules:
+        - login-rule
+    group-by:
+        - User
+    timespan: 60s
+    condition:
+        gte: 2
+custom_attributes:
+    rsigma.exemplars:
+        - expect: match
+          events:
+              - offset: 0s
+                event: { EventType: login, User: alice }
+              - offset: 1s
+                event: { EventType: login, User: alice }
+---
+title: Repeated Bursts
+id: repeated-bursts
+correlation:
+    type: event_count
+    rules:
+        - many-logins
+    group-by:
+        - User
+    timespan: 5m
+    condition:
+        gte: 2
+"#;
+        let report = run(yaml);
+        assert!(report.all_passed(), "{report:?}");
     }
 
     #[test]
