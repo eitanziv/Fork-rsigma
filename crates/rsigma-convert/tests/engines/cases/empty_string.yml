@@ -11,8 +11,3 @@ events:
   - {CommandLine: 'x'}
   - {Image: 'C:\x.exe'}
 matches: [0]
-known_failures:
-  lynxdb:
-    type: match-mismatch
-    reason: "equality with an empty string matches nothing once events are flushed to segments"
-    actual: []

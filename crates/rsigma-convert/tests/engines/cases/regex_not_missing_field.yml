@@ -1,0 +1,15 @@
+description: Negating a regex on a field the event lacks is true, because the regex itself does not match.
+rule:
+  title: regex not missing field
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image: 'cmd.exe'
+    filter:
+      CommandLine|re: '^who'
+    condition: selection and not filter
+events:
+  - {Image: 'cmd.exe'}
+  - {Image: 'cmd.exe', CommandLine: 'whoami'}
+  - {Image: 'cmd.exe', CommandLine: 'ipconfig'}
+matches: [0, 2]

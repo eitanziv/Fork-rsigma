@@ -21,7 +21,7 @@ known_failures:
     contains: "operator does not exist: text > integer"
   lynxdb:
     type: match-mismatch
-    reason: "a boolean value in the field makes the comparison match nothing, and a non-numeric string compares as greater than a number"
+    reason: "segments store a column with mixed types as one type, so a boolean value turns every value in the column into 0 or 1"
     actual: []
   fibratus:
     type: engine-error

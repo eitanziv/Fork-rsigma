@@ -23,10 +23,6 @@ known_failures:
     type: match-mismatch
     reason: "istartswith treats an inner * as a literal character"
     actual: []
-  lynxdb:
-    type: match-mismatch
-    reason: "a wildcard between literals does not match values that contain a slash"
-    actual: [0, 2]
   test-pysigma:
     type: output-difference
     reason: "startswith with a wildcard is not rendered as a match with a trailing wildcard"

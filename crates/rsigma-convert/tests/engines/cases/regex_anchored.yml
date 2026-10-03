@@ -12,8 +12,3 @@ events:
   - {CommandLine: 'x12 34'}
   - {CommandLine: '12 34 '}
 matches: [0]
-known_failures:
-  lynxdb:
-    type: match-mismatch
-    reason: "the =~ operator matches nothing once events are flushed to segments, while match() does"
-    actual: []

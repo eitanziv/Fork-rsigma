@@ -316,24 +316,26 @@ custom_attributes:
 
 ## LynxDB
 
-The LynxDB backend produces SPL2-compatible queries. Translation favors the native search syntax and falls back to `| where` pipeline stages for features that LynxDB's parser does not support directly (regex, CIDR, single-character wildcards).
+The LynxDB backend produces SPL2-compatible queries. A rule renders as a native `search` expression when LynxDB's search matches every one of its values exactly, and as a `where` expression otherwise. {{ added "unreleased" }}
 
 ::: callout tip "LynxDB's own Sigma guide"
 LynxDB maintains the canonical operator-facing guide for running Sigma rules on a LynxDB cluster, including the REST API path, saved queries, and end-to-end tutorials (whoami, bulk conversion, EVTX, CloudTrail, scheduled detection). See [Sigma rules on LynxDB](https://docs.lynxdb.org/docs/sigma/) and the linked subpages (compatibility, SPL2 mapping, pipelines, cookbook, troubleshooting, limitations, drift runbook). RSigma is the engine that emits the SPL2 in that flow.
 :::
 
-| Sigma feature | LynxDB syntax |
-|---------------|---------------|
-| Field equality | `field=value`, `field="quoted"` |
-| Wildcard `*` | `field=prefix*`, `field=*contains*` |
-| Wildcard `?` | Deferred to a `where field=~"regex"` pipeline stage. |
-| Regex (`re` modifier) | Deferred to a `where field=~"pattern"` pipeline stage. |
-| CIDR (`cidr` modifier) | Deferred to a `where cidrmatch("cidr", field)` pipeline stage. |
-| Case-sensitive (`cased` modifier) | `field=CASE(value)` |
-| Boolean AND/OR/NOT | Explicit parenthesization for LynxDB's non-standard precedence (`NOT > OR > AND`) |
-| IN-list | `field IN (val1, val2, ...)` |
+`search` stays in use for strings of letters, digits, spaces, and `. - _ : \` matched case-insensitively with `*` only at the start or end, for numeric and boolean equality, and for `exists`. Anything else puts the whole condition in `where`: regexes, CIDR, `null`, empty strings, `cased`, numeric comparisons, `?`, a literal `*`, and strings with other characters such as `/` or quotes.
 
-"Deferred" means the feature does not translate to a native LynxDB search term and is instead emitted as an SPL2 pipeline stage downstream of `search`.
+| Sigma feature | `search` | `where` |
+|---------------|----------|---------|
+| Field equality | `field="value"` | `match(field, "(?i)^value$")` |
+| Wildcards | `field="prefix"*`, `field=*"contains"*` | `.*` and `.` in the `match()` regex |
+| Regex (`re` modifier) | | `match(field, "pattern")` |
+| CIDR (`cidr` modifier) | | `cidrmatch("cidr", field)` |
+| Case-sensitive (`cased` modifier) | | `match(field, "^Value$")` |
+| Numeric comparison | | `coalesce(tonumber(field)>1000, false)` |
+| `null` value | | `isnull(json_extract(_raw, "field"))` |
+| Boolean AND/OR/NOT | Explicit parenthesization for `search`'s non-standard precedence (`NOT > OR > AND`) | Standard precedence |
+
+See the [LynxDB backend reference](../reference/backends/lynxdb.md#search-or-where) for the full mapping.
 
 ```bash
 rsigma backend convert rules/ -t lynxdb

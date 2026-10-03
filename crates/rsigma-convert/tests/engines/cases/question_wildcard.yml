@@ -14,10 +14,6 @@ events:
   - {CommandLine: 'ab?d'}
 matches: [0, 1, 4]
 known_failures:
-  lynxdb:
-    type: match-mismatch
-    reason: "the single-character wildcard is rewritten to *, which over-matches"
-    actual: [0, 1, 2, 3, 4]
   test-pysigma:
     type: output-difference
     reason: "match values are not quoted"

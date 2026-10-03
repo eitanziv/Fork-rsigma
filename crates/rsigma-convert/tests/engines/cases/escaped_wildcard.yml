@@ -12,10 +12,6 @@ events:
   - {CommandLine: 'x ab y'}
 matches: [0]
 known_failures:
-  lynxdb:
-    type: match-mismatch
-    reason: "the literal star is emitted inside quotes, where LynxDB still treats it as a wildcard"
-    actual: [0, 1, 2]
   test-pysigma:
     type: output-difference
     reason: "the escape of a literal * is dropped"

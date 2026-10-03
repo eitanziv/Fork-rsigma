@@ -19,7 +19,3 @@ known_failures:
     type: match-mismatch
     reason: "PostgreSQL's default regex mode lets . match a line break; the backend accepts this over-match rather than a mode that would make [^...] miss one"
     actual: [0, 1]
-  lynxdb:
-    type: match-mismatch
-    reason: "the =~ operator matches nothing once events are flushed to segments, while match() does"
-    actual: []

@@ -126,29 +126,6 @@ fn lynxdb_executes_cases() {
     engines::assert_outcomes("lynxdb", &results);
 }
 
-/// Whether every detection value avoids the characters LynxDB mis-renders or
-/// mis-matches (`/`, `|`, `=`, `>`, quotes, brackets, embedded wildcards, and
-/// others), so the corpus run isolates condition grouping.
-fn plain_lynxdb_values(case: &Case) -> bool {
-    fn plain(v: &yaml_serde::Value) -> bool {
-        match v {
-            yaml_serde::Value::String(s) => s
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || " .-_:\\".contains(c)),
-            yaml_serde::Value::Sequence(items) => items.iter().all(plain),
-            yaml_serde::Value::Mapping(m) => m.values().all(plain),
-            _ => true,
-        }
-    }
-    let rule: yaml_serde::Value = yaml_serde::from_str(&case.rule_yaml).unwrap();
-    rule["detection"]
-        .as_mapping()
-        .unwrap()
-        .iter()
-        .filter(|(k, _)| k.as_str() != Some("condition"))
-        .all(|(_, v)| plain(v))
-}
-
 /// Differential test against eval over the SigmaHQ rules whose conditions
 /// need grouping (see `engines::corpus`).
 #[test]
@@ -163,14 +140,13 @@ fn lynxdb_agrees_with_eval_on_sigma_corpus() {
         return;
     };
     let sample = engines::corpus::grouping_cases(Path::new(&corpus), |case| {
-        plain_lynxdb_values(case)
-            && engines::convert(
-                &LynxDbBackend::new(),
-                case,
-                &[index_pipeline("c")],
-                "default",
-            )
-            .is_ok_and(|q| q.len() == 1)
+        engines::convert(
+            &LynxDbBackend::new(),
+            case,
+            &[index_pipeline("c")],
+            "default",
+        )
+        .is_ok_and(|q| q.len() == 1)
     });
     let with_both = sample
         .cases

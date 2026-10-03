@@ -14,10 +14,6 @@ events:
   - {Image: 'C:\cmd.exe', User: ''}
 matches: [0, 1]
 known_failures:
-  lynxdb:
-    type: match-mismatch
-    reason: "NOT field=* does not match a field that is present with a null value"
-    actual: [0]
   test-pysigma:
     type: output-difference
     reason: "backslashes in values are doubled"

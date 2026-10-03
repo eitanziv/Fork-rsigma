@@ -11,8 +11,3 @@ events:
   - {CommandLine: 'cmd whoami'}
   - {CommandLine: 'whoami'}
 matches: [0, 2]
-known_failures:
-  lynxdb:
-    type: match-mismatch
-    reason: "the =~ operator matches nothing once events are flushed to segments, while match() does"
-    actual: []
