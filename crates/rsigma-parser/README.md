@@ -18,6 +18,18 @@ This library is part of [rsigma].
 | `parse_condition(input: &str)` | Parse a condition expression string into a `ConditionExpr` |
 | `parse_field_spec(key: &str)` | Parse a field specification like `"CommandLine\|contains\|all"` into a `FieldSpec` |
 
+### Validation
+
+The parser runs these checks on every detection item, and `rsigma-ir` reruns the modifier and CIDR checks when it lowers a rule.
+
+| Function | Description |
+|----------|-------------|
+| `validate::check_detection_item(item: &DetectionItem)` | Check modifiers, value types, regular expressions, CIDR networks, and `exists` values of one detection item |
+| `validate::check_modifiers(modifiers: &[Modifier])` | Reject conflicting modifiers, such as two operators or two UTF-16 encodings |
+| `validate::check_regex(pattern: &str)` | Reject an invalid regular expression; lookaround and backreferences are accepted, as in pySigma |
+| `validate::check_cidr(cidr: &str)` | Reject a CIDR network that is not `address/prefix` or has host bits set |
+| `validate::exists_flag(value: &SigmaValue)` | The boolean an `exists` value stands for when a rule is lowered, which also reads the strings `true`, `false`, `yes`, and `no` a pipeline may write, or `None` |
+
 ### Emitting
 
 | Function | Description |
@@ -109,7 +121,8 @@ The auto-fix implementation is enabled by the default `fix` feature. Disable def
 - **Condition expressions**: PEG grammar (pest) with Pratt parsing and correct operator precedence (`NOT` > `AND` > `OR`). Supports `and`, `or`, `not`, `1 of`, `all of`, `any of`, `N of`, parenthesized groups, wildcard patterns — `them` excludes `_`-prefixed identifiers per spec
 - **Value types**: strings with wildcards (`*`, `?`), escape sequences (`\*`, `\?`, `\\`), integers, floats, booleans, null
 - **Timespan parsing**: `15s`, `30m`, `1h`, `7d`, `1w`, `1M`, `1y`
-- **Logsource**: `category`, `product`, `service`, `definition`, custom fields
+- **Logsource**: `category`, `product`, `service`, `definition`, custom fields. Detection and filter rules must have a `logsource` that sets at least one of `category`, `product`, or `service`.
+- **Semantic validation**: conflicting modifiers, values of the wrong type for their modifiers, invalid regular expressions and CIDR networks, empty detections, and conditions that reference undefined detections are parse errors, as in pySigma
 
 ### Multi-Document Behavior
 

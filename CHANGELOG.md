@@ -4,6 +4,30 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+### The parser rejects rules pySigma rejects
+
+The parser now validates each rule's meaning as well as its structure, as pySigma does, so `rule parse`, `rule validate`, `engine eval`, the daemon, conversion, the LSP, and the MCP tools report a broken rule as a parse error that names the field instead of a compile error, or instead of accepting it. The new `rsigma_parser::validate` module holds the checks. A rule now fails to parse when:
+
+- its `logsource` is missing, or sets none of `category`, `product`, and `service`, or one of those keys or `definition` is not a string. Filter rules need a `logsource` as well, as the Sigma filter specification requires.
+- a field combines conflicting modifiers, such as two operators (`|gt|lt`), two UTF-16 encodings, `base64` with `base64offset`, or a string modifier before `fieldref`.
+- a value has the wrong type for its modifiers: a number or boolean under `contains`, `startswith`, `endswith`, `re`, `cidr`, an encoding, `fieldref`, `expand`, or `cased`, or a non-numeric value under `gt`, `gte`, `lt`, `lte`, or a timestamp part such as `minute`. Numeric strings such as `'5'` still compare numerically.
+- a `re` value is not a valid regular expression, a `cidr` value is not `address/prefix` or has host bits set, a `fieldref`, `base64`, or `base64offset` value contains a wildcard, or a UTF-16 encoding without `base64` or `base64offset` has a non-ASCII value.
+- `exists` is applied to a keyword or takes anything but a single YAML boolean, `true` or `false`. Previously any other value, such as `'yes'` or `maybe`, was treated as `true`.
+- `|all` has fewer than two values, an empty value list is not bound to a field, a field value is a nested list or mapping, or a detection list contains a list.
+- a named detection is empty, a keyword list contains `null`, or the condition references a detection identifier that does not exist or a `1 of x*` selector that matches none.
+
+A regular expression with lookaround or backreferences, which pySigma accepts, still parses, and the evaluator rejects it when the rule compiles, because its regex engine does not support those constructs. Lowering keeps the modifier checks as a backstop for detection items a pipeline rewrites after parsing. `rule reverse` exits with code `3` unless `--logsource-product`, `--logsource-category`, or `--logsource-service` is set, since the rule it would write no longer parses.
+
+The new `deprecated_detection_timeframe` lint warns about a Sigma v1.x `timeframe:` key inside `detection:`, which has no effect. `rule validate` now accepts a single rule file as well as a directory.
+
+Migration notes:
+
+- Add a `logsource` with at least one of `category`, `product`, or `service` to every detection and filter rule. A filter applies only to rules whose `logsource` includes every key the filter sets, so give a filter only the keys its rules share, such as `product: windows`.
+- Fix or remove values that the new checks reject. Run `rsigma rule validate` on the rules directory to list them; every message names the field and the problem.
+- Pass a `--logsource-*` flag to `rule reverse`.
+
+Breaking changes for library users: `parse_sigma_yaml`, `parse_sigma_file`, and `parse_sigma_directory` report the rules above as parse errors, so code that built rules without a `logsource` or with invalid values must fix them. `SigmaParserError` has a new `InvalidModifiers` variant. Lowering a detection item that applies `exists` to a keyword or to a non-boolean value fails with `IrError::IncompatibleValue`, and `rsigma_convert`'s reverse conversion fails with `ConvertError::RuleConversion` when no logsource is configured.
+
 ### Converted queries match what the engine evaluates (#542)
 
 Every native backend now converts the encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) into an OR of one plain match per encoded variant, as pySigma does, instead of failing with `UnsupportedModifier`. The OR stays grouped under an enclosing AND, and eval and conversion share the expansion through the new `rsigma_ir::encoding` module, so both agree on the variants a rule matches. A UTF-16 encoding without a following `base64` or `base64offset` produces NUL characters, which the PostgreSQL and Fibratus backends reject with `UnsupportedValue`. An `expand` value with placeholders no pipeline resolved now names the placeholders in its conversion error.

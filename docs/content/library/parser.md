@@ -22,7 +22,7 @@ For full rule loading, compilation, and event evaluation, layer [`rsigma-eval`](
 rsigma-parser = "{{ rsigma.version }}"
 ```
 
-The crate has no RSigma dependencies and pulls in `yaml_serde` 0.10 (the maintained `serde_yaml` fork), `regex`, `pest`, and `thiserror`. Default features enable YAML source fixes via the optional `fix` feature (`yamlpatch` / `yamlpath`).
+The crate has no RSigma dependencies and pulls in `yaml_serde` 0.10 (the maintained `serde_yaml` fork), `regex`, `regex-syntax` and `fancy-regex` (regular-expression validation), `pest`, and `thiserror`. Default features enable YAML source fixes via the optional `fix` feature (`yamlpatch` / `yamlpath`).
 
 ## Public surface
 
@@ -39,6 +39,7 @@ The crate has no RSigma dependencies and pulls in `yaml_serde` 0.10 (the maintai
 | `parse_condition(&str) -> Result<ConditionExpr, SigmaParserError>` | Standalone condition-expression parser. |
 | `Detection`, `DetectionItem`, `FieldSpec`, `SigmaValue`, `Modifier` | Detection-block building blocks. |
 | `LogSource` | The `logsource:` block (`product`, `category`, `service`). |
+| `validate::{check_detection_item, check_modifiers, check_regex, check_cidr, exists_flag}` | The semantic checks the parser runs on every detection item, exposed for tools that build or rewrite detection items in code. {{ added "unreleased" }} |
 | Linter (`lint::*`) | {{ rsigma.lint.rules }} spec-conformance checks (including cross-document reference checks over a directory). See [Lint Rules reference](../reference/lint-rules.md). |
 | `lint::catalogue::catalogue() -> Vec<LintRuleInfo>` | Programmatic metadata for every lint rule: stable id, default severity, fix disposition, one-line description. |
 | `ads::ads_catalogue() -> Vec<AdsSectionInfo>` | The nine [ADS](../guide/detection-strategy.md) sections: id, carrier field, default-required, description. `AdsSection`/`AdsDocument` read present and missing sections off a `SigmaRule`. |
@@ -126,9 +127,28 @@ println!("{ast:#?}");
 
 Bounds: `MAX_CONDITION_LEN = 64 KiB`, `MAX_CONDITION_DEPTH = 64`. See [Security Hardening](../reference/security.md#input-size-and-depth-caps).
 
+## Semantic validation
+
+{{ added "unreleased" }}
+
+The parser rejects rules that pySigma rejects, not only rules whose structure is wrong. A detection or filter rule fails to parse when its `logsource` is missing or sets none of `category`, `product`, and `service`, when a field combines conflicting modifiers (`|gt|lt`), when a value has the wrong type for its modifiers (a number under `contains`, a word under `gt`), when a `re` or `cidr` value is invalid, when a named detection is empty, or when the condition references a detection that does not exist. Each error is collected per document in `SigmaCollection::errors` and names the field.
+
+The checks live in the `validate` module. `rsigma-ir` reruns `check_modifiers` and `check_cidr` when it lowers a rule, so detection items a processing pipeline rewrites after parsing are checked too.
+
+```rust
+use rsigma_parser::validate::{check_modifiers, check_regex};
+use rsigma_parser::Modifier;
+
+assert!(check_modifiers(&[Modifier::Gt, Modifier::Lt]).is_err());
+assert!(check_regex("a(b").is_err());
+assert!(check_regex("(?<!x)y").is_ok());
+```
+
+`check_regex` accepts lookaround and backreferences, as pySigma does. The `rsigma-eval` regex engine does not support them, so such a rule parses and then fails to compile.
+
 ## Error handling
 
-`SigmaParserError` from `thiserror` (also re-exported as `error::Result<T>`). Variants cover YAML syntax errors, missing required fields, invalid modifiers, condition-expression errors, and the size/depth caps above. Most variants carry a `SourceLocation` so callers can highlight the offending location in source.
+`SigmaParserError` from `thiserror` (also re-exported as `error::Result<T>`). Variants cover YAML syntax errors, missing required fields, invalid modifiers and modifier combinations (`InvalidModifiers`), invalid values and detections, condition-expression errors, and the size/depth caps above. Most variants carry a `SourceLocation` so callers can highlight the offending location in source.
 
 ## See also
 

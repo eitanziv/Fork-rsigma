@@ -14,7 +14,7 @@ rsigma rule parse [OPTIONS] <PATH>
 
 Reads one Sigma rule file, parses it through `rsigma-parser`, and writes the resulting AST to stdout as JSON. Useful for inspecting how RSigma sees a rule, building tooling on top of the parsed shape, or diffing two parse results to spot subtle YAML changes.
 
-Multi-document YAML files (action-global/action-reset/action-repeat fragments) parse into a single JSON object listing each document. Parse errors are written to stderr and the process exits with code `2`.
+Multi-document YAML files (action-global/action-reset/action-repeat fragments) parse into a single JSON object listing each document. A file that cannot be read or is not valid YAML is reported on stderr and the process exits with code `2`. A document that fails rule validation, such as a missing `logsource`, conflicting modifiers, or a value of the wrong type for its modifiers, is listed on stderr under `Warnings:` and left out of the AST, and the process exits with code `0`. Use [`rule validate`](validate.md) as a gate that fails on those errors.
 
 ## Flags
 
