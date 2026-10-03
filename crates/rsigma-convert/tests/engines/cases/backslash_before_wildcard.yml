@@ -1,0 +1,14 @@
+description: A doubled backslash before a star is a literal backslash followed by a wildcard.
+rule:
+  title: backslash before wildcard
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image: 'C:\\*.exe'
+    condition: selection
+events:
+  - {Image: 'C:\tools\x.exe'}
+  - {Image: 'C:x.exe'}
+  - {Image: 'C:\\*.exe'}
+  - {Image: 'D:\x.exe'}
+matches: [0, 2]
