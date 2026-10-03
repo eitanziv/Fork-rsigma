@@ -59,6 +59,10 @@ filter:
     condition: not selection
 ```
 
+## Filter targets and selector scope
+
+`filter.rules` resolves each target by rule `id` or `name`. Referencing an exact title remains supported for compatibility, but `rule lint` reports `filter_reference_by_title` so the filter can be migrated to a stable identity. A selector in the filter condition is evaluated only against the filter's own detection items after they are injected into the target. For example, `not 1 of selection_*` selects the filter's `selection_*` items, not similarly named items in the target rule, and `all of them` means all filter items. {{ added "unreleased" }}
+
 ## Closed verification
 
 Tuning runs the target through the real evaluator twice:

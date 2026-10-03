@@ -557,8 +557,7 @@ level: low
 // =========================================================================
 
 #[test]
-fn test_filter_by_rule_name() {
-    // Filter that references a rule by title (not ID)
+fn test_filter_by_rule_title_compatibility() {
     let yaml = r#"
 title: Detect Mimikatz
 logsource:
@@ -590,6 +589,117 @@ filter:
     let ev2 = json!({"CommandLine": "mimikatz.exe", "ParentImage": "C:\\admin_toolkit.exe"});
     let event2 = JsonEvent::borrow(&ev2);
     assert!(engine.evaluate(&event2).is_empty());
+}
+
+#[test]
+fn test_filter_by_rule_name() {
+    let yaml = r#"
+title: Detect Mimikatz
+name: detect_mimikatz
+logsource:
+    product: windows
+detection:
+    selection:
+        CommandLine|contains: 'mimikatz'
+    condition: selection
+level: critical
+---
+title: Exclude Admin Tools
+filter:
+    rules:
+        - detect_mimikatz
+    selection:
+        ParentImage|endswith: '\admin_toolkit.exe'
+    condition: not selection
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = Engine::new();
+    engine.add_collection(&collection).unwrap();
+
+    let ev = json!({"CommandLine": "mimikatz.exe", "ParentImage": "C:\\cmd.exe"});
+    assert_eq!(engine.evaluate(&JsonEvent::borrow(&ev)).len(), 1);
+
+    let filtered = json!({"CommandLine": "mimikatz.exe", "ParentImage": "C:\\admin_toolkit.exe"});
+    assert!(engine.evaluate(&JsonEvent::borrow(&filtered)).is_empty());
+}
+
+#[test]
+fn test_filter_stable_identity_wins_over_title_fallback() {
+    let yaml = r#"
+title: Stable Target
+name: target
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: target
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 2
+    condition: selection
+---
+title: Exclude Admin
+filter:
+    rules: [target]
+    selection:
+        User: admin
+    condition: not selection
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = Engine::new();
+    engine.add_collection(&collection).unwrap();
+
+    let stable_target = json!({"EventID": 1, "User": "admin"});
+    assert!(
+        engine
+            .evaluate(&JsonEvent::borrow(&stable_target))
+            .is_empty()
+    );
+
+    let title_collision = json!({"EventID": 2, "User": "admin"});
+    let matches = engine.evaluate(&JsonEvent::borrow(&title_collision));
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].header.rule_title, "target");
+}
+
+#[test]
+fn test_filter_selector_patterns_stay_in_filter_scope() {
+    let yaml = r#"
+title: User Activity
+id: 00000000-0000-4000-8000-000000000001
+logsource:
+    category: test
+detection:
+    sel_target:
+        EventID: 1
+    condition: sel_target
+---
+title: Exclude Known Users
+filter:
+    rules:
+        - 00000000-0000-4000-8000-000000000001
+    sel_admin:
+        User|startswith: admin
+    sel_alice:
+        User: alice
+    condition: not 1 of sel_*
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = Engine::new();
+    engine.add_collection(&collection).unwrap();
+
+    for user in ["admin01", "alice"] {
+        let event = json!({"EventID": 1, "User": user});
+        assert!(engine.evaluate(&JsonEvent::borrow(&event)).is_empty());
+    }
+
+    let event = json!({"EventID": 1, "User": "bob"});
+    assert_eq!(engine.evaluate(&JsonEvent::borrow(&event)).len(), 1);
 }
 
 #[test]

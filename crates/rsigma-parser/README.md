@@ -287,7 +287,7 @@ The string must be at least 2 characters (e.g. `1h`). The last character is the 
 
 ## Linter (87 rules)
 
-87 built-in lint rules (plus the reserved `empty_filter_rules`, declared but not emitted) derived from the Sigma v2.1.0 specification, including the opt-in ADS detection-strategy checks. Four severity levels: **Error** (spec violation), **Warning** (best-practice issue), **Info** (soft suggestion), **Hint** (stylistic). Info/Hint findings don't cause lint failure.
+89 emitted lint rules (plus the reserved `empty_filter_rules`) derived from the Sigma v2.1.0 specification, including the opt-in ADS detection-strategy checks. Four severity levels: **Error** (spec violation), **Warning** (best-practice issue), **Info** (soft suggestion), **Hint** (stylistic). Info/Hint findings don't cause lint failure.
 
 The linter operates on raw YAML values to catch issues the parser silently ignores.
 
@@ -367,7 +367,7 @@ The linter operates on raw YAML values to catch issues the parser silently ignor
 | `generate_not_boolean` | Error | | `generate` is not a boolean |
 | `correlation_only_references` | Info | | Referenced rules produce no standalone output unless `generate` is true |
 
-### Filter Rules (8 IDs, 7 emitted)
+### Filter Rules (9 IDs, 8 emitted)
 
 | Rule | Severity | Fix | Trigger |
 |------|----------|-----|---------|
@@ -378,7 +378,8 @@ The linter operates on raw YAML values to catch issues the parser silently ignor
 | `missing_filter_condition` | Error | | No `filter.condition` |
 | `filter_has_level` | Warning | Yes | Filter has `level` (not applicable) |
 | `filter_has_status` | Warning | Yes | Filter has `status` (not applicable) |
-| `missing_filter_logsource` | Warning | | No `logsource` |
+| `missing_filter_logsource` | Error | | No `logsource` |
+| `filter_reference_by_title` | Warning | | A filter references a rule by title instead of id or name |
 
 ### Detection Logic (8)
 

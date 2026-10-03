@@ -132,9 +132,9 @@ Apply to correlation rules (`correlation:` block).
 | `correlation_only_references` | `info` | none | The correlation omits `generate: true`, so referenced detections produce no standalone output. {{ added "unreleased" }} |
 | `invalid_condition_operator` | `error` | none | A key in `correlation.condition` is not one of `gt`, `gte`, `lt`, `lte`, `eq`, `neq` (the `field` key is exempt). |
 
-## Filter rules (8 IDs, 7 emitted)
+## Filter rules (9 IDs, 8 emitted)
 
-Apply to filter rules (`kind: filter` with a `filter:` block). The eighth row (`empty_filter_rules`) is reserved: the variant exists in the lint-rule enum and is asserted in a regression test, but no production code path emits it today.
+Apply to filter rules (`kind: filter` with a `filter:` block). The ninth row (`empty_filter_rules`) is reserved: the variant exists in the lint-rule enum and is asserted in a regression test, but no production code path emits it today.
 
 | Rule | Severity | Fix | Description |
 |------|----------|-----|-------------|
@@ -145,6 +145,7 @@ Apply to filter rules (`kind: filter` with a `filter:` block). The eighth row (`
 | `missing_filter_condition` | `error` | none | `filter:` has no `condition:`. |
 | `filter_has_level` | `warning` | yes | Filter rules should not carry `level:`. The fix removes the field. |
 | `filter_has_status` | `warning` | yes | Filter rules should not carry `status:`. The fix removes the field. |
+| `filter_reference_by_title` | `warning` | none | A `filter.rules` entry matches a rule title. Title references are deprecated; use the rule `id` or `name`. {{ added "unreleased" }} |
 | `empty_filter_rules` | reserved | none | Variant declared in the enum and asserted in a regression test, but no production code emits it today. |
 
 ## Modifier and `related:` hygiene (7)

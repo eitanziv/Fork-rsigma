@@ -202,10 +202,11 @@ Contrasts false-positive events with required true-positive exemplars and emits 
 
 ### Filter Rule Behavior
 
-- Filters match by `rule.id` or `rule.title` (from `filter.rules`).
-- If the filter has a `logsource`, the rule must be compatible (symmetric check).
+- Filters match `filter.rules` references by rule `id` or `name`. Matching by title remains as a deprecated compatibility fallback.
+- Selector patterns in filter conditions, including `1 of selection_*` and `all of them`, are scoped to the filter's own detection items after injection.
+- If the filter has a `logsource`, every dimension it specifies must match the target rule; omitted dimensions act as wildcards.
 - Empty `filter.rules` applies the filter to all rules.
-- Filter detections are added as `__filter_{counter}_{name}` (counter prevents key collisions when multiple filters share detection names); the condition is wrapped as `original AND NOT filter`.
+- Filter detections are added as `__filter_{counter}_{name}` (counter prevents key collisions when multiple filters share detection names); the condition is wrapped as `original AND filter condition`, so suppression filters must write the negation explicitly.
 
 ### Selector Pattern Matching
 
