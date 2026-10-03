@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Filter selectors skip hidden items and generated filters target rule names
+### Filter selectors skip hidden items and generated filters target rule names (#540)
 
 A selector with a `*` between two literal parts no longer matches a name where the parts overlap, so `sel*lection` no longer selects `selection` in a detection condition, and `not 1 of *_main` in a filter no longer selects a filter item named `main`. In a filter condition, `them` and patterns that do not start with `_` now skip the filter's `_`-prefixed detection items, as they already did in detection conditions. `rule tune` and the MCP `tune_rules` tool now target a rule by `name` when it has no `id`, instead of writing the title reference that `rule lint` reports as deprecated. `rule lint` resolves filter references against detection rules only, matching the engine, so a correlation `name` no longer hides a filter's title reference.
 
