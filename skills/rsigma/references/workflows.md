@@ -13,6 +13,7 @@ Prefer the MCP tool when `rsigma mcp serve` is connected. Otherwise use the CLI.
 3. **Evaluate.** `evaluate_events` or `engine eval` against a few positive and negative events. `match_detail` of `summary` or `full` explains why an event matched. When the events live on the rule as `rsigma.exemplars`, `test_exemplars` or `rule test` is the closed runner.
    Correlation inputs do not produce standalone detection output by default. Set top-level `generate: true` on the correlation or pass `--emit-detections` when those matches are needed.
 4. **Tune.** For a noisy rule, `tune_rules` or `rule tune` with classified false positives and a true-positive set that must still fire. Review the returned filter before writing it.
+   Target filters by rule `id` or `name`, not title. Selector patterns in a filter condition refer only to that filter's own detection items.
 5. **Validate.** `validate_rules` or `rule validate` on the set, with pipelines when the rules depend on them.
 6. **Convert.** `convert_rules` or `backend convert` to the deployment target. Native targets run in-process. Other targets need sigma-cli, and on MCP they also need `--allow-sigma-cli`.
 
