@@ -36,6 +36,7 @@ serde_json = "1"   # only if you use the JsonEvent shim
 | `CorrelationEngine` | Stateful engine that wraps `Engine` and adds the sliding-window correlation state. Use this when any rule in the collection is a correlation rule. |
 | `CorrelationConfig` | Limits on correlation state (`max_state_entries`, `max_event_buffer`). Default `100_000` and `10_000`. |
 | `Pipeline` | Parsed processing pipeline. Applied to rules at `add_collection` time, in priority order. |
+| `ConditionSet<T>` | One pipeline condition scope: identifier-keyed conditions, `and`/`or` linking, optional negation, and an optional expression. `TransformationItem` has one set each for rule, detection-item, and field-name conditions. {{ added "unreleased" }} |
 | `pipeline::parse_pipeline(&str) -> Result<Pipeline>` | Parse a pipeline YAML string. |
 | `TransformedRule` + `transform_rule` / `transform_collection` | Apply pipelines and hand back the rewritten rule, the transformation ids that fired, and the merged `PipelineState`, without compiling or loading. `Engine::transform_rule` / `Engine::transform_collection` do the same over an engine's configured pipelines. |
 | `LogSourceExtractor` | Derives an event's `LogSource` from configurable fields plus optional static defaults, for conflict-based logsource pruning. Pass to `Engine::set_logsource_extractor`. |
@@ -51,6 +52,8 @@ serde_json = "1"   # only if you use the JsonEvent shim
 | `explain_rule`, `RuleExplanation`, `ConditionTrace`, `DetectionTrace`, `ArrayMemberTrace`, `ArrayEmptyReason`, `ItemTrace`, `MatchReason` | Non-short-circuiting recording evaluator behind `engine explain`. `DetectionTrace::ArrayMatch` records per-member traces; `Conditional` covers extended array bodies. |
 
 The full enum of modifiers, the matcher-optimizer constants, the `rsigma.*` custom-attribute table, and the bloom/cross-rule prefilters live in [the crate README](https://github.com/timescale/rsigma/blob/main/crates/rsigma-eval/README.md).
+
+`Transformation::SetState.value` is a `serde_json::Value`, preserving numeric and boolean pipeline state for typed `processing_state` comparisons. Code that previously constructed it with a `String` should use `serde_json::Value::String`. {{ added "unreleased" }}
 
 ## Minimum example: detection only
 

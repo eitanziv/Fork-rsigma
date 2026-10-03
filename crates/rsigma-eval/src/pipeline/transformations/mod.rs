@@ -14,9 +14,13 @@ use regex::Regex;
 
 use rsigma_parser::{SigmaRule, SigmaValue};
 
-use super::conditions::{DetectionItemCondition, FieldNameCondition};
+use super::conditions::{
+    ConditionOp, ConditionSet, DetectionItemCondition, FieldNameCondition, NamedCondition,
+};
 use super::state::PipelineState;
 use crate::error::{EvalError, Result};
+
+pub(super) use helpers::{apply_named_string_fn, rename_field_list};
 
 // =============================================================================
 // Transformation enum
@@ -78,6 +82,11 @@ pub enum Transformation {
         /// putting a cheap, highly selective discriminator (e.g. an
         /// event-name predicate) first.
         prepend: bool,
+        /// Name of the added detection. A generated name is used when unset.
+        name: Option<String>,
+        /// Treat string values as templates in which `$category`, `$product`,
+        /// and `$service` are replaced with the rule's logsource values.
+        template: bool,
     },
 
     /// Replace logsource fields.
@@ -96,19 +105,38 @@ pub enum Transformation {
         regex: String,
         replacement: String,
         skip_special: bool,
+        /// With `skip_special`, interpret wildcards in the replacement result
+        /// instead of keeping them as literal characters.
+        interpret_special: bool,
     },
 
     /// Expand `%name%` placeholders with pipeline variables.
-    ValuePlaceholders,
+    ValuePlaceholders {
+        /// Leave unknown placeholders for rsigma's runtime event-field
+        /// substitution instead of rejecting the pipeline application.
+        allow_unresolved: bool,
+        /// Resolve only these placeholder names.
+        include: Option<Vec<String>>,
+        /// Resolve every placeholder except these names.
+        exclude: Option<Vec<String>>,
+    },
 
     /// Replace unresolved `%name%` placeholders with `*` wildcard.
-    WildcardPlaceholders,
+    WildcardPlaceholders {
+        /// Resolve only these placeholder names.
+        include: Option<Vec<String>>,
+        /// Resolve every placeholder except these names.
+        exclude: Option<Vec<String>>,
+    },
 
     /// Store expression template (no-op for eval, kept for YAML compat).
     QueryExpressionPlaceholders { expression: String },
 
     /// Set key-value in pipeline state.
-    SetState { key: String, value: String },
+    SetState {
+        key: String,
+        value: serde_json::Value,
+    },
 
     /// Fail if rule conditions match.
     RuleFailure { message: String },
@@ -125,16 +153,20 @@ pub enum Transformation {
         mapping: HashMap<String, String>,
     },
 
-    /// Decompose the `Hashes` field into per-algorithm fields.
+    /// Decompose hash fields into per-algorithm fields.
     ///
-    /// `Hashes: "SHA1=abc,MD5=def"` → `FileSHA1: abc` + `FileMD5: def`
+    /// `Hashes: [SHA1=abc, MD5=def]` becomes `SHA1: abc` OR `MD5: def`
+    /// (each name prefixed with `field_prefix`). A bare hash value gets its
+    /// algorithm from its length (MD5, SHA1, SHA256, or SHA512).
     HashesFields {
-        /// Allowed hash algorithms (e.g. `["MD5", "SHA1", "SHA256"]`).
+        /// Accepted upper-case algorithm names (e.g. `["MD5", "SHA1"]`).
         valid_hash_algos: Vec<String>,
         /// Prefix for generated field names (e.g. `"File"` → `FileMD5`).
         field_prefix: String,
         /// If true, omit algo name from field (use just prefix).
         drop_algo_prefix: bool,
+        /// Field names whose values are parsed (default `Hashes` and `Hash`).
+        field_to_parse: Vec<String>,
     },
 
     /// Map string values via a lookup table.
@@ -208,13 +240,54 @@ impl Transformation {
         field_name_conditions: &[FieldNameCondition],
         field_name_cond_not: bool,
     ) -> Result<bool> {
+        let detection_item_conditions = ConditionSet {
+            conditions: detection_item_conditions
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(index, condition)| NamedCondition {
+                    id: (index + 1).to_string(),
+                    condition,
+                })
+                .collect(),
+            ..ConditionSet::default()
+        };
+        let field_name_conditions = ConditionSet {
+            conditions: field_name_conditions
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(index, condition)| NamedCondition {
+                    id: (index + 1).to_string(),
+                    condition,
+                })
+                .collect(),
+            op: ConditionOp::And,
+            negated: field_name_cond_not,
+            expression: None,
+        };
+        self.apply_with_condition_sets(
+            rule,
+            state,
+            &[&detection_item_conditions],
+            &[&field_name_conditions],
+        )
+    }
+
+    pub(super) fn apply_with_condition_sets(
+        &self,
+        rule: &mut SigmaRule,
+        state: &mut PipelineState,
+        detection_item_conditions: &[&ConditionSet<DetectionItemCondition>],
+        field_name_conditions: &[&ConditionSet<FieldNameCondition>],
+    ) -> Result<bool> {
         match self {
             Transformation::FieldNameMapping { mapping } => {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| mapping.get(name).cloned(),
                 )?;
                 Ok(true)
@@ -224,8 +297,8 @@ impl Transformation {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| {
                         for (prefix, replacement) in mapping {
                             if name.starts_with(prefix.as_str()) {
@@ -246,8 +319,8 @@ impl Transformation {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| Some(vec![format!("{prefix}{name}")]),
                 )?;
                 Ok(true)
@@ -257,8 +330,8 @@ impl Transformation {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| Some(vec![format!("{name}{suffix}")]),
                 )?;
                 Ok(true)
@@ -270,7 +343,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                 );
                 Ok(true)
             }
@@ -280,9 +352,20 @@ impl Transformation {
                 field_refs,
                 negated,
                 prepend,
+                name,
+                template,
             } => {
-                helpers::add_conditions(rule, conditions, field_refs, *negated, *prepend);
-
+                helpers::add_conditions(
+                    rule,
+                    &helpers::AddedCondition {
+                        conditions,
+                        field_refs,
+                        negated: *negated,
+                        prepend: *prepend,
+                        name: name.as_deref(),
+                        template: *template,
+                    },
+                )?;
                 Ok(true)
             }
 
@@ -307,6 +390,7 @@ impl Transformation {
                 regex,
                 replacement,
                 skip_special,
+                interpret_special,
             } => {
                 let re = Regex::new(regex)
                     .map_err(|e| EvalError::InvalidModifiers(format!("bad regex: {e}")))?;
@@ -315,21 +399,45 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     &re,
-                    replacement,
-                    *skip_special,
+                    &helpers::StringReplace {
+                        replacement,
+                        skip_special: *skip_special,
+                        interpret_special: *interpret_special,
+                    },
                 );
                 Ok(true)
             }
 
-            Transformation::ValuePlaceholders => {
-                helpers::expand_placeholders_in_rule(rule, state, false);
+            Transformation::ValuePlaceholders {
+                allow_unresolved,
+                include,
+                exclude,
+            } => {
+                helpers::expand_placeholders_in_rule(
+                    rule,
+                    &helpers::PlaceholderExpansion {
+                        state,
+                        wildcard: false,
+                        allow_unresolved: *allow_unresolved,
+                        include: include.as_deref(),
+                        exclude: exclude.as_deref(),
+                    },
+                )?;
                 Ok(true)
             }
 
-            Transformation::WildcardPlaceholders => {
-                helpers::expand_placeholders_in_rule(rule, state, true);
+            Transformation::WildcardPlaceholders { include, exclude } => {
+                helpers::expand_placeholders_in_rule(
+                    rule,
+                    &helpers::PlaceholderExpansion {
+                        state,
+                        wildcard: true,
+                        allow_unresolved: false,
+                        include: include.as_deref(),
+                        exclude: exclude.as_deref(),
+                    },
+                )?;
                 Ok(true)
             }
 
@@ -342,7 +450,7 @@ impl Transformation {
             }
 
             Transformation::SetState { key, value } => {
-                state.set_state(key.clone(), serde_json::Value::String(value.clone()));
+                state.set_state(key.clone(), value.clone());
                 Ok(true)
             }
 
@@ -352,8 +460,12 @@ impl Transformation {
             ))),
 
             Transformation::DetectionItemFailure { message } => {
-                let has_match =
-                    helpers::rule_has_matching_item(rule, state, detection_item_conditions);
+                let has_match = helpers::rule_has_matching_item(
+                    rule,
+                    state,
+                    detection_item_conditions,
+                    field_name_conditions,
+                );
                 if has_match {
                     Err(EvalError::InvalidModifiers(format!(
                         "Pipeline detection item failure: {message} (rule: {})",
@@ -373,8 +485,8 @@ impl Transformation {
                 helpers::apply_field_name_transform(
                     rule,
                     state,
+                    detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     |name| {
                         if let Some(mapped) = map.get(name) {
                             return Some(vec![mapped.clone()]);
@@ -389,13 +501,20 @@ impl Transformation {
                 valid_hash_algos,
                 field_prefix,
                 drop_algo_prefix,
+                field_to_parse,
             } => {
                 helpers::decompose_hashes_field(
                     rule,
-                    valid_hash_algos,
-                    field_prefix,
-                    *drop_algo_prefix,
-                );
+                    state,
+                    detection_item_conditions,
+                    field_name_conditions,
+                    &helpers::HashesFields {
+                        valid_hash_algos,
+                        field_prefix,
+                        drop_algo_prefix: *drop_algo_prefix,
+                        field_to_parse,
+                    },
+                )?;
                 Ok(true)
             }
 
@@ -405,7 +524,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     mapping,
                 );
                 Ok(true)
@@ -417,7 +535,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     value,
                 );
                 Ok(true)
@@ -429,7 +546,6 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     target_type,
                 );
                 Ok(true)
@@ -471,43 +587,26 @@ impl Transformation {
                     state,
                     detection_item_conditions,
                     field_name_conditions,
-                    field_name_cond_not,
                     case_type,
                 );
                 Ok(true)
             }
 
             Transformation::Nest { items } => {
+                let outer_id = state.current_item_id.clone();
                 for item in items {
-                    let mut merged_det_conds: Vec<DetectionItemCondition> =
-                        detection_item_conditions.to_vec();
-                    merged_det_conds.extend(item.detection_item_conditions.clone());
-
-                    let mut merged_field_conds: Vec<FieldNameCondition> =
-                        field_name_conditions.to_vec();
-                    merged_field_conds.extend(item.field_name_conditions.clone());
-
-                    let rule_ok = if item.rule_conditions.is_empty() {
-                        true
-                    } else {
-                        super::conditions::all_rule_conditions_match(
-                            &item.rule_conditions,
-                            rule,
-                            state,
-                        )
-                    };
-
-                    if rule_ok {
-                        item.transformation.apply(
-                            rule,
-                            state,
-                            &merged_det_conds,
-                            &merged_field_conds,
-                            item.field_name_cond_not || field_name_cond_not,
-                        )?;
-                        if let Some(ref id) = item.id {
-                            state.mark_applied(id);
-                        }
+                    let rule_ok = item.rule_conditions.conditions.is_empty()
+                        || item
+                            .rule_conditions
+                            .matches(|condition| condition.matches_rule(rule, state));
+                    if !rule_ok {
+                        continue;
+                    }
+                    state.current_item_id = item.id.clone();
+                    let applied = item.apply_tracked(rule, state);
+                    state.current_item_id = outer_id.clone();
+                    if applied? && let Some(ref id) = item.id {
+                        state.mark_applied(id);
                     }
                 }
                 Ok(true)
@@ -515,5 +614,30 @@ impl Transformation {
 
             Transformation::Include { .. } => Ok(false),
         }
+    }
+}
+
+impl super::TransformationItem {
+    /// Apply this item's transformation under its own detection-item and
+    /// field-name conditions, recording the detection items it changes when
+    /// the pipeline tracks them.
+    pub(super) fn apply_tracked(
+        &self,
+        rule: &mut SigmaRule,
+        state: &mut PipelineState,
+    ) -> Result<bool> {
+        let before = state
+            .track_detection_items
+            .then(|| rule.detection.named.clone());
+        let applied = self.transformation.apply_with_condition_sets(
+            rule,
+            state,
+            &[&self.detection_item_conditions],
+            &[&self.field_name_conditions],
+        )?;
+        if let Some(before) = before {
+            helpers::track_detection_item_changes(&before, &rule.detection.named, state);
+        }
+        Ok(applied)
     }
 }

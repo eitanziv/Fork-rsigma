@@ -5,25 +5,196 @@
 //! - **Detection item conditions**: evaluated against individual `DetectionItem` values
 //! - **Field name conditions**: evaluated against field names in detection items
 
+use std::collections::{HashMap, HashSet};
+
 use regex::Regex;
 
-use rsigma_parser::{CorrelationRule, Detection, DetectionItem, LogSource, SigmaRule, SigmaValue};
+use rsigma_parser::{
+    ConditionExpr, CorrelationRule, Detection, DetectionItem, LogSource, Modifier, SigmaRule,
+    SigmaString, SigmaValue, SpecialChar, StringPart, parse_condition,
+};
 
 use super::state::PipelineState;
+use crate::error::{EvalError, Result};
+
+// =============================================================================
+// Condition linking
+// =============================================================================
+
+/// Logical operator used to link a condition list.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ConditionOp {
+    /// Every condition must match.
+    #[default]
+    And,
+    /// At least one condition must match.
+    Or,
+}
+
+/// A condition paired with the identifier used by condition expressions.
+#[derive(Debug, Clone)]
+pub struct NamedCondition<T> {
+    /// Identifier used in a `*_cond_expr` expression.
+    pub id: String,
+    /// Parsed condition.
+    pub condition: T,
+}
+
+/// Conditions and their pySigma-compatible linking behavior.
+#[derive(Debug, Clone)]
+pub struct ConditionSet<T> {
+    /// Parsed conditions in source order.
+    pub conditions: Vec<NamedCondition<T>>,
+    /// Default list-linking operator when no expression is present.
+    pub op: ConditionOp,
+    /// Whether to negate the linked result.
+    pub negated: bool,
+    /// Optional logical expression over condition identifiers.
+    pub expression: Option<String>,
+}
+
+impl<T> Default for ConditionSet<T> {
+    fn default() -> Self {
+        Self {
+            conditions: Vec::new(),
+            op: ConditionOp::And,
+            negated: false,
+            expression: None,
+        }
+    }
+}
+
+impl<T> ConditionSet<T> {
+    /// Evaluate this set with the supplied condition matcher.
+    pub fn matches(&self, mut matcher: impl FnMut(&T) -> bool) -> bool {
+        let matched = if let Some(expression) = &self.expression {
+            let results = self
+                .conditions
+                .iter()
+                .map(|named| (named.id.clone(), matcher(&named.condition)))
+                .collect();
+            eval_condition_expr(expression, &results)
+        } else {
+            match self.op {
+                ConditionOp::And => self
+                    .conditions
+                    .iter()
+                    .all(|named| matcher(&named.condition)),
+                ConditionOp::Or => self
+                    .conditions
+                    .iter()
+                    .any(|named| matcher(&named.condition)),
+            }
+        };
+
+        if self.negated { !matched } else { matched }
+    }
+}
+
+/// A rule-level condition paired with an optional expression identifier.
+///
+/// Retained for source compatibility with the pre-`ConditionSet` API.
+#[derive(Debug, Clone)]
+pub struct NamedRuleCondition {
+    /// Optional condition expression identifier.
+    pub id: Option<String>,
+    /// Parsed rule condition.
+    pub condition: RuleCondition,
+}
+/// A detection-item condition with its expression identifier.
+pub type NamedDetectionItemCondition = NamedCondition<DetectionItemCondition>;
+/// A field-name condition with its expression identifier.
+pub type NamedFieldNameCondition = NamedCondition<FieldNameCondition>;
+
+/// Check whether every named rule condition matches.
+///
+/// This compatibility helper retains the pre-`ConditionSet` API. New code
+/// should call [`ConditionSet::matches`] to honor configured linking,
+/// negation, and expressions.
+pub fn all_rule_conditions_match(
+    conditions: &[NamedRuleCondition],
+    rule: &SigmaRule,
+    state: &PipelineState,
+) -> bool {
+    conditions
+        .iter()
+        .all(|named| named.condition.matches_rule(rule, state))
+}
+
+/// Comparison operator for `processing_state` conditions.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StateOperator {
+    #[default]
+    Eq,
+    Ne,
+    Gte,
+    Gt,
+    Lte,
+    Lt,
+}
+
+impl StateOperator {
+    fn matches(self, actual: &serde_json::Value, expected: &serde_json::Value) -> bool {
+        match self {
+            StateOperator::Eq => state_values_equal(actual, expected),
+            StateOperator::Ne => !state_values_equal(actual, expected),
+            StateOperator::Gte => compare_state_values(actual, expected).is_some_and(|o| o.is_ge()),
+            StateOperator::Gt => compare_state_values(actual, expected).is_some_and(|o| o.is_gt()),
+            StateOperator::Lte => compare_state_values(actual, expected).is_some_and(|o| o.is_le()),
+            StateOperator::Lt => compare_state_values(actual, expected).is_some_and(|o| o.is_lt()),
+        }
+    }
+}
+
+fn state_values_equal(actual: &serde_json::Value, expected: &serde_json::Value) -> bool {
+    match (actual, expected) {
+        (serde_json::Value::Number(_), serde_json::Value::Number(_)) => {
+            compare_state_values(actual, expected).is_some_and(|o| o.is_eq())
+        }
+        _ => actual == expected,
+    }
+}
+
+fn compare_state_values(
+    actual: &serde_json::Value,
+    expected: &serde_json::Value,
+) -> Option<std::cmp::Ordering> {
+    match (actual, expected) {
+        (serde_json::Value::Number(a), serde_json::Value::Number(b)) => {
+            if a.is_f64() || b.is_f64() {
+                return a.as_f64()?.partial_cmp(&b.as_f64()?);
+            }
+            if let (Some(a), Some(b)) = (a.as_i64(), b.as_i64()) {
+                return Some(a.cmp(&b));
+            }
+            if let (Some(a), Some(b)) = (a.as_u64(), b.as_u64()) {
+                return Some(a.cmp(&b));
+            }
+            if let (Some(a), Some(b)) = (a.as_i64(), b.as_u64()) {
+                return Some(if a < 0 {
+                    std::cmp::Ordering::Less
+                } else {
+                    (a as u64).cmp(&b)
+                });
+            }
+            if let (Some(a), Some(b)) = (a.as_u64(), b.as_i64()) {
+                return Some(if b < 0 {
+                    std::cmp::Ordering::Greater
+                } else {
+                    a.cmp(&(b as u64))
+                });
+            }
+            None
+        }
+        (serde_json::Value::String(a), serde_json::Value::String(b)) => Some(a.cmp(b)),
+        (serde_json::Value::Bool(a), serde_json::Value::Bool(b)) => Some(a.cmp(b)),
+        _ => None,
+    }
+}
 
 // =============================================================================
 // Rule Conditions
 // =============================================================================
-
-/// A rule condition paired with an optional named ID for use in
-/// `rule_cond_expression` logical expressions.
-#[derive(Debug, Clone)]
-pub struct NamedRuleCondition {
-    /// Optional ID referenced by `rule_cond_expression` (e.g. `"is_windows"`).
-    /// When absent, the condition is addressed by its positional index (`cond_N`).
-    pub id: Option<String>,
-    pub condition: RuleCondition,
-}
 
 /// A condition evaluated against a `SigmaRule` (or `CorrelationRule`).
 #[derive(Debug, Clone)]
@@ -45,7 +216,11 @@ pub enum RuleCondition {
     ProcessingItemApplied { processing_item_id: String },
 
     /// Check pipeline state key-value.
-    ProcessingState { key: String, val: String },
+    ProcessingState {
+        key: String,
+        val: serde_json::Value,
+        op: StateOperator,
+    },
 
     /// Always true for detection rules.
     IsSigmaRule,
@@ -78,7 +253,9 @@ impl RuleCondition {
                 state.was_applied(processing_item_id)
             }
 
-            RuleCondition::ProcessingState { key, val } => state.state_matches(key, val),
+            RuleCondition::ProcessingState { key, val, op } => state
+                .get_state(key)
+                .is_some_and(|actual| op.matches(actual, val)),
 
             RuleCondition::IsSigmaRule => true,
             RuleCondition::IsSigmaCorrelationRule => false,
@@ -99,68 +276,96 @@ impl RuleCondition {
             RuleCondition::ProcessingItemApplied { processing_item_id } => {
                 state.was_applied(processing_item_id)
             }
-            RuleCondition::ProcessingState { key, val } => state.state_matches(key, val),
+            RuleCondition::ProcessingState { key, val, op } => state
+                .get_state(key)
+                .is_some_and(|actual| op.matches(actual, val)),
             _ => false,
         }
     }
-}
-
-/// Check if all rule conditions match for a rule.
-pub fn all_rule_conditions_match(
-    conditions: &[NamedRuleCondition],
-    rule: &SigmaRule,
-    state: &PipelineState,
-) -> bool {
-    conditions
-        .iter()
-        .all(|c| c.condition.matches_rule(rule, state))
 }
 
 // =============================================================================
 // Detection Item Conditions
 // =============================================================================
 
+/// How a value condition combines its per-value results.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ValueMatch {
+    /// At least one value must match.
+    #[default]
+    Any,
+    /// Every value must match.
+    All,
+}
+
+impl ValueMatch {
+    fn combine(self, mut results: impl Iterator<Item = bool>) -> bool {
+        match self {
+            ValueMatch::Any => results.any(|matched| matched),
+            ValueMatch::All => results.all(|matched| matched),
+        }
+    }
+}
+
 /// A condition evaluated against individual detection item values.
 #[derive(Debug, Clone)]
 pub enum DetectionItemCondition {
-    /// String value matches a pre-compiled regex pattern.
-    MatchString { regex: Regex, negate: bool },
+    /// String values match a pre-compiled regex anchored at the start of the
+    /// value. `negate` inverts each value's result before `cond` combines
+    /// them; values that are not strings never match.
+    MatchString {
+        regex: Regex,
+        negate: bool,
+        cond: ValueMatch,
+    },
 
-    /// Detection item value is null.
-    IsNull { negate: bool },
+    /// Detection item values are null. `negate` inverts the combined result.
+    IsNull { negate: bool, cond: ValueMatch },
 
     /// A specific processing item was applied.
     ProcessingItemApplied { processing_item_id: String },
 
     /// Check pipeline state.
-    ProcessingState { key: String, val: String },
+    ProcessingState {
+        key: String,
+        val: serde_json::Value,
+        op: StateOperator,
+    },
 }
 
 impl DetectionItemCondition {
     /// Check if this condition matches a detection item's values.
     pub fn matches_item(&self, item: &DetectionItem, state: &PipelineState) -> bool {
         match self {
-            DetectionItemCondition::MatchString { regex, negate } => {
-                let has_match = item.values.iter().any(|v| match v {
-                    SigmaValue::String(s) => {
-                        let plain = s.as_plain().unwrap_or_else(|| s.original.clone());
-                        regex.is_match(&plain)
-                    }
+            DetectionItemCondition::MatchString {
+                regex,
+                negate,
+                cond,
+            } => cond.combine(item.values.iter().map(|value| {
+                let matched = match value {
+                    SigmaValue::String(s) => string_value_text(item, s)
+                        .is_some_and(|text| matches_at_start(regex, &text)),
                     _ => false,
-                });
-                if *negate { !has_match } else { has_match }
-            }
+                };
+                matched != *negate
+            })),
 
-            DetectionItemCondition::IsNull { negate } => {
-                let has_null = item.values.iter().any(|v| matches!(v, SigmaValue::Null));
-                if *negate { !has_null } else { has_null }
+            DetectionItemCondition::IsNull { negate, cond } => {
+                let matched = cond.combine(
+                    item.values
+                        .iter()
+                        .map(|value| matches!(value, SigmaValue::Null)),
+                );
+                matched != *negate
             }
 
             DetectionItemCondition::ProcessingItemApplied { processing_item_id } => {
-                state.was_applied_to_detection_item(processing_item_id)
+                state.detection_item_was_processed_by(item, processing_item_id)
             }
 
-            DetectionItemCondition::ProcessingState { key, val } => state.state_matches(key, val),
+            DetectionItemCondition::ProcessingState { key, val, op } => state
+                .get_state(key)
+                .is_some_and(|actual| op.matches(actual, val)),
         }
     }
 }
@@ -200,23 +405,52 @@ pub enum FieldNameCondition {
     ProcessingItemApplied { processing_item_id: String },
 
     /// Check pipeline state.
-    ProcessingState { key: String, val: String },
+    ProcessingState {
+        key: String,
+        val: serde_json::Value,
+        op: StateOperator,
+    },
 }
 
 impl FieldNameCondition {
     /// Check if this condition matches a field name.
     pub fn matches_field_name(&self, field_name: &str, state: &PipelineState) -> bool {
+        self.matches_field(Some(field_name), state)
+    }
+
+    /// Check if this condition matches an optional field name. Keyword
+    /// detection items have no field name: include conditions reject them
+    /// and exclude conditions accept them.
+    pub fn matches_field(&self, field_name: Option<&str>, state: &PipelineState) -> bool {
         match self {
-            FieldNameCondition::IncludeFields { matcher } => field_matches(field_name, matcher),
-
-            FieldNameCondition::ExcludeFields { matcher } => !field_matches(field_name, matcher),
-
-            FieldNameCondition::ProcessingItemApplied { processing_item_id } => {
-                state.was_applied(processing_item_id)
+            FieldNameCondition::IncludeFields { matcher } => {
+                field_name.is_some_and(|name| field_matches(name, matcher))
             }
 
-            FieldNameCondition::ProcessingState { key, val } => state.state_matches(key, val),
+            FieldNameCondition::ExcludeFields { matcher } => {
+                !field_name.is_some_and(|name| field_matches(name, matcher))
+            }
+
+            FieldNameCondition::ProcessingItemApplied { processing_item_id } => field_name
+                .is_some_and(|name| state.field_was_processed_by(name, processing_item_id)),
+
+            FieldNameCondition::ProcessingState { key, val, op } => state
+                .get_state(key)
+                .is_some_and(|actual| op.matches(actual, val)),
         }
+    }
+
+    /// Check if this condition matches a detection item: its field name, or
+    /// the target of any of its field references.
+    pub fn matches_detection_item(&self, item: &DetectionItem, state: &PipelineState) -> bool {
+        self.matches_field(item.field.name.as_deref(), state)
+            || (item.field.modifiers.contains(&Modifier::FieldRef)
+                && item.values.iter().any(|value| match value {
+                    SigmaValue::String(target) => target
+                        .as_plain()
+                        .is_some_and(|name| self.matches_field(Some(&name), state)),
+                    _ => false,
+                }))
     }
 }
 
@@ -227,81 +461,84 @@ impl FieldNameCondition {
 /// Evaluate a logical expression string over a map of condition results.
 ///
 /// The expression can use `and`, `or`, `not`, parentheses, and condition IDs.
-/// For simplicity, we support a flat `and` / `or` / `not` evaluation over
-/// named conditions.
-pub fn eval_condition_expr(expr: &str, results: &std::collections::HashMap<String, bool>) -> bool {
-    // Simple tokenizer and evaluator for expressions like:
-    // "cond1 and not cond2" or "cond1 or cond2"
-    let tokens: Vec<&str> = expr.split_whitespace().collect();
-    if tokens.is_empty() {
-        return true;
-    }
-
-    // Parse with simple recursive descent
-    eval_or_expr(&tokens, &mut 0, results)
+pub fn eval_condition_expr(expr: &str, results: &HashMap<String, bool>) -> bool {
+    parse_condition(expr)
+        .map(|parsed| eval_parsed_condition(&parsed, results))
+        .unwrap_or(false)
 }
 
-fn eval_or_expr(
-    tokens: &[&str],
-    pos: &mut usize,
-    results: &std::collections::HashMap<String, bool>,
-) -> bool {
-    let mut result = eval_and_expr(tokens, pos, results);
-    while *pos < tokens.len() && tokens[*pos].eq_ignore_ascii_case("or") {
-        *pos += 1;
-        let rhs = eval_and_expr(tokens, pos, results);
-        result = result || rhs;
+fn eval_parsed_condition(expr: &ConditionExpr, results: &HashMap<String, bool>) -> bool {
+    match expr {
+        ConditionExpr::Identifier(id) => results.get(id).copied().unwrap_or(false),
+        ConditionExpr::And(children) => children
+            .iter()
+            .all(|child| eval_parsed_condition(child, results)),
+        ConditionExpr::Or(children) => children
+            .iter()
+            .any(|child| eval_parsed_condition(child, results)),
+        ConditionExpr::Not(child) => !eval_parsed_condition(child, results),
+        ConditionExpr::Selector { .. } => false,
     }
-    result
 }
 
-fn eval_and_expr(
-    tokens: &[&str],
-    pos: &mut usize,
-    results: &std::collections::HashMap<String, bool>,
-) -> bool {
-    let mut result = eval_not_expr(tokens, pos, results);
-    while *pos < tokens.len() && tokens[*pos].eq_ignore_ascii_case("and") {
-        *pos += 1;
-        let rhs = eval_not_expr(tokens, pos, results);
-        result = result && rhs;
+/// Validate a condition expression and its references.
+pub(crate) fn validate_condition_expr(expr: &str, ids: &[String], label: &str) -> Result<()> {
+    let parsed = parse_condition(expr).map_err(|error| {
+        EvalError::InvalidModifiers(format!("invalid {label} expression '{expr}': {error}"))
+    })?;
+    let mut referenced = HashSet::new();
+    collect_condition_ids(&parsed, &mut referenced).map_err(|()| {
+        EvalError::InvalidModifiers(format!(
+            "{label} expression must contain only condition identifiers and boolean operators"
+        ))
+    })?;
+
+    let defined: HashSet<&str> = ids.iter().map(String::as_str).collect();
+    let unknown: Vec<&str> = referenced
+        .iter()
+        .map(String::as_str)
+        .filter(|id| !defined.contains(id))
+        .collect();
+    if !unknown.is_empty() {
+        return Err(EvalError::InvalidModifiers(format!(
+            "{label} expression references unknown condition identifier(s): {}",
+            unknown.join(", ")
+        )));
     }
-    result
+
+    let unreferenced: Vec<&str> = ids
+        .iter()
+        .map(String::as_str)
+        .filter(|id| !referenced.contains(*id))
+        .collect();
+    if !unreferenced.is_empty() {
+        return Err(EvalError::InvalidModifiers(format!(
+            "{label} expression leaves condition identifier(s) unreferenced: {}",
+            unreferenced.join(", ")
+        )));
+    }
+
+    Ok(())
 }
 
-fn eval_not_expr(
-    tokens: &[&str],
-    pos: &mut usize,
-    results: &std::collections::HashMap<String, bool>,
-) -> bool {
-    if *pos < tokens.len() && tokens[*pos].eq_ignore_ascii_case("not") {
-        *pos += 1;
-        return !eval_primary(tokens, pos, results);
-    }
-    eval_primary(tokens, pos, results)
-}
-
-fn eval_primary(
-    tokens: &[&str],
-    pos: &mut usize,
-    results: &std::collections::HashMap<String, bool>,
-) -> bool {
-    if *pos >= tokens.len() {
-        return false;
-    }
-
-    if tokens[*pos] == "(" {
-        *pos += 1;
-        let result = eval_or_expr(tokens, pos, results);
-        if *pos < tokens.len() && tokens[*pos] == ")" {
-            *pos += 1;
+fn collect_condition_ids(
+    expr: &ConditionExpr,
+    ids: &mut HashSet<String>,
+) -> std::result::Result<(), ()> {
+    match expr {
+        ConditionExpr::Identifier(id) => {
+            ids.insert(id.clone());
+            Ok(())
         }
-        return result;
+        ConditionExpr::And(children) | ConditionExpr::Or(children) => {
+            for child in children {
+                collect_condition_ids(child, ids)?;
+            }
+            Ok(())
+        }
+        ConditionExpr::Not(child) => collect_condition_ids(child, ids),
+        ConditionExpr::Selector { .. } => Err(()),
     }
-
-    let id = tokens[*pos];
-    *pos += 1;
-    *results.get(id).unwrap_or(&false)
 }
 
 // =============================================================================
@@ -420,8 +657,78 @@ fn rule_attribute_matches(rule: &SigmaRule, attribute: &str, value: &str) -> boo
 fn field_matches(field_name: &str, matcher: &FieldMatcher) -> bool {
     match matcher {
         FieldMatcher::Plain(fields) => fields.iter().any(|f| f == field_name),
-        FieldMatcher::Regex(regexes) => regexes.iter().any(|re| re.is_match(field_name)),
+        FieldMatcher::Regex(regexes) => regexes.iter().any(|re| matches_at_start(re, field_name)),
     }
+}
+
+/// Python `re.match` semantics: the leftmost match must begin at offset 0.
+fn matches_at_start(regex: &Regex, text: &str) -> bool {
+    regex.find(text).is_some_and(|m| m.start() == 0)
+}
+
+/// The text pySigma matches for a string value once the item's modifiers are
+/// applied: literal `*` and `?` escaped, wildcards bare, and `contains`,
+/// `startswith`, and `endswith` adding their wildcards. `None` when pySigma
+/// holds the value as a non-string type (field references, regular
+/// expressions, CIDR, comparisons, timestamp parts) or as an encoded string.
+fn string_value_text(item: &DetectionItem, s: &SigmaString) -> Option<String> {
+    let modifiers = &item.field.modifiers;
+    let non_string = modifiers.iter().any(|modifier| {
+        matches!(
+            modifier,
+            Modifier::FieldRef
+                | Modifier::Re
+                | Modifier::Cidr
+                | Modifier::Exists
+                | Modifier::Gt
+                | Modifier::Gte
+                | Modifier::Lt
+                | Modifier::Lte
+                | Modifier::Base64
+                | Modifier::Base64Offset
+                | Modifier::Wide
+                | Modifier::Utf16be
+                | Modifier::Utf16
+                | Modifier::WindAsh
+                | Modifier::Minute
+                | Modifier::Hour
+                | Modifier::Day
+                | Modifier::Week
+                | Modifier::Month
+                | Modifier::Year
+        )
+    });
+    if non_string {
+        return None;
+    }
+    let mut text: String = s
+        .parts
+        .iter()
+        .map(|part| match part {
+            StringPart::Plain(plain) => plain.replace('*', "\\*").replace('?', "\\?"),
+            StringPart::Special(SpecialChar::WildcardMulti) => "*".to_string(),
+            StringPart::Special(SpecialChar::WildcardSingle) => "?".to_string(),
+        })
+        .collect();
+    let starts_wild = matches!(
+        s.parts.first(),
+        Some(StringPart::Special(SpecialChar::WildcardMulti))
+    );
+    let ends_wild = matches!(
+        s.parts.last(),
+        Some(StringPart::Special(SpecialChar::WildcardMulti))
+    );
+    let contains = modifiers.contains(&Modifier::Contains);
+    let mut prefixed = false;
+    if (contains || modifiers.contains(&Modifier::EndsWith)) && !starts_wild {
+        text.insert(0, '*');
+        prefixed = true;
+    }
+    let ends_wild = ends_wild || (prefixed && s.parts.is_empty());
+    if (contains || modifiers.contains(&Modifier::StartsWith)) && !ends_wild {
+        text.push('*');
+    }
+    Some(text)
 }
 
 #[cfg(test)]
@@ -440,6 +747,49 @@ mod tests {
         assert!(eval_condition_expr("cond1 and not cond2", &results));
         assert!(eval_condition_expr("cond1 or cond2", &results));
         assert!(!eval_condition_expr("cond1 and cond2", &results));
+    }
+
+    #[test]
+    fn state_operators_at_boundaries() {
+        use serde_json::json;
+        let cases = [
+            (StateOperator::Eq, [false, true, false]),
+            (StateOperator::Ne, [true, false, true]),
+            (StateOperator::Gt, [false, false, true]),
+            (StateOperator::Gte, [false, true, true]),
+            (StateOperator::Lt, [true, false, false]),
+            (StateOperator::Lte, [true, true, false]),
+        ];
+        for (op, expected) in cases {
+            let actual =
+                [json!(4), json!(5.0), json!(6)].map(|value| op.matches(&value, &json!(5)));
+            assert_eq!(actual, expected, "{op:?}");
+        }
+        assert!(StateOperator::Eq.matches(&json!("a"), &json!("a")));
+        assert!(!StateOperator::Eq.matches(&json!("5"), &json!(5)));
+        assert!(StateOperator::Ne.matches(&json!("5"), &json!(5)));
+        assert!(!StateOperator::Gt.matches(&json!("6"), &json!(5)));
+    }
+
+    #[test]
+    fn state_number_comparison_preserves_integer_precision() {
+        let lower = serde_json::json!(9_007_199_254_740_992u64);
+        let higher = serde_json::json!(9_007_199_254_740_993u64);
+        assert_eq!(
+            compare_state_values(&lower, &higher),
+            Some(std::cmp::Ordering::Less)
+        );
+        assert_eq!(
+            compare_state_values(&higher, &lower),
+            Some(std::cmp::Ordering::Greater)
+        );
+
+        let negative = serde_json::json!(-1);
+        let unsigned = serde_json::json!(u64::MAX);
+        assert_eq!(
+            compare_state_values(&negative, &unsigned),
+            Some(std::cmp::Ordering::Less)
+        );
     }
 
     #[test]

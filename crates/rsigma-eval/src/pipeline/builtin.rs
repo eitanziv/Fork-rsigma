@@ -87,7 +87,7 @@ mod tests {
         pipeline.transformations.iter().find_map(|item| {
             if let Transformation::AddCondition { conditions, .. } = &item.transformation
                 && let Some(evts) = conditions.get("EventID")
-                && let Some(rule_cond) = item.rule_conditions.first()
+                && let Some(rule_cond) = item.rule_conditions.conditions.first()
                 && let RuleCondition::Logsource {
                     category: Some(cat),
                     ..

@@ -133,6 +133,7 @@ fn parse_transformation_array(data: &serde_json::Value) -> Result<Vec<Transforma
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rsigma_eval::pipeline::ConditionSet;
 
     #[test]
     fn extract_source_id_simple() {
@@ -163,11 +164,9 @@ mod tests {
                 transformation: Transformation::Include {
                     template: "${source.transforms}".to_string(),
                 },
-                rule_conditions: vec![],
-                rule_cond_expr: None,
-                detection_item_conditions: vec![],
-                field_name_conditions: vec![],
-                field_name_cond_not: false,
+                rule_conditions: ConditionSet::default(),
+                detection_item_conditions: ConditionSet::default(),
+                field_name_conditions: ConditionSet::default(),
             }],
             finalizers: vec![],
             source_refs: vec![],
