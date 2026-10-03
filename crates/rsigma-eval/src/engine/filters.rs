@@ -1,4 +1,4 @@
-use rsigma_parser::{ConditionExpr, LogSource};
+use rsigma_parser::{ConditionExpr, LogSource, SelectorPattern};
 
 /// Asymmetric containment check for filter-to-rule matching: every field the
 /// filter specifies must be present and equal in the rule. Fields the filter
@@ -45,7 +45,21 @@ pub(super) fn rewrite_condition_identifiers(expr: &ConditionExpr, counter: usize
         ConditionExpr::Not(child) => {
             ConditionExpr::Not(Box::new(rewrite_condition_identifiers(child, counter)))
         }
-        ConditionExpr::Selector { .. } => expr.clone(),
+        ConditionExpr::Selector {
+            quantifier,
+            pattern,
+        } => {
+            let pattern = match pattern {
+                SelectorPattern::Them => SelectorPattern::Pattern(format!("__filter_{counter}_*")),
+                SelectorPattern::Pattern(pattern) => {
+                    SelectorPattern::Pattern(format!("__filter_{counter}_{pattern}"))
+                }
+            };
+            ConditionExpr::Selector {
+                quantifier: quantifier.clone(),
+                pattern,
+            }
+        }
     }
 }
 
@@ -116,6 +130,7 @@ pub(super) fn logsource_matches(rule_ls: &LogSource, event_ls: &LogSource) -> bo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rsigma_parser::{Quantifier, SelectorPattern};
     use std::collections::HashMap;
 
     fn ls(product: Option<&str>, custom: &[(&str, &str)]) -> LogSource {
@@ -156,5 +171,35 @@ mod tests {
             &ls(Some("linux"), &[]),
             &ls(Some("windows"), &[("tenant", "acme")]),
         ));
+    }
+
+    #[test]
+    fn selector_patterns_are_scoped_to_injected_filter_detections() {
+        let expression = ConditionExpr::Selector {
+            quantifier: Quantifier::Any,
+            pattern: SelectorPattern::Pattern("selection_*".to_string()),
+        };
+        assert_eq!(
+            rewrite_condition_identifiers(&expression, 3),
+            ConditionExpr::Selector {
+                quantifier: Quantifier::Any,
+                pattern: SelectorPattern::Pattern("__filter_3_selection_*".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn them_is_scoped_to_injected_filter_detections() {
+        let expression = ConditionExpr::Selector {
+            quantifier: Quantifier::All,
+            pattern: SelectorPattern::Them,
+        };
+        assert_eq!(
+            rewrite_condition_identifiers(&expression, 2),
+            ConditionExpr::Selector {
+                quantifier: Quantifier::All,
+                pattern: SelectorPattern::Pattern("__filter_2_*".to_string()),
+            }
+        );
     }
 }
