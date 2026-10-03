@@ -28,9 +28,11 @@ The `test` backend now renders what pySigma's `TextQueryTestBackend` renders. Ba
 
 Conversion now applies Sigma filters, as pySigma does when a collection loads: `convert_collection`, and so `backend convert`, `hunt`, and the MCP `convert_rules` tool, merges each filter into the detection rules it references before pipelines run, so field mappings reach the filter's fields. The new `rsigma_eval::apply_filters` performs the merge and targets rules the same way `Engine::apply_filter` does. A correlation rule converted with a backend that has no correlation support (`lynxdb` and `test`) is now an `UnsupportedCorrelation` error instead of being dropped silently; pass `--skip-unsupported` to convert the rest.
 
+Breaking changes for library users: the `PostgresBackend::case_sensitive_re` field is removed, and an invalid `cidr` value fails with `EvalError::IncompatibleValue` instead of `EvalError::InvalidCidr`.
+
 Migration notes:
 
-- Add `|i` to a `re` value that should keep matching case-insensitively in PostgreSQL. The `case_sensitive_re` PostgreSQL option is removed, and the `PostgresBackend::case_sensitive_re` field with it, because plain `re` is now case-sensitive; `-O case_sensitive_re=...` is ignored like any unknown option.
+- Add `|i` to a `re` value that should keep matching case-insensitively in PostgreSQL. The `case_sensitive_re` PostgreSQL option is removed because plain `re` is now case-sensitive, and `-O case_sensitive_re=...` is ignored like any unknown option.
 - LynxDB queries for rules with regexes, CIDR, `null`, `cased`, numeric comparisons, or values `search` cannot match exactly now start with `FROM <index> | where` instead of `FROM <index> | search`, and scan every event in the index. Saved queries that parse the `search` expression need to accept both forms.
 
 ### Chained correlations follow Sigma output semantics, and corpus replay counts referenced rules (#541)

@@ -594,7 +594,8 @@ Always benchmark against representative rule sets and event streams before flipp
 | Error | When |
 |-------|------|
 | `InvalidRegex` | Regex compilation failure |
-| `InvalidCidr` | CIDR parse failure |
+| `InvalidCidr` | CIDR parse failure in IR that did not come from lowering a rule |
+| `IncompatibleValue` | A value the modifier cannot use, such as a `cidr` with host bits set or a wildcard in a field reference |
 | `Base64` | Base64 encoding error |
 | `UnknownDetection` | Condition references missing detection (caught at compile time) |
 | `InvalidModifiers` | Invalid modifier combo, empty AllOf/AnyOf, windash overflow, pipeline failure |

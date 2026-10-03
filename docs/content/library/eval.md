@@ -208,7 +208,7 @@ Decision matrix in [Performance Tuning](../guide/performance-tuning.md). Verifie
 
 ## Error handling
 
-`EvalError` from `thiserror`. Variants include `Parser` (re-exports the parser errors), `InvalidRegex`, `InvalidCidr`, `InvalidModifiers`, `UnknownRuleRef` (correlation references a rule that wasn't added), `CorrelationCycle`, and `Base64`. Each carries enough context to point operators at the offending rule.
+`EvalError` from `thiserror`. Variants include `Parser` (re-exports the parser errors), `InvalidRegex`, `InvalidCidr`, `IncompatibleValue` (a value the modifier cannot use, such as a `cidr` with host bits set), `InvalidModifiers`, `UnknownRuleRef` (correlation references a rule that wasn't added), `CorrelationCycle`, and `Base64`. Each carries enough context to point operators at the offending rule.
 
 ## See also
 
