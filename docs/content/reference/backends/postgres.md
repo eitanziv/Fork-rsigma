@@ -26,12 +26,12 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 
 | Sigma modifier | PostgreSQL operator |
 |----------------|---------------------|
-| equality (no modifier) | `"field" ILIKE 'value'` (case-insensitive, with `%`, `_`, and `\` escaped so they match literally) {{ added "unreleased" }} |
+| equality (no modifier) | `"field" ILIKE 'value'` (case-insensitive, with `%`, `_`, and `\` escaped so they match literally). A value without letters, such as `'4624'` or `'10.0.0.1'`, renders as `"field" = 'value'`, which matches the same rows and also works on an integer, `inet`, or timestamp column. A value with letters needs a text column. {{ added "unreleased" }} |
 | `contains` | `"field" ILIKE '%value%'` (case-insensitive) |
 | `startswith` | `"field" ILIKE 'value%'` |
 | `endswith` | `"field" ILIKE '%value'` |
 | `cased` (any of the above) | switches `ILIKE` to `LIKE` (case-sensitive); a plain `cased` equality renders as `"field" = 'value'` |
-| `re` | `"field" ~ 'pattern'` (case-sensitive, as the Sigma specification requires); `~*` with `\|i`. `\|m` adds the `(?w)` embedded option so `^` and `$` match at line breaks. PostgreSQL's `.` matches a line break even without `\|s`, so a regex can over-match a multi-line value but never misses one. {{ added "unreleased" }} |
+| `re` | `"field" ~ 'pattern'` (case-sensitive, as the Sigma specification requires); `~*` with `\|i`. `\|m` adds the `(?w)` embedded option so `^` and `$` match at line breaks, merged into a leading options group such as `(?i)` because PostgreSQL reads only one. PostgreSQL's `.` matches a line break even without `\|s`, so a regex can over-match a multi-line value but never misses one. {{ added "unreleased" }} |
 | `cidr` | `("field")::inet <<= 'value'::cidr` |
 | `exists: true` | `"field" IS NOT NULL`; `data->'field' IS NOT NULL` in [JSONB mode](#jsonb-mode) |
 | `exists: false` | `"field" IS NULL`; `data->'field' IS NULL` in [JSONB mode](#jsonb-mode) |
@@ -148,15 +148,15 @@ data->'actor'->'detail'->>'alternateId'
 
 Typed values need care because `->>` returns text. {{ added "unreleased" }}
 
-- A number or a `lt`/`lte`/`gt`/`gte` comparison casts the text to `numeric` only when it reads as a number, so a JSON number and a numeric string such as `"1500"` both compare numerically, as in the rsigma engine, and a value such as `"abc"` compares as NULL instead of failing the whole query:
+- A number or a `lt`/`lte`/`gt`/`gte` comparison casts the text to `numeric` only when it reads as a number of at most 100 digits on each side of the decimal point and a three-digit exponent, so a JSON number and a numeric string such as `"1500"` both compare numerically, as in the rsigma engine, and a value such as `"abc"` or `"9e999999"` compares as NULL instead of failing the whole query. Elements of a scalar array (`ports[any]: 4444`) get the same cast:
 
 ```sql
 -- Sigma: ProcessId|gt: 1000
-(CASE WHEN data->>'ProcessId' ~ '^[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$'
+(CASE WHEN data->>'ProcessId' ~ '^[-+]?([0-9]{1,100}\.?[0-9]{0,100}|\.[0-9]{1,100})([eE][-+]?[0-9]{1,3})?$'
   THEN (data->>'ProcessId')::numeric END) > 1000
 ```
 
-- A boolean compares the text case-insensitively (`data->>'Elevated' ILIKE 'true'`), which matches a JSON `true` and the string `"true"`.
+- A boolean compares the text case-insensitively (`data->>'Elevated' ILIKE 'true'`), which matches a JSON `true` and the string `"true"`, in a field or a scalar array element.
 - `exists` tests the `->` (jsonb) form, which is SQL NULL only when the key is absent. A key whose value is JSON `null` exists, as Sigma requires. Flat columns cannot make this distinction, because a typed column stores an absent field and a null value as the same SQL NULL.
 
 Each path segment is validated against the SQL identifier regex (`^[A-Za-z_][A-Za-z0-9_$]*$`) before insertion; malformed segments fail conversion. Single quotes inside path segments are doubled (`don''t`). See [Security Hardening](../security.md#sql-injection-prevention).

@@ -732,19 +732,67 @@ detection:
     condition: pid and port
 "#,
     );
-    let num = |f: &str| {
-        format!(
-            "(CASE WHEN data->>'{f}' ~ '^[-+]?([0-9]+\\.?[0-9]*|\\.[0-9]+)([eE][-+]?[0-9]+)?$' \
-             THEN (data->>'{f}')::numeric END)"
-        )
-    };
+    let num = |f: &str| format!("(CASE WHEN {f} ~ '{NUMERIC_TEXT}' THEN ({f})::numeric END)");
     assert_eq!(
         queries,
         vec![format!(
             "SELECT * FROM security_events WHERE {} = 4 AND {} > 1000",
-            num("ProcessId"),
-            num("Port")
+            num("data->>'ProcessId'"),
+            num("data->>'Port'")
         )]
+    );
+}
+
+const NUMERIC_TEXT: &str =
+    r"^[-+]?([0-9]{1,100}\.?[0-9]{0,100}|\.[0-9]{1,100})([eE][-+]?[0-9]{1,3})?$";
+
+#[test]
+fn test_jsonb_scalar_array_elements_compare_as_text() {
+    let queries = convert_json(
+        r#"
+sigma-version: 3
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        ports[any]: 4444
+        flags[any]: true
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec![format!(
+            "SELECT * FROM security_events WHERE \
+             (jsonb_typeof(data->'ports') = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(data->'ports') AS __sigma_e0 \
+             WHERE (CASE WHEN __sigma_e0 ~ '{NUMERIC_TEXT}' THEN (__sigma_e0)::numeric END) = 4444)) AND \
+             (jsonb_typeof(data->'flags') = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(data->'flags') AS __sigma_e1 \
+             WHERE __sigma_e1 ILIKE 'true'))"
+        )]
+    );
+}
+
+#[test]
+fn test_caseless_equality_uses_eq() {
+    let queries = convert(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: '4624'
+        SourceIp: '10.0.0.1'
+        User: 'admin'
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec![
+            r#"SELECT * FROM security_events WHERE "EventID" = '4624' AND "SourceIp" = '10.0.0.1' AND "User" ILIKE 'admin'"#
+        ]
     );
 }
 
@@ -1437,6 +1485,86 @@ correlation:
     assert!(
         q.contains("'rule_b' AS rule_name"),
         "expected rule_b label in: {q}"
+    );
+}
+
+#[test]
+fn test_multiline_regex_joins_leading_options_group() {
+    let queries = convert(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        F|re|m: '(?i)^ab$'
+        G|re|m: '(?:a)b'
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec![r#"SELECT * FROM security_events WHERE "F" ~ '(?wi)^ab$' AND "G" ~ '(?w)(?:a)b'"#]
+    );
+}
+
+#[test]
+fn test_temporal_multi_table_escapes_rule_names() {
+    let collection = parse_sigma_yaml(
+        r#"
+title: Multi-Stage Attack
+correlation:
+    type: temporal_ordered
+    rules:
+        - "a'); DROP TABLE t; --"
+        - rule_b
+    timespan: 5m
+"#,
+    )
+    .unwrap();
+    let mut pipeline_state = PipelineState::default();
+    pipeline_state.set_state(
+        "_rule_tables".to_string(),
+        serde_json::json!({"a'); DROP TABLE t; --": "proc", "rule_b": "net"}),
+    );
+    let q = PostgresBackend::new()
+        .convert_correlation_rule(&collection.correlations[0], "default", &pipeline_state)
+        .unwrap()
+        .remove(0);
+    assert!(
+        q.contains("SELECT *, 'a''); DROP TABLE t; --' AS rule_name FROM proc"),
+        "{q}"
+    );
+    assert!(!q.contains("'a');"), "{q}");
+}
+
+#[test]
+fn test_temporal_ordered_timescaledb_orders_within_each_bucket() {
+    let collection = parse_sigma_yaml(
+        r#"
+title: Ordered
+correlation:
+    type: temporal_ordered
+    rules:
+        - rule_a
+        - rule_b
+    group-by:
+        - User
+    timespan: 5m
+"#,
+    )
+    .unwrap();
+    let q = PostgresBackend::new()
+        .convert_correlation_rule(
+            &collection.correlations[0],
+            "timescaledb",
+            &PipelineState::default(),
+        )
+        .unwrap()
+        .remove(0);
+    assert!(
+        q.contains("OVER (PARTITION BY time_bucket('1 hour', time), \"User\")"),
+        "{q}"
     );
 }
 

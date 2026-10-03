@@ -454,7 +454,8 @@ impl super::PostgresBackend {
                 .iter()
                 .flat_map(|(tbl, rules)| {
                     rules.iter().map(move |rule_ref| {
-                        format!("SELECT *, '{rule_ref}' AS rule_name FROM {tbl}{tf}")
+                        let name = rule_ref.replace('\'', "''");
+                        format!("SELECT *, '{name}' AS rule_name FROM {tbl}{tf}")
                     })
                 })
                 .collect();
@@ -525,6 +526,7 @@ impl super::PostgresBackend {
         default_table: &str,
         ts: &str,
         window_secs: u64,
+        group_by_cols: &[String],
         group_by_select: &str,
         group_by_clause: &str,
         having_clause: &str,
@@ -542,13 +544,8 @@ impl super::PostgresBackend {
             pipeline_state,
             true,
         )?;
-        let group_exprs: Vec<String> = rule
-            .group_by
-            .iter()
-            .map(|g| self.field_expr(g))
-            .collect::<Result<_>>()?;
         let (steps, source, order_having) =
-            Self::temporal_order_steps(rule, "matched", ts, &group_exprs)
+            Self::temporal_order_steps(rule, "matched", ts, group_by_cols)
                 .unwrap_or_else(|| (String::new(), "matched".to_string(), String::new()));
 
         Ok(format!(
