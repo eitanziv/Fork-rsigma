@@ -58,7 +58,7 @@ fn emit_sql_prints_wrapped_query_without_connecting() {
             "-- rule: Suspicious Process Start (id: 00000000-0000-0000-0000-000000000101)\n",
         ))
         .stdout(predicate::str::contains(
-            "SELECT * FROM (SELECT * FROM security_events WHERE \"Image\" = '/usr/bin/curl'",
+            "SELECT * FROM (SELECT * FROM security_events WHERE \"Image\" ILIKE '/usr/bin/curl'",
         ))
         .stdout(predicate::str::contains(
             "WHERE time >= '2026-07-01T00:00:00+00:00'::timestamptz \
@@ -89,7 +89,7 @@ fn emit_sql_jsonb_mode_extracts_from_the_json_column() {
         .success()
         .stdout(predicate::str::contains("-- json_field: data\n"))
         .stdout(predicate::str::contains(
-            "FROM events WHERE data->>'Image' = '/usr/bin/curl'",
+            "FROM events WHERE data->>'Image' ILIKE '/usr/bin/curl'",
         ));
 }
 

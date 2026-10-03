@@ -16,9 +16,9 @@ matches: [1, 2, 3]
 known_failures:
   postgres-jsonb:
     type: match-mismatch
-    reason: "NOT over a missing or null field is NULL instead of true, and plain equality is case-sensitive"
-    actual: [1, 4]
+    reason: "NOT over a missing or null field is NULL instead of true"
+    actual: [1]
   postgres-columns:
     type: match-mismatch
-    reason: "NOT over a missing or null field is NULL instead of true, and plain equality is case-sensitive"
-    actual: [1, 4]
+    reason: "NOT over a missing or null field is NULL instead of true"
+    actual: [1]

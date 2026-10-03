@@ -26,11 +26,11 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 
 | Sigma modifier | PostgreSQL operator |
 |----------------|---------------------|
-| equality (no modifier) | `"field" = 'value'` |
+| equality (no modifier) | `"field" ILIKE 'value'` (case-insensitive, with `%`, `_`, and `\` escaped so they match literally) {{ added "unreleased" }} |
 | `contains` | `"field" ILIKE '%value%'` (case-insensitive) |
 | `startswith` | `"field" ILIKE 'value%'` |
 | `endswith` | `"field" ILIKE '%value'` |
-| `cased` (any of the above) | switches `ILIKE` to `LIKE` (case-sensitive) |
+| `cased` (any of the above) | switches `ILIKE` to `LIKE` (case-sensitive); a plain `cased` equality renders as `"field" = 'value'` |
 | `re` | `"field" ~ 'pattern'` (case-sensitive, as the Sigma specification requires); `~*` with `\|i`. `\|m` adds the `(?w)` embedded option so `^` and `$` match at line breaks. PostgreSQL's `.` matches a line break even without `\|s`, so a regex can over-match a multi-line value but never misses one. {{ added "unreleased" }} |
 | `cidr` | `("field")::inet <<= 'value'::cidr` |
 | `exists: true` | `"field" IS NOT NULL` |
@@ -38,7 +38,7 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 | `all` | values combined with `AND` instead of the default `OR` |
 | `fieldref` | `lower(("field")::text) = lower(("other")::text)` (case-insensitive); `"field" = "other"` with `cased` |
 | `fieldref` with `contains` | `strpos(lower(("field")::text), lower(("other")::text)) > 0`. `startswith` uses `strpos(...) = 1`. `endswith` uses `right(("field")::text, char_length(("other")::text)) = ("other")::text`. `|cased` drops the `lower()` calls. `%` and `_` in the referenced value stay literal. {{ added "0.23.0" }} |
-| `neq` | `NOT "field" = 'value'`. A list negates the whole item: `NOT ("field" = 'a' OR "field" = 'b')`. |
+| `neq` | `NOT "field" ILIKE 'value'`. A list negates the whole item: `NOT ("field" ILIKE 'a' OR "field" ILIKE 'b')`. |
 | `fieldref` with `neq` | `(lower(("field")::text) = lower(("other")::text)) IS NOT TRUE AND "field" IS NOT NULL`. A missing referenced field still matches when the left field is present. {{ added "0.23.0" }} |
 | `null` value | `"field" IS NULL` |
 | keywords | `to_tsvector('simple', security_events::text) @@ plainto_tsquery('simple', 'value')` |
@@ -163,7 +163,7 @@ data->'args'->>-1
 -- connections[any]: { protocol: TCP, ip|cidr: 123.1.0.0/16 }
 (jsonb_typeof(data->'connections') = 'array' AND EXISTS (
   SELECT 1 FROM jsonb_array_elements(data->'connections') AS __sigma_e0
-  WHERE __sigma_e0->>'protocol' = 'TCP'
+  WHERE __sigma_e0->>'protocol' ILIKE 'TCP'
     AND (__sigma_e0->>'ip')::inet <<= '123.1.0.0/16'::cidr))
 ```
 
@@ -173,7 +173,7 @@ data->'args'->>-1
 -- containers[none]: { privileged: 'true' }
 (CASE WHEN jsonb_typeof(data->'containers') = 'array'
   THEN NOT EXISTS (SELECT 1 FROM jsonb_array_elements(data->'containers') AS __sigma_e0
-    WHERE __sigma_e0->>'privileged' = 'true')
+    WHERE __sigma_e0->>'privileged' ILIKE 'true')
   ELSE data->'containers' IS NULL OR jsonb_typeof(data->'containers') = 'null' END)
 ```
 
@@ -186,7 +186,7 @@ An **extended** block body (a `condition:` plus named element-scoped sub-selecti
 (jsonb_typeof(data->'connections') = 'array' AND EXISTS (
   SELECT 1 FROM jsonb_array_elements(data->'connections') AS __sigma_e0
   WHERE (__sigma_e0->>'ip')::inet <<= '123.1.0.0/16'::cidr
-    AND NOT __sigma_e0->>'protocol' = 'TCP'))
+    AND NOT __sigma_e0->>'protocol' ILIKE 'TCP'))
 ```
 
 Array matching requires JSONB mode; in flat-column mode the backend reports `UnsupportedArrayMatching`.

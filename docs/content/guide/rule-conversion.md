@@ -85,8 +85,8 @@ The PostgreSQL backend is the most fully featured. It leverages native operators
 
 | Sigma modifier | PostgreSQL operator |
 |----------------|---------------------|
-| `contains`, `startswith`, `endswith` | `ILIKE` (case-insensitive) |
-| `cased` variants | `LIKE` |
+| equality, `contains`, `startswith`, `endswith` | `ILIKE` (case-insensitive) |
+| `cased` variants | `LIKE`, or `=` for plain equality |
 | `re` | `~` (case-sensitive regex), `~*` with `i` |
 | `cidr` | `field::inet <<= 'value'::cidr` |
 | `exists` | `IS NOT NULL` / `IS NULL` |

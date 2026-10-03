@@ -1,1 +1,1 @@
-SELECT * FROM security_events WHERE "CommandLine" = 'whoami'
+SELECT * FROM security_events WHERE "CommandLine" ILIKE 'whoami'

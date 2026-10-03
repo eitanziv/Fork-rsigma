@@ -87,7 +87,7 @@ rsigma backend convert -t postgres \
 
 ```sql
 SELECT * FROM okta_events
-WHERE data->>'eventType' = 'group.user_membership.add'
+WHERE data->>'eventType' ILIKE 'group.user\_membership.add'
   AND data->'actor'->>'alternateId' ILIKE '%@partner.example.com'
 ```
 

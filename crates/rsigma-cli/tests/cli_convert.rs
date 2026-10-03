@@ -363,7 +363,7 @@ fn convert_correlation_rule() {
         .unwrap();
     assert!(output.status.success());
     assert_snapshot!(String::from_utf8_lossy(&output.stdout), @r#"
-    WITH combined_events AS (SELECT * FROM security_events WHERE "EventType" = 'login_failure') SELECT src_ip, COUNT(*) AS event_count FROM combined_events GROUP BY src_ip HAVING COUNT(*) >= 5
+    WITH combined_events AS (SELECT * FROM security_events WHERE "EventType" ILIKE 'login\_failure') SELECT src_ip, COUNT(*) AS event_count FROM combined_events GROUP BY src_ip HAVING COUNT(*) >= 5
     "#);
 }
 

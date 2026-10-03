@@ -12,6 +12,8 @@ A `cidr` value with host bits set (`10.1.2.3/8`), or one that is not `address/pr
 
 Regex flags now reach every backend. A plain `re` converts to PostgreSQL's case-sensitive `~` instead of `~*`, as the Sigma specification requires, and `|i` selects `~*`. `|m` adds PostgreSQL's `(?w)` embedded option so `^` and `$` match at line breaks. The `test`, LynxDB, and Fibratus backends prepend the `i`, `m`, and `s` flags as an inline group such as `(?i)`, which they previously dropped, and the `test` backend rejects `re|cased` as pySigma does. The new `RegexFlags::inline_prefix` renders the group for custom backends.
 
+PostgreSQL plain equality is now case-insensitive, as Sigma requires: `User: admin` renders as `"User" ILIKE 'admin'` with `%`, `_`, and `\` escaped, and only `|cased` keeps `=`. Previously `=` missed `ADMIN`.
+
 Conversion now applies Sigma filters, as pySigma does when a collection loads: `convert_collection`, and so `backend convert`, `hunt`, and the MCP `convert_rules` tool, merges each filter into the detection rules it references before pipelines run, so field mappings reach the filter's fields. The new `rsigma_eval::apply_filters` performs the merge and targets rules the same way `Engine::apply_filter` does. A correlation rule converted with a backend that has no correlation support (`lynxdb` and `test`) is now an `UnsupportedCorrelation` error instead of being dropped silently; pass `--skip-unsupported` to convert the rest.
 
 Migration notes:

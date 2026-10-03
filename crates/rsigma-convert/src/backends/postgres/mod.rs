@@ -752,7 +752,7 @@ impl Backend for PostgresBackend {
 
         let like_op = if is_cased { "LIKE" } else { "ILIKE" };
 
-        if is_contains || is_startswith || is_endswith || has_wildcards {
+        if is_contains || is_startswith || is_endswith || has_wildcards || !is_cased {
             let inner = self.build_like_value_ir(pattern);
             let val = self.wrap_like_wildcards(&inner, is_contains, is_startswith, is_endswith);
             return Ok(ConvertResult::Query(format!("{f} {like_op} {val}")));
