@@ -1,0 +1,26 @@
+description: A keyword matches a substring of a word.
+rule:
+  title: keyword partial token
+  logsource: {category: process_creation, product: windows}
+  detection:
+    keywords:
+      - 'hoami'
+    condition: keywords
+events:
+  - {CommandLine: 'whoami'}
+  - {CommandLine: 'ipconfig'}
+matches: [0]
+unsupported: [fibratus, fibratus-nomacros]
+known_failures:
+  lynxdb:
+    type: match-mismatch
+    reason: "LynxDB skips segments whose bloom filter lacks the keyword's tokens, so a keyword that is only part of a word misses flushed events"
+    actual: []
+  postgres-jsonb:
+    type: match-mismatch
+    reason: "keywords render as full-text search, which matches whole words only"
+    actual: []
+  postgres-columns:
+    type: match-mismatch
+    reason: "keywords render as full-text search, which matches whole words only"
+    actual: []

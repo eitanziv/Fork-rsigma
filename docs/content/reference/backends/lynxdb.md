@@ -49,7 +49,7 @@ Verified against the LynxDB backend's golden tests at [`crates/rsigma-convert/sr
 |---------------|----------|---------|
 | Field equality | `field="value"` | `match(field, "(?i)^value$")` |
 | `contains`, `startswith`, `endswith` | `field=*"value"*`, `field="value"*`, `field=*"value"` | `match(field, "(?i)value")`, anchored with `^` or `$` |
-| Wildcards `*` and `?` | `field="pre"*` | `.*` and `.` in the `match()` regex |
+| Wildcards `*` and `?` | `field="pre"*`, with the literal quoted and the wildcards outside the quotes | `.*` and `.` in the `match()` regex |
 | Case-sensitive (`cased` modifier) | | `match(field, "^Value$")` (no `(?i)`) |
 | Regex (`re` modifier) | | `match(field, "pattern")`; the `i`, `m`, and `s` flags are prepended as an inline group, such as `(?i)pattern`. |
 | CIDR (`cidr` modifier) | | `cidrmatch("cidr", field)` |
@@ -60,7 +60,7 @@ Verified against the LynxDB backend's golden tests at [`crates/rsigma-convert/sr
 | Empty string | | `coalesce(json_extract(_raw, "field")="", false)` |
 | `exists: true`/`false` | `field=*`/`NOT field=*` | `isnotnull(json_extract(_raw, "field"))`/`isnull(...)` |
 | Value list (`field` with multiple values) | `field="val1" OR field="val2"` | `match(field, "(?i)^val1$") OR match(field, "(?i)^val2$")` |
-| Keywords | `"keyword"` | `match(_raw, "(?i)keyword")` |
+| Keywords | `"keyword"`, without outer wildcards, since a keyword already matches a substring | `match(_raw, "(?i)keyword")`, with the keyword escaped as serde_json writes it in the raw JSON; a wildcard matches within one JSON string |
 | Boolean `AND`, `OR`, `NOT` | Parenthesized where the non-standard precedence (`NOT > OR > AND`) requires it: an `AND` under an `OR`, and a compound operand of `NOT`. | Standard precedence. |
 
 `match()` returns false for a missing field, so a negated detection is true for an event that lacks the field, as in `engine eval`. The `coalesce(..., false)` wrappers do the same for comparisons. Null checks and empty strings read the event's raw JSON because LynxDB's columns store an empty string as null.
@@ -186,6 +186,8 @@ The CIDR check puts the whole condition in `where`, so the `Action` equality ren
 | Correlation rules | Not supported. Each correlation fails with `UnsupportedCorrelation`; the detection rules it references still convert. {{ added "unreleased" }} |
 | Field-to-field comparison (`fieldref`) | Not supported. |
 | Fields with mixed value types | LynxDB stores each column with a single type, so a field holding numbers in some events and strings or booleans in others loses values once events are flushed to segments. For example, a boolean in a numeric field turns every value into 0 or 1. {{ added "unreleased" }} |
+| Keywords that are part of a word | LynxDB skips a segment whose bloom filter lacks the tokens of a keyword, so a keyword such as `hoami` misses `whoami` in events flushed to segments, in both `search` and `where` queries. {{ added "unreleased" }} |
+| Keywords in a `where` query | The regex runs on the event's raw JSON and assumes serde_json's escaping: `"`, `\`, and control characters escaped, other characters verbatim. A producer that escapes non-ASCII characters or `/` writes text the keyword does not match. {{ added "unreleased" }} |
 | `exists` in a `where` query | A field that is present with a null value counts as missing, while `engine eval` counts it as present. In a `search` query, `field=*` counts it as present. {{ added "unreleased" }} |
 | Continuous aggregates | LynxDB-equivalent (scheduled saved queries) lives on the LynxDB side. RSigma emits the SPL2; LynxDB schedules it. |
 

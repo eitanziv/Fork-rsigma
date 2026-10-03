@@ -11,7 +11,7 @@
 //!   (`/`, `>`, quotes, brackets, and others), `?`, a literal `*`, a `*`
 //!   between literals, and quoted `CASE()` values do not match exactly.
 //! - `where` uses standard precedence and evaluates the actual values: strings
-//!   through anchored `match()` regexes, numeric comparisons through
+//!   through `match()` regexes, anchored except for `contains` and keywords, numeric comparisons through
 //!   `tonumber()`, CIDR through `cidrmatch()`, and null, empty strings, and
 //!   `exists` through the event's raw JSON (columns store `""` as null).
 //!   Regexes, CIDR, `null`, `cased`, numeric comparisons, and any string value
@@ -158,6 +158,30 @@ fn search_safe(pattern: &IrPattern, case_insensitive: bool) -> bool {
         })
 }
 
+/// Split the outer `*` wildcards off a `search`-safe pattern, returning the
+/// operator they amount to and the literal between them. `search` splits a
+/// bare value at a space and keeps a backslash escaped, so the literal must
+/// render quoted, with the wildcards outside the quotes.
+fn search_literal(op: IrStrOp, pattern: &IrPattern) -> (IrStrOp, IrPattern) {
+    let leading = matches!(pattern.parts.first(), Some(IrPatternPart::WildcardMulti));
+    let trailing = pattern.parts.len() > 1
+        && matches!(pattern.parts.last(), Some(IrPatternPart::WildcardMulti));
+    let parts: Vec<IrPatternPart> = pattern
+        .parts
+        .iter()
+        .filter(|p| !matches!(p, IrPatternPart::WildcardMulti))
+        .cloned()
+        .collect();
+    let op = match (op, leading, trailing) {
+        (IrStrOp::Exact, true, true) => IrStrOp::Contains,
+        (IrStrOp::Exact, true, false) => IrStrOp::EndsWith,
+        (IrStrOp::Exact, false, true) => IrStrOp::StartsWith,
+        (IrStrOp::StartsWith, true, _) | (IrStrOp::EndsWith, _, true) => IrStrOp::Contains,
+        (op, _, _) => op,
+    };
+    (op, IrPattern { parts })
+}
+
 /// Quote a string as a LynxDB string literal.
 fn quote_str(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
@@ -188,9 +212,13 @@ fn pattern_regex(
     }
     for part in &pattern.parts {
         match part {
-            IrPatternPart::Literal(s) if raw_json => re.push_str(&regex::escape(
-                &s.replace('\\', "\\\\").replace('"', "\\\""),
-            )),
+            IrPatternPart::Literal(s) if raw_json => re.push_str(&regex::escape(&json_escape(s))),
+            // Inside a JSON string, so a wildcard cannot run into the next
+            // value, and `?` covers a whole escape sequence.
+            IrPatternPart::WildcardMulti if raw_json => re.push_str(r#"(?:[^"\\]|\\.)*"#),
+            IrPatternPart::WildcardSingle if raw_json => {
+                re.push_str(r#"(?:[^"\\]|\\u[0-9a-fA-F]{4}|\\.)"#)
+            }
             IrPatternPart::Literal(s) => re.push_str(&regex::escape(s)),
             IrPatternPart::WildcardMulti => re.push_str(".*"),
             IrPatternPart::WildcardSingle => re.push('.'),
@@ -202,15 +230,36 @@ fn pattern_regex(
     re
 }
 
+/// A string as serde_json writes it inside a JSON string: `"`, `\`, and
+/// control characters escaped, everything else verbatim.
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            c if c < ' ' => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// The field as read from the event's raw JSON. Columns store an empty string
 /// as null, while the raw JSON keeps the two apart.
 fn raw_field(field: &str) -> String {
     format!("json_extract(_raw, {})", quote_str(field))
 }
 
-/// Format a number without a fractional part when it has none.
+/// Format a number without a fractional part when it has none and is
+/// exactly representable as an integer.
 fn format_num(value: f64) -> String {
-    if value.fract() == 0.0 {
+    if value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0 {
         (value as i64).to_string()
     } else {
         value.to_string()
@@ -361,7 +410,8 @@ impl Backend for LynxDbBackend {
         state: &mut ConversionState,
     ) -> Result<ConvertResult> {
         if !self.where_mode && search_safe(pattern, case_insensitive) {
-            return text_convert_field_str_ir(self.config, field, op, pattern, case_insensitive);
+            let (op, literal) = search_literal(op, pattern);
+            return text_convert_field_str_ir(self.config, field, op, &literal, case_insensitive);
         }
         if let Some(placeholder) = self.needs_where(state) {
             return Ok(ConvertResult::Query(placeholder));
@@ -539,7 +589,10 @@ impl Backend for LynxDbBackend {
             let re = pattern_regex(pattern, IrStrOp::Contains, true, true);
             return Ok(format!("match(_raw, {})", quote_str(&re)));
         }
-        let v = text_convert_ir_pattern(self.config, pattern);
+        // A keyword already matches as a substring, so outer wildcards add
+        // nothing.
+        let (_, literal) = search_literal(IrStrOp::Contains, pattern);
+        let v = text_convert_ir_pattern(self.config, &literal);
         let expr = self
             .config
             .unbound_value_str_expression
@@ -600,21 +653,26 @@ impl Backend for LynxDbBackend {
         _rule: &SigmaRule,
         query: String,
         _index: usize,
-        _state: &ConversionState,
+        state: &ConversionState,
         output_format: &str,
     ) -> Result<String> {
         match output_format {
             "default" => Ok(query),
             "minimal" => {
-                if let Some(rest) = query.strip_prefix("FROM ") {
-                    if let Some(pos) = rest.find("| search ") {
-                        return Ok(rest[pos + "| search ".len()..].to_string());
-                    }
-                    if let Some(pos) = rest.find("| where ") {
-                        return Ok(format!("* {}", &rest[pos..]));
-                    }
-                }
-                Ok(query)
+                let index = state
+                    .processing_state
+                    .get("index")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("main");
+                let stage = if self.where_mode { "where" } else { "search" };
+                let Some(expr) = query.strip_prefix(&format!("FROM {index} | {stage} ")) else {
+                    return Ok(query);
+                };
+                Ok(if self.where_mode {
+                    format!("* | where {expr}")
+                } else {
+                    expr.to_string()
+                })
             }
             other => Err(ConvertError::RuleConversion(format!(
                 "unknown output format: {other}"
@@ -828,7 +886,7 @@ detection:
     condition: selection
 "#,
         );
-        assert_eq!(q, vec!["FROM main | search CommandLine=*whoami*"]);
+        assert_eq!(q, vec![r#"FROM main | search CommandLine=*"whoami"*"#]);
     }
 
     #[test]
@@ -1551,5 +1609,83 @@ detection:
                 "FROM main | where coalesce(tonumber(status)=500, false) AND match(Path, \"/api/.*\")"
             ]
         );
+    }
+
+    #[test]
+    fn search_quotes_literals_between_outer_wildcards() {
+        let q = convert(
+            r#"
+title: T
+logsource: { category: test }
+detection:
+    image:
+        Image: '*\cmd.exe'
+    cmd:
+        CommandLine: '* -enc *'
+    tool:
+        Tool: 'net *'
+    condition: image or cmd or tool
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![
+                r#"FROM main | search Image=*"\\cmd.exe" OR CommandLine=*" -enc "* OR Tool="net "*"#
+            ]
+        );
+    }
+
+    #[test]
+    fn search_keywords_drop_outer_wildcards() {
+        let q = convert(
+            r#"
+title: T
+logsource: { category: test }
+detection:
+    keywords:
+        - '*foo*'
+        - 'foo bar*'
+    condition: keywords
+"#,
+        );
+        assert_eq!(q, vec![r#"FROM main | search "foo" OR "foo bar""#]);
+    }
+
+    #[test]
+    fn where_keywords_match_raw_json_text() {
+        let q = convert(
+            "title: T\nlogsource: { category: test }\ndetection:\n    keywords:\n        - \"a\\tb/\"\n        - 'foo*bar/'\n        - 'x?y/'\n    condition: keywords\n",
+        );
+        assert_eq!(
+            q,
+            vec![
+                r#"FROM main | where match(_raw, "(?i)a\\\\tb/") OR match(_raw, "(?is)foo(?:[^\"\\\\]|\\\\.)*bar/") OR match(_raw, "(?is)x(?:[^\"\\\\]|\\\\u[0-9a-fA-F]{4}|\\\\.)y/")"#
+            ]
+        );
+    }
+
+    #[test]
+    fn minimal_where_keeps_values_containing_search() {
+        let q = convert_minimal(
+            r#"
+title: T
+logsource: { category: test }
+detection:
+    selection:
+        CommandLine|contains: '| search x'
+    condition: selection
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![r#"* | where match(CommandLine, "(?i)\\| search x")"#]
+        );
+    }
+
+    #[test]
+    fn large_numbers_keep_their_magnitude() {
+        assert_eq!(format_num(4688.0), "4688");
+        assert_eq!(format_num(12345678901234567890.0), "12345678901234567000");
+        assert_eq!(format_num(1e300), 1e300.to_string());
     }
 }
