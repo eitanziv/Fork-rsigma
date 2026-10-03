@@ -1,1 +1,1 @@
-ps.exe != false and ps.args = ''
+ps.exe != '' and ps.args = ''

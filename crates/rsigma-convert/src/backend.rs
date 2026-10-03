@@ -50,8 +50,9 @@ pub enum CompareOp {
 
 /// Regex match flags for [`Backend::convert_field_regex`].
 ///
-/// `case_insensitive` is the `|i` flag; `cased` records the `|cased` modifier
-/// (which some backends use to select a case-sensitive regex operator).
+/// A Sigma regex is case-sensitive unless it has the `|i` flag
+/// (`case_insensitive`). `cased` records a redundant `|cased` modifier, which
+/// pySigma rejects on a regex.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RegexFlags {
     pub case_insensitive: bool,
@@ -60,12 +61,53 @@ pub struct RegexFlags {
     pub cased: bool,
 }
 
+impl RegexFlags {
+    /// The `i`, `m`, and `s` flags as an inline group such as `(?im)`, or an
+    /// empty string when none is set. RE2, Rust `regex`, PCRE, and Python
+    /// read this prefix the same way.
+    pub fn inline_prefix(&self) -> String {
+        let flags: String = [
+            (self.case_insensitive, 'i'),
+            (self.multiline, 'm'),
+            (self.dotall, 's'),
+        ]
+        .into_iter()
+        .filter_map(|(set, flag)| set.then_some(flag))
+        .collect();
+        if flags.is_empty() {
+            flags
+        } else {
+            format!("(?{flags})")
+        }
+    }
+}
+
 /// Reconstruct a parser `SigmaString` from a faithful [`IrPattern`].
 ///
 /// The canonical implementation lives in `rsigma-ir` (shared with the reverse
 /// raise path); it is re-exported here so backends keep referring to
 /// `crate::backend::ir_pattern_to_sigma`.
 pub(crate) use rsigma_ir::ir_pattern_to_sigma;
+
+/// Reject a value containing a NUL character (for example from `|wide`
+/// without `|base64`), which `backend` cannot carry in its query text.
+pub(crate) fn reject_nul(backend: &str, value: &str) -> Result<()> {
+    if value.contains('\0') {
+        return Err(ConvertError::UnsupportedValue(format!(
+            "{backend} cannot represent a NUL character in a query value; \
+             combine |wide/|utf16 with |base64 or |base64offset"
+        )));
+    }
+    Ok(())
+}
+
+/// [`reject_nul`] over the literal parts of an [`IrPattern`].
+pub(crate) fn reject_nul_pattern(backend: &str, pattern: &IrPattern) -> Result<()> {
+    pattern.parts.iter().try_for_each(|part| match part {
+        IrPatternPart::Literal(s) => reject_nul(backend, s),
+        _ => Ok(()),
+    })
+}
 
 // =============================================================================
 // Backend trait

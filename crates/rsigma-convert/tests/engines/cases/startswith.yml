@@ -14,9 +14,3 @@ events:
   - {Image: 'C:\WindowsApps\x.exe'}
   - {CommandLine: 'x'}
 matches: [0, 1]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "backslashes in values are doubled"
-    actual: ["Image startswith \"C\\:\\\\Windows\\\\\""]
-    reference: ["Image startswith \"C\\:\\Windows\\\""]

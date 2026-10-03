@@ -1,0 +1,23 @@
+description: A keyword wildcard matches within one value, not across the fields of the event.
+rule:
+  title: keyword wildcard json
+  logsource: {category: process_creation, product: windows}
+  detection:
+    keywords:
+      - 'foo*bar/'
+    condition: keywords
+events:
+  - {CommandLine: 'foo and bar/'}
+  - {CommandLine: 'foo', Image: 'bar/'}
+  - {CommandLine: 'bar/ foo'}
+matches: [0]
+unsupported: [fibratus, fibratus-nomacros]
+known_failures:
+  postgres-jsonb:
+    type: match-mismatch
+    reason: "keywords render as full-text search, which drops wildcards and matches the words in any order and any field"
+    actual: [0, 1, 2]
+  postgres-columns:
+    type: match-mismatch
+    reason: "keywords render as full-text search, which drops wildcards and matches the words in any order and any field"
+    actual: [0, 1, 2]

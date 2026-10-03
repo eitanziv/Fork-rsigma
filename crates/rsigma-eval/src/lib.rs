@@ -128,7 +128,7 @@ pub use correlation_engine::{
     CorrelationSnapshot, CorrelationStateSnapshot, GroupKeyPart, GroupStateInfo, ProcessResult,
     TimestampFallback,
 };
-pub use engine::Engine;
+pub use engine::{Engine, apply_filters};
 pub use error::{EvalError, Result};
 pub use event::{Event, EventValue, JsonEvent, KvEvent, MapEvent, MappedEvent, PlainEvent};
 pub use exemplar::{

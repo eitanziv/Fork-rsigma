@@ -498,6 +498,7 @@ dependencies = [
 name = "rsigma-ir"
 version = "0.23.0"
 dependencies = [
+ "base64",
  "ciborium",
  "rsigma-parser",
  "serde",

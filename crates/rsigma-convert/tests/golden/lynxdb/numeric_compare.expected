@@ -1,1 +1,1 @@
-FROM main | search status>=400 AND status<500
+FROM main | where coalesce(tonumber(status)>=400, false) AND coalesce(tonumber(status)<500, false)

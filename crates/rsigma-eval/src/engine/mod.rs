@@ -34,9 +34,10 @@ use crate::rule_metadata::{RuleBundleMetadata, RuleMetadataLookup};
 
 use bloom_index::{BloomCache, FieldBloomIndex};
 
+pub use filters::apply_filters;
 use filters::{
-    filter_detection_key, filter_logsource_contains, logsource_compatible, logsource_matches,
-    rewrite_condition_identifiers,
+    FilterTarget, filter_detection_key, filter_targets, logsource_compatible, logsource_matches,
+    namespaced_filter_condition, stable_references,
 };
 
 /// The main rule evaluation engine.
@@ -554,86 +555,35 @@ impl Engine {
         let fc = self.filter_counter;
         self.filter_counter += 1;
 
-        // An id/name match wins over the deprecated title fallback across the
-        // whole collection, so a title cannot capture a reference that names
-        // another rule's stable identity.
-        let stable_references: Vec<String> = match &filter.rules {
-            FilterRuleTarget::Any => Vec::new(),
-            FilterRuleTarget::Specific(refs) => refs
-                .iter()
-                .filter(|reference| {
-                    self.rules.iter().any(|rule| {
-                        rule.id.as_deref() == Some(reference.as_str())
-                            || rule.name.as_deref() == Some(reference.as_str())
-                    })
-                })
-                .cloned()
-                .collect(),
-        };
+        let identities: Vec<_> = self
+            .rules
+            .iter()
+            .map(|rule| (rule.id.as_deref(), rule.name.as_deref()))
+            .collect();
+        let stable = stable_references(filter, &identities);
+        let rewritten_cond = namespaced_filter_condition(filter, fc);
 
-        // Rewrite the filter's own condition expression with namespaced identifiers
-        // so that `selection` becomes `__filter_0_v_selection`, etc.
-        let rewritten_cond = if let Some(cond_expr) = filter.detection.conditions.first() {
-            rewrite_condition_identifiers(cond_expr, fc)
-        } else {
-            // No explicit condition: AND all detections (legacy fallback)
-            if filter_detections.len() == 1 {
-                ConditionExpr::Identifier(filter_detection_key(fc, &filter_detections[0].0))
-            } else {
-                ConditionExpr::And(
-                    filter_detections
-                        .iter()
-                        .map(|(name, _)| ConditionExpr::Identifier(filter_detection_key(fc, name)))
-                        .collect(),
-                )
-            }
-        };
-
-        // Find and modify referenced rules
         let mut matched_any = false;
         for rule in &mut self.rules {
-            let rule_matches = match &filter.rules {
-                FilterRuleTarget::Any => true,
-                FilterRuleTarget::Specific(refs) => refs.iter().any(|reference| {
-                    let identity_match = rule.id.as_deref() == Some(reference.as_str())
-                        || rule.name.as_deref() == Some(reference.as_str());
-                    let title_match = !stable_references.contains(reference)
-                        && !identity_match
-                        && rule.title == *reference;
-                    if title_match {
-                        log::warn!(
-                            "filter '{}' references rule '{}' by title; title references are \
-                             deprecated, use the rule id or name",
-                            filter.title,
-                            reference
-                        );
-                    }
-                    identity_match || title_match
-                }),
+            let target = FilterTarget {
+                id: rule.id.as_deref(),
+                name: rule.name.as_deref(),
+                title: &rule.title,
+                logsource: &rule.logsource,
             };
-
-            // Also check logsource compatibility if the filter specifies one
-            if rule_matches {
-                if let Some(ref filter_ls) = filter.logsource
-                    && !filter_logsource_contains(filter_ls, &rule.logsource)
-                {
-                    continue;
-                }
-
-                // Inject filter detections into the rule
-                for (name, compiled) in &filter_detections {
-                    rule.detections
-                        .insert(filter_detection_key(fc, name), compiled.clone());
-                }
-
-                // Wrap each existing rule condition with the filter condition
-                rule.conditions = rule
-                    .conditions
-                    .iter()
-                    .map(|cond| ConditionExpr::And(vec![cond.clone(), rewritten_cond.clone()]))
-                    .collect();
-                matched_any = true;
+            if !filter_targets(filter, &stable, &target) {
+                continue;
             }
+            for (name, compiled) in &filter_detections {
+                rule.detections
+                    .insert(filter_detection_key(fc, name), compiled.clone());
+            }
+            rule.conditions = rule
+                .conditions
+                .iter()
+                .map(|cond| ConditionExpr::And(vec![cond.clone(), rewritten_cond.clone()]))
+                .collect();
+            matched_any = true;
         }
 
         if let FilterRuleTarget::Specific(_) = &filter.rules

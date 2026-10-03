@@ -1,0 +1,15 @@
+description: A contains value with slashes, quotes, and a closing angle bracket matches the literal text only.
+rule:
+  title: slash contains
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|contains: ' /q "a>b'
+    condition: selection
+events:
+  - {CommandLine: 'cmd /q "a>b"'}
+  - {CommandLine: 'CMD /Q "A>B" /c'}
+  - {CommandLine: 'cmd /q a>b'}
+  - {CommandLine: 'cmd q "a>b"'}
+  - {Image: 'x'}
+matches: [0, 1]

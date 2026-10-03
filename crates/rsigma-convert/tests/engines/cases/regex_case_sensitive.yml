@@ -10,16 +10,3 @@ events:
   - {CommandLine: 'x whoami'}
   - {CommandLine: 'x WHOAMI'}
 matches: [0]
-known_failures:
-  postgres-jsonb:
-    type: match-mismatch
-    reason: "re renders as the case-insensitive ~* operator"
-    actual: [0, 1]
-  postgres-columns:
-    type: match-mismatch
-    reason: "re renders as the case-insensitive ~* operator"
-    actual: [0, 1]
-  lynxdb:
-    type: match-mismatch
-    reason: "the =~ operator matches nothing once events are flushed to segments, while match() does"
-    actual: []

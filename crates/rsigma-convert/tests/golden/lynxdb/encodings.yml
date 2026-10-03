@@ -1,0 +1,12 @@
+title: Encoding Modifiers
+logsource:
+    category: test
+detection:
+    selection:
+        Image|endswith: '\certutil.exe'
+        CommandLine|windash|contains: ' -decode '
+    payload:
+        CommandLine|base64offset|contains: 'IEX'
+    wide:
+        CommandLine|wide|base64offset|contains: 'http'
+    condition: selection or payload or wide

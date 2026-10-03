@@ -17,30 +17,18 @@ use rsigma_parser::{SigmaString, StringPart};
 
 /// Quote a [`SigmaString`] for use inside a Fibratus filter expression.
 ///
-/// Fibratus string literals are single-quoted. `\` and `'` are the only
-/// characters that must be escaped inside literals. `*` and `?` glob
-/// wildcards inherited from a Sigma wildcard token are emitted verbatim so
-/// they participate in `matches`/`imatches` evaluation; literal `*`/`?`
-/// characters from the source string are backslash-escaped so the filter
-/// engine treats them as literals everywhere else.
+/// Fibratus string literals are single-quoted, and the lexer accepts only
+/// the `\\`, `\'`, `\"`, and `\n` escapes, with no raw line break. Sigma
+/// wildcard tokens are emitted as `*` and `?` so they participate in
+/// `matches`/`imatches` evaluation. A glob has no escape for a literal `*`
+/// or `?`, so callers route such patterns to `regex()`; elsewhere the
+/// characters are literal and stay verbatim.
 pub fn quote_sigma_string(value: &SigmaString) -> String {
     let mut out = String::with_capacity(value.original.len() + 2);
     out.push('\'');
     for part in &value.parts {
         match part {
-            StringPart::Plain(s) => {
-                for ch in s.chars() {
-                    match ch {
-                        '\\' => out.push_str("\\\\"),
-                        '\'' => out.push_str("\\'"),
-                        '*' | '?' => {
-                            out.push('\\');
-                            out.push(ch);
-                        }
-                        _ => out.push(ch),
-                    }
-                }
-            }
+            StringPart::Plain(s) => push_escaped(&mut out, s),
             StringPart::Special(rsigma_parser::SpecialChar::WildcardMulti) => out.push('*'),
             StringPart::Special(rsigma_parser::SpecialChar::WildcardSingle) => out.push('?'),
         }
@@ -55,15 +43,20 @@ pub fn quote_sigma_string(value: &SigmaString) -> String {
 pub fn quote_plain_str(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('\'');
+    push_escaped(&mut out, s);
+    out.push('\'');
+    out
+}
+
+fn push_escaped(out: &mut String, s: &str) {
     for ch in s.chars() {
         match ch {
             '\\' => out.push_str("\\\\"),
             '\'' => out.push_str("\\'"),
+            '\n' => out.push_str("\\n"),
             _ => out.push(ch),
         }
     }
-    out.push('\'');
-    out
 }
 
 /// Whether a [`SigmaString`] contains any wildcard tokens.
@@ -263,9 +256,16 @@ mod tests {
     }
 
     #[test]
-    fn quote_sigma_string_escapes_literal_glob_chars() {
+    fn quote_sigma_string_keeps_literal_glob_chars() {
         let value = s(vec![StringPart::Plain("a*b?c".to_string())]);
-        assert_eq!(quote_sigma_string(&value), r"'a\*b\?c'");
+        assert_eq!(quote_sigma_string(&value), "'a*b?c'");
+    }
+
+    #[test]
+    fn quote_escapes_line_breaks() {
+        let value = s(vec![StringPart::Plain("a\nb".to_string())]);
+        assert_eq!(quote_sigma_string(&value), r"'a\nb'");
+        assert_eq!(quote_plain_str("a\nb"), r"'a\nb'");
     }
 
     #[test]

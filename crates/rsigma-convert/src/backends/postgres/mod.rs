@@ -62,6 +62,24 @@ enum FieldOp {
 /// Return a fresh, query-unique sequence number for naming array-element
 /// aliases (`__sigma_e0`, `__sigma_e1`, ...). Stored in the conversion state so
 /// nested object-scope blocks never collide.
+/// Processing-state key naming the scalar array element alias being
+/// converted, whose values are text.
+const TEXT_ELEMENT_KEY: &str = "_text_array_element";
+
+/// Add PostgreSQL's `w` embedded option, which makes `^` and `$` match at
+/// line breaks. PostgreSQL reads only one leading `(?...)` options group, so
+/// the option joins an existing one.
+fn with_newline_sensitive_option(pattern: &str) -> String {
+    if let Some(rest) = pattern.strip_prefix("(?")
+        && let Some(end) = rest.find(')')
+        && end > 0
+        && rest[..end].bytes().all(|b| b.is_ascii_alphabetic())
+    {
+        return format!("(?w{}", rest);
+    }
+    format!("(?w){pattern}")
+}
+
 fn next_array_alias_seq(state: &mut ConversionState) -> u64 {
     let cur = state
         .processing_state
@@ -126,8 +144,8 @@ pub static POSTGRES_CONFIG: TextQueryConfig = TextQueryConfig {
     case_sensitive_endswith_expression: Some("{field} LIKE {value}"),
     case_sensitive_contains_expression: Some("{field} LIKE {value}"),
 
-    re_expression: Some("{field} ~* {regex}"),
-    not_re_expression: Some("{field} !~* {regex}"),
+    re_expression: Some("{field} ~ {regex}"),
+    not_re_expression: Some("{field} !~ {regex}"),
     re_escape_char: None,
     re_escape: &[],
     re_escape_escape_char: None,
@@ -180,8 +198,6 @@ pub struct PostgresBackend {
     pub timestamp_field: String,
     /// If set, fields are accessed via JSONB extraction (`metadata->>'fieldName'`).
     pub json_field: Option<String>,
-    /// Use case-sensitive regex (`~`) instead of case-insensitive (`~*`).
-    pub case_sensitive_re: bool,
     /// PostgreSQL schema name (e.g. `public`).
     pub schema: Option<String>,
     /// PostgreSQL database name (connection-level metadata, not used in queries).
@@ -206,7 +222,6 @@ impl PostgresBackend {
             table: "security_events".to_string(),
             timestamp_field: "time".to_string(),
             json_field: None,
-            case_sensitive_re: false,
             schema: None,
             database: None,
             timescaledb: false,
@@ -218,8 +233,8 @@ impl PostgresBackend {
     /// Create a backend from CLI-style key=value option pairs.
     ///
     /// Recognized keys: `table`, `schema`, `database`, `timestamp_field`,
-    /// `json_field`, `case_sensitive_re` (true/false), `correlation_method`
-    /// (sliding/tumbling/session), `gap` (default session gap, e.g. `5m`).
+    /// `json_field`, `correlation_method` (sliding/tumbling/session), `gap`
+    /// (default session gap, e.g. `5m`).
     /// Unknown keys are silently ignored so forward-compatible options can be
     /// added without breaking existing invocations.
     pub fn from_options(options: &HashMap<String, String>) -> Self {
@@ -238,9 +253,6 @@ impl PostgresBackend {
         }
         if let Some(v) = options.get("json_field") {
             backend.json_field = Some(v.clone());
-        }
-        if let Some(v) = options.get("case_sensitive_re") {
-            backend.case_sensitive_re = v == "true";
         }
         if let Some(v) = options.get("correlation_method") {
             backend.correlation_method = Some(v.clone());
@@ -370,6 +382,33 @@ impl PostgresBackend {
             Some(json_col) => Self::jsonb_path(json_col, field, true),
             None => Ok(text_escape_and_quote_field(self.config, field)),
         }
+    }
+
+    /// Whether `field` holds text: a JSONB extraction, or the element alias of
+    /// a scalar array, which `jsonb_array_elements_text` yields as text.
+    fn is_text_field(&self, field: &str, state: &ConversionState) -> bool {
+        self.json_field.is_some()
+            || state
+                .processing_state
+                .get(TEXT_ELEMENT_KEY)
+                .and_then(|v| v.as_str())
+                == Some(field)
+    }
+
+    /// A field as a number. Text is cast only when it reads as a number of
+    /// bounded size, so a string such as `abc` or `9e999999` compares as NULL
+    /// instead of failing the query, and a numeric string such as `"4"`
+    /// matches as the engine does.
+    fn numeric_expr(&self, field: &str, state: &ConversionState) -> Result<String> {
+        let f = self.field_expr(field)?;
+        Ok(if self.is_text_field(field, state) {
+            format!(
+                "(CASE WHEN {f} ~ '^[-+]?([0-9]{{1,100}}\\.?[0-9]{{0,100}}|\\.[0-9]{{1,100}})([eE][-+]?[0-9]{{1,3}})?$' \
+                 THEN ({f})::numeric END)"
+            )
+        } else {
+            f
+        })
     }
 
     /// Escape a string value for use in a SQL single-quoted literal.
@@ -510,7 +549,6 @@ impl PostgresBackend {
             table: self.table.clone(),
             timestamp_field: self.timestamp_field.clone(),
             json_field,
-            case_sensitive_re: self.case_sensitive_re,
             schema: self.schema.clone(),
             database: self.database.clone(),
             timescaledb: self.timescaledb,
@@ -555,10 +593,17 @@ impl PostgresBackend {
                     .collect(),
             );
             let elem = self.with_json_field(None);
-            (
-                "jsonb_array_elements_text",
-                crate::ir_convert::default_convert_ir_detection(&elem, &renamed, state)?,
-            )
+            let outer = state
+                .processing_state
+                .insert(TEXT_ELEMENT_KEY.to_string(), alias.clone().into());
+            let body = crate::ir_convert::default_convert_ir_detection(&elem, &renamed, state);
+            match outer {
+                Some(v) => state
+                    .processing_state
+                    .insert(TEXT_ELEMENT_KEY.to_string(), v),
+                None => state.processing_state.remove(TEXT_ELEMENT_KEY),
+            };
+            ("jsonb_array_elements_text", body?)
         } else {
             // A field-less item in an object body matches the element itself,
             // which the per-field SQL cannot express.
@@ -580,11 +625,11 @@ impl PostgresBackend {
             ArrayQuantifier::All => format!(
                 "(jsonb_typeof({array_expr}) = 'array' AND jsonb_array_length({array_expr}) > 0 \
                  AND NOT EXISTS \
-                 (SELECT 1 FROM {srf}({array_expr}) AS {alias} WHERE NOT ({body_sql})))"
+                 (SELECT 1 FROM {srf}({array_expr}) AS {alias} WHERE ({body_sql}) IS NOT TRUE))"
             ),
             ArrayQuantifier::AllOrEmpty => format!(
                 "(CASE WHEN jsonb_typeof({array_expr}) = 'array' \
-                 THEN NOT EXISTS (SELECT 1 FROM {srf}({array_expr}) AS {alias} WHERE NOT ({body_sql})) \
+                 THEN NOT EXISTS (SELECT 1 FROM {srf}({array_expr}) AS {alias} WHERE ({body_sql}) IS NOT TRUE) \
                  ELSE {array_expr} IS NULL OR jsonb_typeof({array_expr}) = 'null' END)"
             ),
             ArrayQuantifier::None => format!(
@@ -689,8 +734,10 @@ impl Backend for PostgresBackend {
         Ok(text_convert_condition_or(self.config, exprs))
     }
 
+    /// `NOT` over a missing field is NULL, which drops the row, while Sigma
+    /// treats the negated detection as true. `IS NOT TRUE` maps NULL to true.
     fn convert_condition_not(&self, expr: &str) -> Result<String> {
-        Ok(text_convert_condition_not(self.config, expr))
+        Ok(format!("({expr}) IS NOT TRUE"))
     }
 
     fn convert_condition_group(
@@ -699,6 +746,9 @@ impl Backend for PostgresBackend {
         outer: TokenType,
         inner: TokenType,
     ) -> Result<String> {
+        if outer == TokenType::NOT {
+            return Ok(expr.to_string());
+        }
         Ok(text_convert_condition_group(
             self.config,
             expr,
@@ -749,6 +799,7 @@ impl Backend for PostgresBackend {
         case_insensitive: bool,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
+        reject_nul_pattern("PostgreSQL", pattern)?;
         let f = self.field_expr(field)?;
         let is_cased = !case_insensitive;
         let is_contains = matches!(op, IrStrOp::Contains);
@@ -758,7 +809,13 @@ impl Backend for PostgresBackend {
 
         let like_op = if is_cased { "LIKE" } else { "ILIKE" };
 
-        if is_contains || is_startswith || is_endswith || has_wildcards {
+        // Without wildcards or cased characters ILIKE matches exactly what `=`
+        // matches, and `=` also accepts a quoted literal on a non-text column.
+        let caseless = !pattern.parts.iter().any(|p| match p {
+            IrPatternPart::Literal(s) => s.chars().any(|c| c.to_lowercase().ne(c.to_uppercase())),
+            _ => false,
+        });
+        if is_contains || is_startswith || is_endswith || has_wildcards || !(is_cased || caseless) {
             let inner = self.build_like_value_ir(pattern);
             let val = self.wrap_like_wildcards(&inner, is_contains, is_startswith, is_endswith);
             return Ok(ConvertResult::Query(format!("{f} {like_op} {val}")));
@@ -772,9 +829,9 @@ impl Backend for PostgresBackend {
         &self,
         field: &str,
         value: f64,
-        _state: &mut ConversionState,
+        state: &mut ConversionState,
     ) -> Result<String> {
-        let f = self.field_expr(field)?;
+        let f = self.numeric_expr(field, state)?;
         if value.fract() == 0.0 && (i64::MIN as f64..=i64::MAX as f64).contains(&value) {
             Ok(format!("{f} = {}", value as i64))
         } else {
@@ -786,7 +843,7 @@ impl Backend for PostgresBackend {
         &self,
         field: &str,
         value: bool,
-        _state: &mut ConversionState,
+        state: &mut ConversionState,
     ) -> Result<String> {
         let f = self.field_expr(field)?;
         let v = if value {
@@ -794,6 +851,9 @@ impl Backend for PostgresBackend {
         } else {
             self.config.bool_false
         };
+        if self.is_text_field(field, state) {
+            return Ok(format!("{f} ILIKE '{v}'"));
+        }
         Ok(format!("{f} = {v}"))
     }
 
@@ -809,10 +869,19 @@ impl Backend for PostgresBackend {
         flags: RegexFlags,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
+        reject_nul("PostgreSQL", pattern)?;
         let f = self.field_expr(field)?;
-        let escaped_pattern = self.escape_sql_str(pattern);
-        let is_cased = flags.cased || self.case_sensitive_re;
-        let op = if is_cased { "~" } else { "~*" };
+        // PostgreSQL's default regex mode lets `.` match a newline even
+        // without `|s`, so a regex can over-match a multi-line value but never
+        // misses one. The `w` embedded option makes `^` and `$` match at line
+        // breaks for `|m` without changing what `.` matches.
+        let pattern = if flags.multiline {
+            with_newline_sensitive_option(pattern)
+        } else {
+            pattern.to_string()
+        };
+        let escaped_pattern = self.escape_sql_str(&pattern);
+        let op = if flags.case_insensitive { "~*" } else { "~" };
         Ok(ConvertResult::Query(format!(
             "{f} {op} '{escaped_pattern}'"
         )))
@@ -835,9 +904,9 @@ impl Backend for PostgresBackend {
         field: &str,
         op: CompareOp,
         value: f64,
-        _state: &mut ConversionState,
+        state: &mut ConversionState,
     ) -> Result<String> {
-        let f = self.field_expr(field)?;
+        let f = self.numeric_expr(field, state)?;
         let op_token = match op {
             CompareOp::Lt => "<",
             CompareOp::Lte => "<=",
@@ -859,7 +928,12 @@ impl Backend for PostgresBackend {
         exists: bool,
         _state: &mut ConversionState,
     ) -> Result<String> {
-        let f = self.field_expr(field)?;
+        // `->` yields a jsonb `null` for a null value and SQL NULL only when
+        // the key is absent, so it tells a null field from a missing one.
+        let f = match &self.json_field {
+            Some(json_col) => Self::jsonb_path(json_col, field, false)?,
+            None => self.field_expr(field)?,
+        };
         if exists {
             Ok(format!("{f} IS NOT NULL"))
         } else {
@@ -906,6 +980,7 @@ impl Backend for PostgresBackend {
         pattern: &IrPattern,
         state: &mut ConversionState,
     ) -> Result<String> {
+        reject_nul_pattern("PostgreSQL", pattern)?;
         let search_target = self.keyword_search_target(state);
         let plain = keyword_pattern_text(pattern);
         if plain.is_empty() {
@@ -1247,6 +1322,7 @@ impl Backend for PostgresBackend {
                     &table,
                     ts,
                     window_secs,
+                    &group_by_cols,
                     &group_by_select,
                     &group_by_clause,
                     &having_clause,

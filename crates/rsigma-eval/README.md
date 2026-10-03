@@ -23,6 +23,8 @@ This library is part of [rsigma].
 | `add_compiled_rule(rule: CompiledRule)` | Add a pre-compiled rule directly; folds into engine indexes incrementally (amortized O(1) per rule) |
 | `extend_compiled_rules(rules)` | Batched add of pre-compiled rules; rebuilds engine indexes once |
 | `apply_filter(filter: &FilterRule)` | Inject filter as `AND NOT` into referenced rules |
+
+The free function `apply_filters(collection: &SigmaCollection) -> Vec<SigmaRule>` merges each filter into the detection rules it targets at the AST level, as pySigma does when a collection loads, so processing pipelines applied afterwards transform the filter's fields too. `rsigma-convert` uses it before converting.
 | `evaluate(event: &Event)` | Evaluate all rules against an event |
 | `evaluate_with_logsource(event, logsource)` | Evaluate with subset logsource pre-filtering |
 | `evaluate_pruned(event, logsource)` | Evaluate with a caller-resolved logsource for conflict-based pruning (used by `SchemaRouter`) |
@@ -579,8 +581,8 @@ Always benchmark against representative rule sets and event streams before flipp
 | Constant | Value | Purpose |
 |----------|-------|---------|
 | `MAX_NESTING_DEPTH` | 64 | Recursive JSON traversal depth for keyword search |
-| `MAX_WINDASH_DASHES` | 8 | Maximum dash characters expanded by windash (5^8 variants) |
-| `WINDASH_CHARS` | 5 | `-`, `/`, `–` (en-dash), `—` (em-dash), `―` (horizontal bar) |
+| `MAX_WINDASH_DASHES` | 8 | Maximum dash characters expanded by windash (5^8 variants); defined in `rsigma_ir::encoding` and shared with conversion |
+| Windash characters | 5 | `-`, `/`, `–` (en-dash), `—` (em-dash), `―` (horizontal bar) |
 | `MAX_CHAIN_DEPTH` | 10 | Maximum correlation chaining depth |
 | `max_state_entries` | 100,000 | Default hard cap for correlation state |
 | Eviction target | 90% | Hard-cap eviction drops the stalest 10% |
@@ -592,7 +594,8 @@ Always benchmark against representative rule sets and event streams before flipp
 | Error | When |
 |-------|------|
 | `InvalidRegex` | Regex compilation failure |
-| `InvalidCidr` | CIDR parse failure |
+| `InvalidCidr` | CIDR parse failure in IR that did not come from lowering a rule |
+| `IncompatibleValue` | A value the modifier cannot use, such as a `cidr` with host bits set or a wildcard in a field reference |
 | `Base64` | Base64 encoding error |
 | `UnknownDetection` | Condition references missing detection (caught at compile time) |
 | `InvalidModifiers` | Invalid modifier combo, empty AllOf/AnyOf, windash overflow, pipeline failure |

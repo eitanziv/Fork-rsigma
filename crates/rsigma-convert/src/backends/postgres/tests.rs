@@ -45,7 +45,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM security_events WHERE "CommandLine" = 'whoami'"#]
+        vec![r#"SELECT * FROM security_events WHERE "CommandLine" ILIKE 'whoami'"#]
     );
 }
 
@@ -64,7 +64,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE action = 'login'"]
+        vec!["SELECT * FROM security_events WHERE action ILIKE 'login'"]
     );
 }
 
@@ -85,7 +85,9 @@ detection:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM security_events WHERE "FieldA" = 'val1' AND "FieldB" = 'val2'"#]
+        vec![
+            r#"SELECT * FROM security_events WHERE "FieldA" ILIKE 'val1' AND "FieldB" ILIKE 'val2'"#
+        ]
     );
 }
 
@@ -106,7 +108,9 @@ detection:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM security_events WHERE "FieldA" = 'val1' OR "FieldB" = 'val2'"#]
+        vec![
+            r#"SELECT * FROM security_events WHERE "FieldA" ILIKE 'val1' OR "FieldB" ILIKE 'val2'"#
+        ]
     );
 }
 
@@ -127,7 +131,9 @@ detection:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM security_events WHERE "FieldA" = 'val1' AND NOT "FieldB" = 'val2'"#]
+        vec![
+            r#"SELECT * FROM security_events WHERE "FieldA" ILIKE 'val1' AND ("FieldB" ILIKE 'val2') IS NOT TRUE"#
+        ]
     );
 }
 
@@ -210,6 +216,29 @@ detection:
 }
 
 #[test]
+fn test_equality_is_case_insensitive_unless_cased() {
+    let queries = convert(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    plain:
+        User: 'NT AUTHORITY\100%_x'
+    exact:
+        Group|cased: 'Admins_1'
+    condition: plain and exact
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec![
+            r#"SELECT * FROM security_events WHERE "User" ILIKE 'NT AUTHORITY\\100\%\_x' AND "Group" = 'Admins_1'"#
+        ]
+    );
+}
+
+#[test]
 fn test_wildcard_value() {
     let queries = convert(
         r#"
@@ -245,8 +274,28 @@ detection:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM security_events WHERE "CommandLine" ~* '.*whoami.*'"#]
+        vec![r#"SELECT * FROM security_events WHERE "CommandLine" ~ '.*whoami.*'"#]
     );
+}
+
+#[test]
+fn test_regex_flags() {
+    for (modifiers, expected) in [
+        ("re|i", r#""F" ~* 'ab.c'"#),
+        ("re|s", r#""F" ~ 'ab.c'"#),
+        ("re|m", r#""F" ~ '(?w)ab.c'"#),
+        ("re|i|m|s", r#""F" ~* '(?w)ab.c'"#),
+        ("re|cased", r#""F" ~ 'ab.c'"#),
+    ] {
+        let queries = convert(&format!(
+            "title: Test\nlogsource:\n    category: test\ndetection:\n    selection:\n        F|{modifiers}: 'ab.c'\n    condition: selection\n"
+        ));
+        assert_eq!(
+            queries,
+            vec![format!("SELECT * FROM security_events WHERE {expected}")],
+            "{modifiers}"
+        );
+    }
 }
 
 #[test]
@@ -448,7 +497,7 @@ detection:
     assert_eq!(
         queries,
         vec![
-            r#"SELECT * FROM security_events WHERE "CommandLine" = 'whoami' OR "CommandLine" = 'ipconfig'"#
+            r#"SELECT * FROM security_events WHERE "CommandLine" ILIKE 'whoami' OR "CommandLine" ILIKE 'ipconfig'"#
         ]
     );
 }
@@ -471,7 +520,7 @@ detection:
     assert_eq!(
         queries,
         vec![
-            r#"SELECT * FROM security_events WHERE "CommandLine" = 'whoami' AND "CommandLine" = 'ipconfig'"#
+            r#"SELECT * FROM security_events WHERE "CommandLine" ILIKE 'whoami' AND "CommandLine" ILIKE 'ipconfig'"#
         ]
     );
 }
@@ -548,7 +597,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM security_events WHERE "CommandLine" = 'it''s a test'"#]
+        vec![r#"SELECT * FROM security_events WHERE "CommandLine" ILIKE 'it''s a test'"#]
     );
 }
 
@@ -572,7 +621,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE metadata->>'CommandLine' = 'whoami'"]
+        vec!["SELECT * FROM security_events WHERE metadata->>'CommandLine' ILIKE 'whoami'"]
     );
 }
 
@@ -618,7 +667,9 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE data->'securityContext'->>'isProxy' = 'true'"]
+        vec![
+            "SELECT * FROM security_events WHERE data->'securityContext'->>'isProxy' ILIKE 'true'"
+        ]
     );
 }
 
@@ -640,7 +691,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE data->'a'->'b'->'c'->>'d' = 'val'"]
+        vec!["SELECT * FROM security_events WHERE data->'a'->'b'->'c'->>'d' ILIKE 'val'"]
     );
 }
 
@@ -662,7 +713,125 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE data->'securityContext'->>'isProxy' IS NOT NULL"]
+        vec!["SELECT * FROM security_events WHERE data->'securityContext'->'isProxy' IS NOT NULL"]
+    );
+}
+
+#[test]
+fn test_jsonb_numeric_values_cast_numeric_text() {
+    let queries = convert_json(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    pid:
+        ProcessId: 4
+    port:
+        Port|gt: 1000
+    condition: pid and port
+"#,
+    );
+    let num = |f: &str| format!("(CASE WHEN {f} ~ '{NUMERIC_TEXT}' THEN ({f})::numeric END)");
+    assert_eq!(
+        queries,
+        vec![format!(
+            "SELECT * FROM security_events WHERE {} = 4 AND {} > 1000",
+            num("data->>'ProcessId'"),
+            num("data->>'Port'")
+        )]
+    );
+}
+
+const NUMERIC_TEXT: &str =
+    r"^[-+]?([0-9]{1,100}\.?[0-9]{0,100}|\.[0-9]{1,100})([eE][-+]?[0-9]{1,3})?$";
+
+#[test]
+fn test_jsonb_scalar_array_elements_compare_as_text() {
+    let queries = convert_json(
+        r#"
+sigma-version: 3
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        ports[any]: 4444
+        flags[any]: true
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec![format!(
+            "SELECT * FROM security_events WHERE \
+             (jsonb_typeof(data->'ports') = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(data->'ports') AS __sigma_e0 \
+             WHERE (CASE WHEN __sigma_e0 ~ '{NUMERIC_TEXT}' THEN (__sigma_e0)::numeric END) = 4444)) AND \
+             (jsonb_typeof(data->'flags') = 'array' AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(data->'flags') AS __sigma_e1 \
+             WHERE __sigma_e1 ILIKE 'true'))"
+        )]
+    );
+}
+
+#[test]
+fn test_caseless_equality_uses_eq() {
+    let queries = convert(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: '4624'
+        SourceIp: '10.0.0.1'
+        User: 'admin'
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec![
+            r#"SELECT * FROM security_events WHERE "EventID" = '4624' AND "SourceIp" = '10.0.0.1' AND "User" ILIKE 'admin'"#
+        ]
+    );
+}
+
+#[test]
+fn test_jsonb_bool_compares_text() {
+    let queries = convert_json(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        Elevated: true
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec!["SELECT * FROM security_events WHERE data->>'Elevated' ILIKE 'true'"]
+    );
+}
+
+#[test]
+fn test_columns_keep_typed_comparisons() {
+    let queries = convert(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        ProcessId|gte: 4
+        Elevated: false
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec![r#"SELECT * FROM security_events WHERE "ProcessId" >= 4 AND "Elevated" = false"#]
     );
 }
 
@@ -708,7 +877,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE data->'actor'->>'displayName' ~* '.*admin.*'"]
+        vec!["SELECT * FROM security_events WHERE data->'actor'->>'displayName' ~ '.*admin.*'"]
     );
 }
 
@@ -730,7 +899,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE data->>'eventType' = 'user.session.start'"]
+        vec!["SELECT * FROM security_events WHERE data->>'eventType' ILIKE 'user.session.start'"]
     );
 }
 
@@ -758,7 +927,7 @@ detection:
     assert_eq!(
         queries,
         vec![
-            r#"CREATE OR REPLACE VIEW sigma_12345678_1234_1234_1234_123456789abc AS SELECT * FROM security_events WHERE "FieldA" = 'val1'"#
+            r#"CREATE OR REPLACE VIEW sigma_12345678_1234_1234_1234_123456789abc AS SELECT * FROM security_events WHERE "FieldA" ILIKE 'val1'"#
         ]
     );
 }
@@ -807,7 +976,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM audit.security_events WHERE "FieldA" = 'val1'"#]
+        vec![r#"SELECT * FROM audit.security_events WHERE "FieldA" ILIKE 'val1'"#]
     );
 }
 
@@ -829,7 +998,9 @@ detection:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM security_events WHERE "FieldA" = 'val1' AND "FieldB" = 'val2'"#]
+        vec![
+            r#"SELECT * FROM security_events WHERE "FieldA" ILIKE 'val1' AND "FieldB" ILIKE 'val2'"#
+        ]
     );
 }
 
@@ -881,7 +1052,7 @@ detection:
     assert_eq!(
         queries,
         vec![
-            r#"SELECT time_bucket('1 hour', time) AS bucket, * FROM security_events WHERE "FieldA" = 'val1'"#
+            r#"SELECT time_bucket('1 hour', time) AS bucket, * FROM security_events WHERE "FieldA" ILIKE 'val1'"#
         ]
     );
 }
@@ -915,7 +1086,7 @@ detection:
             "CREATE MATERIALIZED VIEW sigma_abcdef01_2345_6789_abcd_ef0123456789 \
              WITH (timescaledb.continuous) AS \
              SELECT time_bucket('1 hour', time) AS bucket, * \
-             FROM security_events WHERE \"FieldA\" = 'val1' WITH NO DATA"
+             FROM security_events WHERE \"FieldA\" ILIKE 'val1' WITH NO DATA"
         ]
     );
 }
@@ -1070,21 +1241,12 @@ fn test_from_options_json_field() {
 }
 
 #[test]
-fn test_from_options_case_sensitive_re() {
-    let mut opts = HashMap::new();
-    opts.insert("case_sensitive_re".to_string(), "true".to_string());
-    let backend = PostgresBackend::from_options(&opts);
-    assert!(backend.case_sensitive_re);
-}
-
-#[test]
 fn test_from_options_empty_uses_defaults() {
     let opts = HashMap::new();
     let backend = PostgresBackend::from_options(&opts);
     assert_eq!(backend.table, "security_events");
     assert_eq!(backend.timestamp_field, "time");
     assert_eq!(backend.json_field, None);
-    assert!(!backend.case_sensitive_re);
     assert_eq!(backend.schema, None);
 }
 
@@ -1107,7 +1269,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM my_events WHERE action = 'login'"]
+        vec!["SELECT * FROM my_events WHERE action ILIKE 'login'"]
     );
 }
 
@@ -1136,7 +1298,7 @@ custom_attributes:
         .unwrap();
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM siem.custom_events WHERE "FieldA" = 'val1'"#]
+        vec![r#"SELECT * FROM siem.custom_events WHERE "FieldA" ILIKE 'val1'"#]
     );
 }
 
@@ -1164,7 +1326,7 @@ detection:
         .unwrap();
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM process_events WHERE "FieldA" = 'val1'"#]
+        vec![r#"SELECT * FROM process_events WHERE "FieldA" ILIKE 'val1'"#]
     );
 }
 
@@ -1323,6 +1485,86 @@ correlation:
     assert!(
         q.contains("'rule_b' AS rule_name"),
         "expected rule_b label in: {q}"
+    );
+}
+
+#[test]
+fn test_multiline_regex_joins_leading_options_group() {
+    let queries = convert(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        F|re|m: '(?i)^ab$'
+        G|re|m: '(?:a)b'
+    condition: selection
+"#,
+    );
+    assert_eq!(
+        queries,
+        vec![r#"SELECT * FROM security_events WHERE "F" ~ '(?wi)^ab$' AND "G" ~ '(?w)(?:a)b'"#]
+    );
+}
+
+#[test]
+fn test_temporal_multi_table_escapes_rule_names() {
+    let collection = parse_sigma_yaml(
+        r#"
+title: Multi-Stage Attack
+correlation:
+    type: temporal_ordered
+    rules:
+        - "a'); DROP TABLE t; --"
+        - rule_b
+    timespan: 5m
+"#,
+    )
+    .unwrap();
+    let mut pipeline_state = PipelineState::default();
+    pipeline_state.set_state(
+        "_rule_tables".to_string(),
+        serde_json::json!({"a'); DROP TABLE t; --": "proc", "rule_b": "net"}),
+    );
+    let q = PostgresBackend::new()
+        .convert_correlation_rule(&collection.correlations[0], "default", &pipeline_state)
+        .unwrap()
+        .remove(0);
+    assert!(
+        q.contains("SELECT *, 'a''); DROP TABLE t; --' AS rule_name FROM proc"),
+        "{q}"
+    );
+    assert!(!q.contains("'a');"), "{q}");
+}
+
+#[test]
+fn test_temporal_ordered_timescaledb_orders_within_each_bucket() {
+    let collection = parse_sigma_yaml(
+        r#"
+title: Ordered
+correlation:
+    type: temporal_ordered
+    rules:
+        - rule_a
+        - rule_b
+    group-by:
+        - User
+    timespan: 5m
+"#,
+    )
+    .unwrap();
+    let q = PostgresBackend::new()
+        .convert_correlation_rule(
+            &collection.correlations[0],
+            "timescaledb",
+            &PipelineState::default(),
+        )
+        .unwrap()
+        .remove(0);
+    assert!(
+        q.contains("OVER (PARTITION BY time_bucket('1 hour', time), \"User\")"),
+        "{q}"
     );
 }
 
@@ -1539,7 +1781,7 @@ fields:
     );
     assert_eq!(
         queries,
-        vec!["SELECT user_id, action FROM security_events WHERE action = 'login'"]
+        vec!["SELECT user_id, action FROM security_events WHERE action ILIKE 'login'"]
     );
 }
 
@@ -1560,7 +1802,7 @@ fields:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT "CommandLine" AS cmd FROM security_events WHERE action = 'login'"#]
+        vec![r#"SELECT "CommandLine" AS cmd FROM security_events WHERE action ILIKE 'login'"#]
     );
 }
 
@@ -1582,7 +1824,7 @@ fields:
     );
     assert_eq!(
         queries,
-        vec!["SELECT count(*), user_id FROM security_events WHERE action = 'login'"]
+        vec!["SELECT count(*), user_id FROM security_events WHERE action ILIKE 'login'"]
     );
 }
 
@@ -1605,7 +1847,9 @@ fields:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT "EventID", "SourceIp", action FROM security_events WHERE action = 'login'"#]
+        vec![
+            r#"SELECT "EventID", "SourceIp", action FROM security_events WHERE action ILIKE 'login'"#
+        ]
     );
 }
 
@@ -1624,7 +1868,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE action = 'login'"]
+        vec!["SELECT * FROM security_events WHERE action ILIKE 'login'"]
     );
 }
 
@@ -2144,7 +2388,7 @@ detection:
             "SELECT * FROM security_events WHERE \
              (jsonb_typeof(data->'connections') = 'array' AND EXISTS \
              (SELECT 1 FROM jsonb_array_elements(data->'connections') AS __sigma_e0 \
-             WHERE __sigma_e0->>'protocol' = 'TCP' AND \
+             WHERE __sigma_e0->>'protocol' ILIKE 'TCP' AND \
              (__sigma_e0->>'ip')::inet <<= '123.1.0.0/16'::cidr))"
         ]
     );
@@ -2172,7 +2416,7 @@ detection:
     assert!(
         q.contains(
             "NOT EXISTS (SELECT 1 FROM jsonb_array_elements(data->'connections') AS __sigma_e0 \
-             WHERE NOT (__sigma_e0->>'protocol' = 'TCP'))"
+             WHERE (__sigma_e0->>'protocol' ILIKE 'TCP') IS NOT TRUE)"
         ),
         "{q}"
     );
@@ -2200,7 +2444,7 @@ detection:
             "SELECT * FROM security_events WHERE \
              (CASE WHEN jsonb_typeof(data->'connections') = 'array' \
              THEN NOT EXISTS (SELECT 1 FROM jsonb_array_elements(data->'connections') AS __sigma_e0 \
-             WHERE NOT (__sigma_e0->>'protocol' = 'TCP')) \
+             WHERE (__sigma_e0->>'protocol' ILIKE 'TCP') IS NOT TRUE) \
              ELSE data->'connections' IS NULL OR jsonb_typeof(data->'connections') = 'null' END)"
         ]
     );
@@ -2235,8 +2479,11 @@ detection:
         q.contains("(__sigma_e0->>'ip')::inet <<= '123.1.0.0/16'::cidr"),
         "{q}"
     );
-    // The per-element negation lowers to a SQL NOT inside the element scope.
-    assert!(q.contains("NOT __sigma_e0->>'protocol' = 'TCP'"), "{q}");
+    // The per-element negation lowers to IS NOT TRUE inside the element scope.
+    assert!(
+        q.contains("(__sigma_e0->>'protocol' ILIKE 'TCP') IS NOT TRUE"),
+        "{q}"
+    );
     assert!(q.contains(" AND "), "{q}");
 }
 
@@ -2263,7 +2510,7 @@ detection:
             "SELECT * FROM security_events WHERE \
              (CASE WHEN jsonb_typeof(data->'containers') = 'array' \
              THEN NOT EXISTS (SELECT 1 FROM jsonb_array_elements(data->'containers') AS __sigma_e0 \
-             WHERE __sigma_e0->>'privileged' = 'true') \
+             WHERE __sigma_e0->>'privileged' ILIKE 'true') \
              ELSE data->'containers' IS NULL OR jsonb_typeof(data->'containers') = 'null' END)"
         ]
     );
@@ -2312,7 +2559,7 @@ detection:
         q.contains("jsonb_array_elements(data->'rules') AS __sigma_e0"),
         "{q}"
     );
-    assert!(q.contains("__sigma_e0->>'type' = 'allow'"), "{q}");
+    assert!(q.contains("__sigma_e0->>'type' ILIKE 'allow'"), "{q}");
     // Inner array over each rule's ip, with a distinct alias.
     assert!(
         q.contains("jsonb_array_elements_text(__sigma_e0->'ip') AS __sigma_e1"),
@@ -2338,7 +2585,7 @@ detection:
     );
     let q = &queries[0];
     assert!(
-        q.contains("data->>'eventName' = 'AuthorizeSecurityGroupIngress'"),
+        q.contains("data->>'eventName' ILIKE 'AuthorizeSecurityGroupIngress'"),
         "{q}"
     );
     assert!(
@@ -2364,7 +2611,7 @@ detection:
     );
     let q = &queries[0];
     assert!(q.contains("data->'args'->>0 ILIKE '%.exe'"), "{q}");
-    assert!(q.contains("data->'args'->>1 = '-enc'"), "{q}");
+    assert!(q.contains("data->'args'->>1 ILIKE '-enc'"), "{q}");
 }
 
 #[test]
@@ -2382,7 +2629,7 @@ detection:
     );
     // PostgreSQL JSONB supports negative subscripts (-1 is the last element).
     let q = &queries[0];
-    assert!(q.contains("data->'args'->>-1 = '-enc'"), "{q}");
+    assert!(q.contains("data->'args'->>-1 ILIKE '-enc'"), "{q}");
 }
 
 #[test]
@@ -2869,4 +3116,27 @@ correlation:
     assert!(q.contains("NOW() - INTERVAL '300 seconds'"), "{q}");
     assert!(!q.contains("date_bin("), "{q}");
     assert!(!q.contains("session_id"), "{q}");
+}
+
+#[test]
+fn test_nul_from_wide_is_rejected() {
+    let collection = parse_sigma_yaml(
+        r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        CommandLine|wide|contains: 'ab'
+    condition: selection
+"#,
+    )
+    .unwrap();
+    let err = PostgresBackend::new()
+        .convert_rule(&collection.rules[0], "default", &PipelineState::default())
+        .unwrap_err();
+    assert!(
+        matches!(&err, ConvertError::UnsupportedValue(m) if m.contains("NUL")),
+        "got: {err}"
+    );
 }

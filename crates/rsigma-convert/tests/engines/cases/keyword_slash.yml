@@ -1,0 +1,15 @@
+description: A keyword with a slash matches the literal text anywhere in the event, case-insensitively.
+rule:
+  title: keyword slash
+  logsource: {category: process_creation, product: windows}
+  detection:
+    keywords:
+      - '/c whoami'
+    condition: keywords
+events:
+  - {CommandLine: 'cmd /c whoami'}
+  - {CommandLine: 'cmd c whoami'}
+  - {CommandLine: 'CMD /C WHOAMI /all'}
+  - {CommandLine: 'cmd /c who ami'}
+matches: [0, 2]
+unsupported: [fibratus, fibratus-nomacros]

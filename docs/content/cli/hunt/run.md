@@ -94,7 +94,7 @@ rsigma hunt run -r rules/ -t postgres -O table=okta_events -O json_field=data \
 -- timestamp_field: time
 -- json_field: data
 -- rule: Suspicious Curl (id: 00000000-0000-0000-0000-000000000201)
-SELECT * FROM (SELECT * FROM okta_events WHERE data->>'Image' = '/usr/bin/curl') AS __hunt WHERE time >= '2026-07-01T00:00:00+00:00'::timestamptz ORDER BY time LIMIT 1000;
+SELECT * FROM (SELECT * FROM okta_events WHERE data->>'Image' ILIKE '/usr/bin/curl') AS __hunt WHERE time >= '2026-07-01T00:00:00+00:00'::timestamptz ORDER BY time LIMIT 1000;
 ```
 
 ### Feed a draft

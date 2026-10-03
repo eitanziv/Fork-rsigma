@@ -12,8 +12,3 @@ events:
   - {ProcessId: 5}
   - {ProcessId: 20000}
 matches: [0, 3]
-known_failures:
-  postgres-jsonb:
-    type: engine-error
-    reason: "comparing the text from ->> with an integer is a SQL type error"
-    contains: "operator does not exist: text > integer"

@@ -38,7 +38,7 @@ fn duplicate_matches_are_a_failure() {
 fn known_failure_must_have_the_recorded_outcome() {
     let case = engines::load_cases()
         .into_iter()
-        .find(|case| case.name == "regex_anchored")
+        .find(|case| case.name == "numeric_string")
         .unwrap();
 
     let recorded = vec![(case.clone(), Ok(Outcome::Matched(Vec::new())))];

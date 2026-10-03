@@ -38,9 +38,29 @@ level: low
     let mut engine = Engine::new();
     let err = engine.add_collection(&collection).unwrap_err();
     assert!(
-        matches!(err, EvalError::InvalidCidr(_)),
-        "expected InvalidCidr, got: {err}"
+        matches!(err, EvalError::IncompatibleValue(_)),
+        "expected IncompatibleValue, got: {err}"
     );
+}
+
+#[test]
+fn cidr_with_host_bits_is_rejected() {
+    for cidr in ["10.1.2.3/8", "2001:db8::1/32"] {
+        let yaml = format!(
+            r#"
+title: Host Bits
+logsource:
+    product: test
+detection:
+    selection:
+        SourceIP|cidr: '{cidr}'
+    condition: selection
+"#
+        );
+        let collection = parse_sigma_yaml(&yaml).unwrap();
+        let err = Engine::new().add_collection(&collection).unwrap_err();
+        assert!(err.to_string().contains("host bits set"), "{cidr}: {err}");
+    }
 }
 
 #[test]

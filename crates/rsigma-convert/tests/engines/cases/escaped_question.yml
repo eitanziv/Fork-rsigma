@@ -1,0 +1,13 @@
+description: An escaped question mark is a literal question mark, not a single-character wildcard.
+rule:
+  title: escaped question
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|contains: 'a\?b'
+    condition: selection
+events:
+  - {CommandLine: 'x a?b y'}
+  - {CommandLine: 'x aZb y'}
+  - {CommandLine: 'x ab y'}
+matches: [0]

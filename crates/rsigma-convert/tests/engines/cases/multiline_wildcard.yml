@@ -11,9 +11,3 @@ events:
   - {CommandLine: "abc"}
   - {CommandLine: "ab"}
 matches: [0, 1]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "match values are not quoted"
-    actual: ["CommandLine match a*c"]
-    reference: ["CommandLine match \"a*c\""]

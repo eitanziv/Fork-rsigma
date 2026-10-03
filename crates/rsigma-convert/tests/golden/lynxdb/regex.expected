@@ -1,1 +1,1 @@
-FROM main | search * | where CommandLine =~ ".*whoami.*"
+FROM main | where match(CommandLine, ".*whoami.*")

@@ -14,20 +14,11 @@ events:
   - {Image: 'C:\cmd.exe', User: ''}
 matches: [0, 1]
 known_failures:
-  lynxdb:
-    type: match-mismatch
-    reason: "NOT field=* does not match a field that is present with a null value"
-    actual: [0]
-  test-pysigma:
-    type: output-difference
-    reason: "backslashes in values are doubled"
-    actual: ["Image endswith \"\\\\cmd.exe\" and User is null"]
-    reference: ["Image endswith \"\\cmd.exe\" and User is null"]
   fibratus:
     type: match-mismatch
-    reason: "null renders as = '', which matches an empty string instead of an absent field"
-    actual: [3]
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so the null test also matches a present empty value"
+    actual: [0, 1, 3]
   fibratus-nomacros:
     type: match-mismatch
-    reason: "null renders as = '', which matches an empty string instead of an absent field"
-    actual: [3]
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so the null test also matches a present empty value"
+    actual: [0, 1, 3]

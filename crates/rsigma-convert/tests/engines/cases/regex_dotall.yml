@@ -1,0 +1,13 @@
+description: re|s lets . match a line break.
+rule:
+  title: regex dotall
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|re|s: 'who.mi'
+    condition: selection
+events:
+  - {CommandLine: "who\nmi"}
+  - {CommandLine: 'whoami'}
+  - {CommandLine: "who\n\nmi"}
+matches: [0, 1]

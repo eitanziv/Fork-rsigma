@@ -178,6 +178,81 @@ detection:
     assert_eq!(q, vec!["file.name matches '*Cmd*'"]);
 }
 
+#[test]
+fn substring_operator_with_wildcard_lowers_to_imatches() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    ps.cmdline|startswith: 'net*user'
+  e:
+    ps.exe|endswith: 'sys?.exe'
+  c:
+    ps.cmdline|contains: 'a*b'
+  condition: s and e and c
+"#,
+    );
+    assert_eq!(
+        q,
+        vec![
+            "ps.cmdline imatches 'net*user*' and ps.exe imatches '*sys?.exe' and ps.cmdline imatches '*a*b*'"
+        ]
+    );
+}
+
+#[test]
+fn substring_list_with_wildcard_converts_per_value() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    ps.cmdline|startswith:
+      - 'net*user'
+      - 'whoami'
+  condition: s
+"#,
+    );
+    assert_eq!(
+        q,
+        vec!["(ps.cmdline imatches 'net*user*' or ps.cmdline istartswith 'whoami')"]
+    );
+}
+
+#[test]
+fn literal_star_stays_verbatim_outside_globs() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    ps.cmdline|contains: 'a\*b'
+  condition: s
+"#,
+    );
+    assert_eq!(q, vec!["ps.cmdline icontains 'a*b'"]);
+}
+
+#[test]
+fn literal_star_in_glob_lowers_to_regex() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    file.name: 'a\*b?c*'
+  t:
+    ps.cmdline|endswith|cased: 'x\?.y'
+  condition: s or t
+"#,
+    );
+    assert_eq!(
+        q,
+        vec![r"(regex(file.name, '(?is)^a\\*b.c.*$') = true or ps.cmdline endswith 'x?.y')"]
+    );
+}
+
 // ---------------------------------------------------------------------
 // Boolean logic and grouping
 // ---------------------------------------------------------------------
@@ -390,8 +465,8 @@ detection:
 
 #[test]
 fn field_eq_null_compares_to_empty_string() {
-    // Fibratus has no `null` token; a Sigma `field: null` lowers to an
-    // empty-string comparison.
+    // Fibratus has no `null` token, and an absent field reads as its zero
+    // value; a Sigma `field: null` lowers to an empty-string comparison.
     let q = convert(
         r#"
 title: T
@@ -551,6 +626,29 @@ detection:
 }
 
 #[test]
+fn regex_flags_render_inline() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    ps.cmdline|re|i|s:
+      - '^safe.x'
+      - '^trusted'
+  single:
+    ps.exe|re|m: '^cmd$'
+  condition: s and single
+"#,
+    );
+    assert_eq!(
+        q,
+        vec![
+            "regex(ps.cmdline, '(?is)^safe.x', '(?is)^trusted') = true and regex(ps.exe, '(?m)^cmd$') = true"
+        ]
+    );
+}
+
+#[test]
 fn multi_value_re_with_all_modifier_uses_and() {
     let q = convert(
         r#"
@@ -618,18 +716,18 @@ detection:
 
 #[test]
 fn field_exists_true() {
-    // Fibratus has no `null`; field presence is expressed against the
-    // zero value (`!= false` set, `= false` absent).
+    // An absent field reads as its zero value, so presence of a string
+    // field is a non-empty value.
     let q = convert(
         r#"
 title: T
 detection:
   s:
-    thread.callstack.is_unbacked|exists: true
+    ps.cmdline|exists: true
   condition: s
 "#,
     );
-    assert_eq!(q, vec!["thread.callstack.is_unbacked != false"]);
+    assert_eq!(q, vec!["ps.cmdline != ''"]);
 }
 
 #[test]
@@ -639,11 +737,11 @@ fn field_exists_false() {
 title: T
 detection:
   s:
-    thread.callstack.is_unbacked|exists: false
+    ps.cmdline|exists: false
   condition: s
 "#,
     );
-    assert_eq!(q, vec!["thread.callstack.is_unbacked = false"]);
+    assert_eq!(q, vec!["ps.cmdline = ''"]);
 }
 
 #[test]
@@ -1197,4 +1295,24 @@ detection:
         "expr",
     );
     assert_eq!(q, vec!["ps.cmdline contains 'Whoami'"]);
+}
+
+#[test]
+fn nul_from_wide_is_rejected() {
+    for value in ["ab", "['ab', 'cd']"] {
+        let yaml = format!(
+            r#"
+title: Test
+detection:
+  selection:
+    ps.cmdline|wide|contains: {value}
+  condition: selection
+"#
+        );
+        let collection = parse_sigma_yaml(&yaml).unwrap();
+        let err = FibratusBackend::new()
+            .convert_rule(&collection.rules[0], "expr", &PipelineState::default())
+            .unwrap_err();
+        assert!(err.to_string().contains("NUL"), "{value}: {err}");
+    }
 }

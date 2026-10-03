@@ -108,3 +108,8 @@ fn golden_numeric_compare() {
 fn golden_brute_force() {
     run_golden("brute_force");
 }
+
+#[test]
+fn golden_encodings() {
+    run_golden("encodings");
+}

@@ -154,3 +154,8 @@ fn golden_all_modifier() {
 fn golden_envelope_yaml() {
     run_golden("envelope", "default");
 }
+
+#[test]
+fn golden_encodings() {
+    run_golden("encodings", "expr");
+}

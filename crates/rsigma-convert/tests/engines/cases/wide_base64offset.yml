@@ -1,0 +1,14 @@
+description: wide combined with base64offset matches the UTF-16LE encoding at each offset and not the UTF-8 encoding.
+rule:
+  title: wide base64offset
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|wide|base64offset|contains: 'http://'
+    condition: selection
+events:
+  - {CommandLine: 'powershell -enc YwB1AHIAbAAgAGgAdAB0AHAAOgAvAC8AZQB2AGkAbAA='}
+  - {CommandLine: 'powershell -enc eABjAHUAcgBsACAAaAB0AHQAcAA6AC8ALwBlAHYAaQBsAA=='}
+  - {CommandLine: 'powershell -enc eAB4AGMAdQByAGwAIABoAHQAdABwADoALwAvAGUAdgBpAGwA'}
+  - {CommandLine: 'powershell -enc Y3VybCBodHRwOi8vZXZpbA=='}
+matches: [0, 1, 2]

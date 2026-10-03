@@ -11,8 +11,3 @@ events:
   - {CommandLine: 'x whoami y'}
   - {CommandLine: 'x WHOAMI y'}
 matches: [0]
-known_failures:
-  lynxdb:
-    type: match-mismatch
-    reason: "cased drops contains and renders whole-value CASE() equality"
-    actual: []

@@ -1,0 +1,18 @@
+description: windash matches each Windows flag prefix (hyphen, slash, en dash, em dash, horizontal bar) and the OR of variants stays grouped under the AND.
+rule:
+  title: windash
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      Image|endswith: '\certutil.exe'
+      CommandLine|windash|contains: ' -decode '
+    condition: selection
+events:
+  - {Image: 'C:\certutil.exe', CommandLine: 'certutil -decode a b'}
+  - {Image: 'C:\certutil.exe', CommandLine: 'certutil /decode a b'}
+  - {Image: 'C:\certutil.exe', CommandLine: "certutil \u2013decode a b"}
+  - {Image: 'C:\certutil.exe', CommandLine: "certutil \u2014decode a b"}
+  - {Image: 'C:\certutil.exe', CommandLine: "certutil \u2015decode a b"}
+  - {Image: 'C:\certutil.exe', CommandLine: 'certutil ~decode a b'}
+  - {Image: 'C:\cmd.exe', CommandLine: 'certutil -decode a b'}
+matches: [0, 1, 2, 3, 4]

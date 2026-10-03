@@ -1,0 +1,29 @@
+title: Recon Whoami
+id: recon-whoami
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        CommandLine|contains: whoami
+    condition: selection
+---
+title: Recon Ipconfig
+id: recon-ipconfig
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        CommandLine|contains: ipconfig
+    condition: selection
+---
+title: Recon Sequence
+correlation:
+    type: temporal_ordered
+    rules:
+        - recon-whoami
+        - recon-ipconfig
+    group-by:
+        - User
+    timespan: 5m

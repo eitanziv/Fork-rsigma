@@ -1,1 +1,1 @@
-SELECT * FROM (SELECT * FROM security_events WHERE "Image" = '/usr/bin/curl' AND "CommandLine" ILIKE '%--insecure%') AS __hunt WHERE time >= '2026-07-01T00:00:00+00:00'::timestamptz AND time < '2026-07-02T00:00:00+00:00'::timestamptz ORDER BY time LIMIT 1000;
+SELECT * FROM (SELECT * FROM security_events WHERE "Image" ILIKE '/usr/bin/curl' AND "CommandLine" ILIKE '%--insecure%') AS __hunt WHERE time >= '2026-07-01T00:00:00+00:00'::timestamptz AND time < '2026-07-02T00:00:00+00:00'::timestamptz ORDER BY time LIMIT 1000;

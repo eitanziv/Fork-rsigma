@@ -1,31 +1,37 @@
 //! LynxDB conversion backend.
 //!
 //! Generates [LynxDB](https://github.com/lynxbase/lynxdb) SPL2-compatible
-//! search queries from Sigma rules. LynxDB is a Go-based log analytics engine
-//! whose search syntax is close to Splunk SPL2 but with notable differences:
+//! queries from Sigma rules. A rule renders as a `search` predicate when every
+//! part of it is one LynxDB's inverted-index search matches exactly, and as a
+//! `where` expression otherwise:
 //!
-//! - Boolean precedence: `NOT` > `OR` > `AND` (OR binds tighter than AND).
-//! - Only `*` wildcard; no single-character `?` wildcard.
-//! - Regex via `=~` / `!~` in `where` clauses (not in `search` predicates).
-//! - CIDR via `cidrmatch("cidr", field)` in `where` clauses.
-//! - Case-sensitive matching via `CASE(value)` wrapper.
-//! - Default matching is case-insensitive.
+//! - `search` binds `NOT` tightest, then `OR`, then `AND` (OR binds tighter
+//!   than AND), matches case-insensitively, and has only the `*` wildcard.
+//!   It matches through tokens, so values outside a small character set
+//!   (`/`, `>`, quotes, brackets, and others), `?`, a literal `*`, a `*`
+//!   between literals, and quoted `CASE()` values do not match exactly.
+//! - `where` uses standard precedence and evaluates the actual values: strings
+//!   through `match()` regexes, anchored except for `contains` and keywords, numeric comparisons through
+//!   `tonumber()`, CIDR through `cidrmatch()`, and null, empty strings, and
+//!   `exists` through the event's raw JSON (columns store `""` as null).
+//!   Regexes, CIDR, `null`, `cased`, numeric comparisons, and any string value
+//!   `search` cannot match exactly put the whole rule in `where`.
 
 use rsigma_eval::pipeline::state::PipelineState;
-use rsigma_ir::{IrPattern, IrStrOp};
+use rsigma_ir::{IrPattern, IrPatternPart, IrStrOp};
 use rsigma_parser::*;
 
 use crate::backend::*;
-use crate::condition_ir::convert_rule_via_ir;
+use crate::condition_ir::{condition_state, convert_ir_condition, lower_rule_for_conversion};
 use crate::error::{ConvertError, Result};
-use crate::state::{ConversionState, ConvertResult, DeferredTextExpression};
+use crate::state::{ConversionState, ConvertResult};
 
 // =============================================================================
 // LynxDB config
 // =============================================================================
 
-static LYNXDB_CONFIG: TextQueryConfig = TextQueryConfig {
-    // LynxDB binds NOT tightest, then OR, then AND loosest.
+const SEARCH_CONFIG: TextQueryConfig = TextQueryConfig {
+    // LynxDB search binds NOT tightest, then OR, then AND loosest.
     precedence: (TokenType::NOT, TokenType::OR, TokenType::AND),
     group_expression: "({expr})",
     token_separator: " ",
@@ -40,10 +46,7 @@ static LYNXDB_CONFIG: TextQueryConfig = TextQueryConfig {
     not_eq_expression: None,
     convert_not_as_not_eq: false,
 
-    // LynxDB only supports `*` glob; `?` is a literal character.
-    // Sigma's single-char wildcard is mapped to `*` here (lossy fallback);
-    // patterns that actually contain `?` are deferred to a regex `where` clause
-    // in `convert_field_str`.
+    // Only `*` is a search wildcard; a pattern with `?` renders in `where`.
     wildcard_multi: "*",
     wildcard_single: "*",
 
@@ -73,12 +76,11 @@ static LYNXDB_CONFIG: TextQueryConfig = TextQueryConfig {
     contains_expression_allow_special: false,
     wildcard_match_expression: None,
 
-    case_sensitive_match_expression: Some("{field}=CASE({value})"),
+    case_sensitive_match_expression: None,
     case_sensitive_startswith_expression: None,
     case_sensitive_endswith_expression: None,
     case_sensitive_contains_expression: None,
 
-    // Regex and CIDR are handled as deferred `where` clauses, not inline.
     re_expression: None,
     not_re_expression: None,
     re_escape_char: Some("\\"),
@@ -88,11 +90,11 @@ static LYNXDB_CONFIG: TextQueryConfig = TextQueryConfig {
     cidr_expression: None,
     not_cidr_expression: None,
 
-    field_null_expression: "NOT {field}=*",
+    field_null_expression: "isnull({field})",
     field_exists_expression: Some("{field}=*"),
     field_not_exists_expression: Some("NOT {field}=*"),
 
-    compare_op_expression: Some("{field}{op}{value}"),
+    compare_op_expression: Some("coalesce(tonumber({field}){op}{value}, false)"),
     compare_ops: &[("lt", "<"), ("lte", "<="), ("gt", ">"), ("gte", ">=")],
 
     convert_or_as_in: true,
@@ -110,8 +112,8 @@ static LYNXDB_CONFIG: TextQueryConfig = TextQueryConfig {
     field_eq_field_expression: None,
     field_eq_field_escaping_quoting: false,
 
-    deferred_start: Some(" | where "),
-    deferred_separator: Some(" | where "),
+    deferred_start: None,
+    deferred_separator: None,
     deferred_only_query: "*",
 
     bool_true: "true",
@@ -121,19 +123,183 @@ static LYNXDB_CONFIG: TextQueryConfig = TextQueryConfig {
     state_defaults: &[("index", "main")],
 };
 
+static LYNXDB_CONFIG: TextQueryConfig = SEARCH_CONFIG;
+
+static LYNXDB_WHERE_CONFIG: TextQueryConfig = TextQueryConfig {
+    // `where` expressions use standard precedence.
+    precedence: (TokenType::NOT, TokenType::AND, TokenType::OR),
+    query_expression: "FROM {index} | where {query}",
+    ..SEARCH_CONFIG
+};
+
+/// Set in a condition's state when a part of it cannot render in `search`.
+const NEEDS_WHERE: &str = "_lynxdb_needs_where";
+
+/// Characters a `search` value matches exactly, as verified against LynxDB
+/// on the SigmaHQ corpus.
+fn search_safe_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || " .-_:\\".contains(c)
+}
+
+/// Whether `search` matches the pattern exactly: case-insensitive, at least
+/// one literal character, only safe characters, and `*` only at the start or
+/// end (a wildcard between literals misses values containing `/`).
+fn search_safe(pattern: &IrPattern, case_insensitive: bool) -> bool {
+    let last = pattern.parts.len().saturating_sub(1);
+    case_insensitive
+        && pattern
+            .parts
+            .iter()
+            .any(|p| matches!(p, IrPatternPart::Literal(s) if !s.is_empty()))
+        && pattern.parts.iter().enumerate().all(|(i, p)| match p {
+            IrPatternPart::Literal(s) => s.chars().all(search_safe_char),
+            IrPatternPart::WildcardMulti => i == 0 || i == last,
+            IrPatternPart::WildcardSingle => false,
+        })
+}
+
+/// Split the outer `*` wildcards off a `search`-safe pattern, returning the
+/// operator they amount to and the literal between them. `search` splits a
+/// bare value at a space and keeps a backslash escaped, so the literal must
+/// render quoted, with the wildcards outside the quotes.
+fn search_literal(op: IrStrOp, pattern: &IrPattern) -> (IrStrOp, IrPattern) {
+    let leading = matches!(pattern.parts.first(), Some(IrPatternPart::WildcardMulti));
+    let trailing = pattern.parts.len() > 1
+        && matches!(pattern.parts.last(), Some(IrPatternPart::WildcardMulti));
+    let parts: Vec<IrPatternPart> = pattern
+        .parts
+        .iter()
+        .filter(|p| !matches!(p, IrPatternPart::WildcardMulti))
+        .cloned()
+        .collect();
+    let op = match (op, leading, trailing) {
+        (IrStrOp::Exact, true, true) => IrStrOp::Contains,
+        (IrStrOp::Exact, true, false) => IrStrOp::EndsWith,
+        (IrStrOp::Exact, false, true) => IrStrOp::StartsWith,
+        (IrStrOp::StartsWith, true, _) | (IrStrOp::EndsWith, _, true) => IrStrOp::Contains,
+        (op, _, _) => op,
+    };
+    (op, IrPattern { parts })
+}
+
+/// Quote a string as a LynxDB string literal.
+fn quote_str(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// The regex a Sigma pattern matches, anchored for `op`. Wildcards match a
+/// line break, as in the rsigma engine. `raw_json` escapes literals the way
+/// they appear in an event's raw JSON text.
+fn pattern_regex(
+    pattern: &IrPattern,
+    op: IrStrOp,
+    case_insensitive: bool,
+    raw_json: bool,
+) -> String {
+    let has_wildcard = pattern
+        .parts
+        .iter()
+        .any(|p| !matches!(p, IrPatternPart::Literal(_)));
+    let flags = match (case_insensitive, has_wildcard) {
+        (true, true) => "(?is)",
+        (true, false) => "(?i)",
+        (false, true) => "(?s)",
+        (false, false) => "",
+    };
+    let mut re = flags.to_string();
+    if matches!(op, IrStrOp::Exact | IrStrOp::StartsWith) {
+        re.push('^');
+    }
+    for part in &pattern.parts {
+        match part {
+            IrPatternPart::Literal(s) if raw_json => re.push_str(&regex::escape(&json_escape(s))),
+            // Inside a JSON string, so a wildcard cannot run into the next
+            // value, and `?` covers a whole escape sequence.
+            IrPatternPart::WildcardMulti if raw_json => re.push_str(r#"(?:[^"\\]|\\.)*"#),
+            IrPatternPart::WildcardSingle if raw_json => {
+                re.push_str(r#"(?:[^"\\]|\\u[0-9a-fA-F]{4}|\\.)"#)
+            }
+            IrPatternPart::Literal(s) => re.push_str(&regex::escape(s)),
+            IrPatternPart::WildcardMulti => re.push_str(".*"),
+            IrPatternPart::WildcardSingle => re.push('.'),
+        }
+    }
+    if matches!(op, IrStrOp::Exact | IrStrOp::EndsWith) {
+        re.push('$');
+    }
+    re
+}
+
+/// A string as serde_json writes it inside a JSON string: `"`, `\`, and
+/// control characters escaped, everything else verbatim.
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            c if c < ' ' => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// The field as read from the event's raw JSON. Columns store an empty string
+/// as null, while the raw JSON keeps the two apart.
+fn raw_field(field: &str) -> String {
+    format!("json_extract(_raw, {})", quote_str(field))
+}
+
+/// Format a number without a fractional part when it has none and is
+/// exactly representable as an integer.
+fn format_num(value: f64) -> String {
+    if value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0 {
+        (value as i64).to_string()
+    } else {
+        value.to_string()
+    }
+}
+
 // =============================================================================
 // LynxDbBackend
 // =============================================================================
 
 pub struct LynxDbBackend {
     config: &'static TextQueryConfig,
+    where_mode: bool,
 }
 
 impl LynxDbBackend {
     pub fn new() -> Self {
         Self {
             config: &LYNXDB_CONFIG,
+            where_mode: false,
         }
+    }
+
+    fn where_backend() -> Self {
+        Self {
+            config: &LYNXDB_WHERE_CONFIG,
+            where_mode: true,
+        }
+    }
+
+    /// In `search` mode, record that the condition needs `where` and return a
+    /// placeholder; the condition is converted again in `where` mode.
+    fn needs_where(&self, state: &mut ConversionState) -> Option<String> {
+        if self.where_mode {
+            return None;
+        }
+        state
+            .processing_state
+            .insert(NEEDS_WHERE.to_string(), true.into());
+        Some(String::new())
     }
 }
 
@@ -150,8 +316,14 @@ impl Backend for LynxDbBackend {
 
     fn formats(&self) -> &[(&str, &str)] {
         &[
-            ("default", "full query: FROM <index> | search ..."),
-            ("minimal", "search expression only (no FROM prefix)"),
+            (
+                "default",
+                "full query: FROM <index> | search ..., or FROM <index> | where ...",
+            ),
+            (
+                "minimal",
+                "search expression only (no FROM prefix); * | where ... for a where query",
+            ),
         ]
     }
 
@@ -167,7 +339,22 @@ impl Backend for LynxDbBackend {
         output_format: &str,
         pipeline_state: &PipelineState,
     ) -> Result<Vec<String>> {
-        convert_rule_via_ir(self, rule, output_format, pipeline_state)
+        let ir = lower_rule_for_conversion(rule)?;
+        let where_backend = Self::where_backend();
+        let mut queries = Vec::with_capacity(ir.conditions.len());
+        for (idx, cond) in ir.conditions.iter().enumerate() {
+            let mut backend = self;
+            let mut state = condition_state(pipeline_state, output_format);
+            let mut query = convert_ir_condition(self, cond, &ir.detections, &mut state)?;
+            if state.processing_state.contains_key(NEEDS_WHERE) {
+                backend = &where_backend;
+                state = condition_state(pipeline_state, output_format);
+                query = convert_ir_condition(backend, cond, &ir.detections, &mut state)?;
+            }
+            let finished = backend.finish_query(rule, query, &state)?;
+            queries.push(backend.finalize_query(rule, finished, idx, &state, output_format)?);
+        }
+        Ok(queries)
     }
 
     // --- Condition combinators ---
@@ -220,9 +407,31 @@ impl Backend for LynxDbBackend {
         op: IrStrOp,
         pattern: &IrPattern,
         case_insensitive: bool,
-        _state: &mut ConversionState,
+        state: &mut ConversionState,
     ) -> Result<ConvertResult> {
-        text_convert_field_str_ir(self.config, field, op, pattern, case_insensitive)
+        if !self.where_mode && search_safe(pattern, case_insensitive) {
+            let (op, literal) = search_literal(op, pattern);
+            return text_convert_field_str_ir(self.config, field, op, &literal, case_insensitive);
+        }
+        if let Some(placeholder) = self.needs_where(state) {
+            return Ok(ConvertResult::Query(placeholder));
+        }
+        let empty = pattern
+            .parts
+            .iter()
+            .all(|p| matches!(p, IrPatternPart::Literal(s) if s.is_empty()));
+        if op == IrStrOp::Exact && empty {
+            return Ok(ConvertResult::Query(format!(
+                "coalesce({}=\"\", false)",
+                raw_field(field)
+            )));
+        }
+        let f = text_escape_and_quote_field(self.config, field);
+        let re = pattern_regex(pattern, op, case_insensitive, false);
+        Ok(ConvertResult::Query(format!(
+            "match({f}, {})",
+            quote_str(&re)
+        )))
     }
 
     fn convert_field_eq_num(
@@ -232,10 +441,11 @@ impl Backend for LynxDbBackend {
         _state: &mut ConversionState,
     ) -> Result<String> {
         let f = text_escape_and_quote_field(self.config, field);
-        if value.fract() == 0.0 {
-            Ok(format!("{f}={}", value as i64))
+        let v = format_num(value);
+        if self.where_mode {
+            Ok(format!("coalesce(tonumber({f})={v}, false)"))
         } else {
-            Ok(format!("{f}={value}"))
+            Ok(format!("{f}={v}"))
         }
     }
 
@@ -246,51 +456,51 @@ impl Backend for LynxDbBackend {
         _state: &mut ConversionState,
     ) -> Result<String> {
         let f = text_escape_and_quote_field(self.config, field);
-        let v = if value {
-            self.config.bool_true
-        } else {
-            self.config.bool_false
-        };
-        Ok(format!("{f}={v}"))
+        if self.where_mode {
+            return Ok(format!("match({f}, \"(?i)^{value}$\")"));
+        }
+        Ok(format!("{f}={value}"))
     }
 
-    fn convert_field_eq_null(&self, field: &str, _state: &mut ConversionState) -> Result<String> {
-        let f = text_escape_and_quote_field(self.config, field);
-        Ok(self.config.field_null_expression.replace("{field}", &f))
+    fn convert_field_eq_null(&self, field: &str, state: &mut ConversionState) -> Result<String> {
+        if let Some(placeholder) = self.needs_where(state) {
+            return Ok(placeholder);
+        }
+        Ok(format!("isnull({})", raw_field(field)))
     }
 
     fn convert_field_regex(
         &self,
         field: &str,
         pattern: &str,
-        _flags: RegexFlags,
-        _state: &mut ConversionState,
+        flags: RegexFlags,
+        state: &mut ConversionState,
     ) -> Result<ConvertResult> {
+        if let Some(placeholder) = self.needs_where(state) {
+            return Ok(ConvertResult::Query(placeholder));
+        }
         let f = text_escape_and_quote_field(self.config, field);
-        let re_val = text_convert_value_re(self.config, pattern);
-        Ok(ConvertResult::Deferred(Box::new(DeferredTextExpression {
-            template: "{field} {op} \"{value}\"".to_string(),
-            field: f,
-            value: re_val,
-            negated: false,
-            operators: ("=~", "!~"),
-        })))
+        let re = format!("{}{pattern}", flags.inline_prefix());
+        Ok(ConvertResult::Query(format!(
+            "match({f}, {})",
+            quote_str(&re)
+        )))
     }
 
     fn convert_field_eq_cidr(
         &self,
         field: &str,
         cidr: &str,
-        _state: &mut ConversionState,
+        state: &mut ConversionState,
     ) -> Result<ConvertResult> {
+        if let Some(placeholder) = self.needs_where(state) {
+            return Ok(ConvertResult::Query(placeholder));
+        }
         let f = text_escape_and_quote_field(self.config, field);
-        Ok(ConvertResult::Deferred(Box::new(DeferredTextExpression {
-            template: "{op}cidrmatch(\"{value}\", {field})".to_string(),
-            field: f,
-            value: cidr.to_string(),
-            negated: false,
-            operators: ("", "NOT "),
-        })))
+        Ok(ConvertResult::Query(format!(
+            "cidrmatch({}, {f})",
+            quote_str(cidr)
+        )))
     }
 
     fn convert_field_compare_op(
@@ -298,37 +508,26 @@ impl Backend for LynxDbBackend {
         field: &str,
         op: CompareOp,
         value: f64,
-        _state: &mut ConversionState,
+        state: &mut ConversionState,
     ) -> Result<String> {
+        if let Some(placeholder) = self.needs_where(state) {
+            return Ok(placeholder);
+        }
         let f = text_escape_and_quote_field(self.config, field);
-        let op_name = match op {
-            CompareOp::Lt => "lt",
-            CompareOp::Lte => "lte",
-            CompareOp::Gt => "gt",
-            CompareOp::Gte => "gte",
+        let op_token = match op {
+            CompareOp::Lt => "<",
+            CompareOp::Lte => "<=",
+            CompareOp::Gt => ">",
+            CompareOp::Gte => ">=",
         };
-        let op_token = self
-            .config
-            .compare_ops
-            .iter()
-            .find(|(name, _)| *name == op_name)
-            .map(|(_, token)| *token)
-            .ok_or_else(|| ConvertError::UnsupportedModifier(op_name.into()))?;
-
         let expr = self
             .config
             .compare_op_expression
             .ok_or_else(|| ConvertError::UnsupportedModifier("compare".into()))?;
-
-        let val_str = if value.fract() == 0.0 {
-            (value as i64).to_string()
-        } else {
-            value.to_string()
-        };
         Ok(expr
             .replace("{field}", &f)
             .replace("{op}", op_token)
-            .replace("{value}", &val_str))
+            .replace("{value}", &format_num(value)))
     }
 
     fn convert_field_exists(
@@ -337,20 +536,19 @@ impl Backend for LynxDbBackend {
         exists: bool,
         _state: &mut ConversionState,
     ) -> Result<String> {
-        let f = text_escape_and_quote_field(self.config, field);
-        if exists {
-            let expr = self
-                .config
-                .field_exists_expression
-                .ok_or_else(|| ConvertError::UnsupportedModifier("exists".into()))?;
-            Ok(expr.replace("{field}", &f))
-        } else {
-            let expr = self
-                .config
-                .field_not_exists_expression
-                .ok_or_else(|| ConvertError::UnsupportedModifier("not exists".into()))?;
-            Ok(expr.replace("{field}", &f))
+        if self.where_mode {
+            // `where` cannot tell a null value from an absent field.
+            let check = if exists { "isnotnull" } else { "isnull" };
+            return Ok(format!("{check}({})", raw_field(field)));
         }
+        let f = text_escape_and_quote_field(self.config, field);
+        let expr = if exists {
+            self.config.field_exists_expression
+        } else {
+            self.config.field_not_exists_expression
+        };
+        let expr = expr.ok_or_else(|| ConvertError::UnsupportedModifier("exists".into()))?;
+        Ok(expr.replace("{field}", &f))
     }
 
     fn convert_field_eq_query_expr(
@@ -380,9 +578,21 @@ impl Backend for LynxDbBackend {
     fn convert_keyword_str(
         &self,
         pattern: &IrPattern,
-        _state: &mut ConversionState,
+        state: &mut ConversionState,
     ) -> Result<String> {
-        let v = text_convert_ir_pattern(self.config, pattern);
+        if !search_safe(pattern, true)
+            && let Some(placeholder) = self.needs_where(state)
+        {
+            return Ok(placeholder);
+        }
+        if self.where_mode {
+            let re = pattern_regex(pattern, IrStrOp::Contains, true, true);
+            return Ok(format!("match(_raw, {})", quote_str(&re)));
+        }
+        // A keyword already matches as a substring, so outer wildcards add
+        // nothing.
+        let (_, literal) = search_literal(IrStrOp::Contains, pattern);
+        let v = text_convert_ir_pattern(self.config, &literal);
         let expr = self
             .config
             .unbound_value_str_expression
@@ -391,15 +601,14 @@ impl Backend for LynxDbBackend {
     }
 
     fn convert_keyword_num(&self, value: f64, _state: &mut ConversionState) -> Result<String> {
+        let s = format_num(value);
+        if self.where_mode {
+            return Ok(format!("match(_raw, {})", quote_str(&regex::escape(&s))));
+        }
         let expr = self
             .config
             .unbound_value_num_expression
             .ok_or(ConvertError::UnsupportedKeyword)?;
-        let s = if value.fract() == 0.0 {
-            (value as i64).to_string()
-        } else {
-            value.to_string()
-        };
         Ok(expr.replace("{value}", &s))
     }
 
@@ -415,13 +624,7 @@ impl Backend for LynxDbBackend {
         // pipeline-provided values (e.g. `index`) override the default ("main").
         // The generic `text_finish_query` applies defaults first, which prevents
         // state values from overriding them.
-        let main_query = if state.has_deferred() && query.is_empty() {
-            self.config.deferred_only_query
-        } else {
-            &query
-        };
-
-        let mut result = self.config.query_expression.replace("{query}", main_query);
+        let mut result = self.config.query_expression.replace("{query}", &query);
 
         // Processing state first (pipeline-provided values take precedence)
         for (key, val) in &state.processing_state {
@@ -442,14 +645,6 @@ impl Backend for LynxDbBackend {
             result = result.replace("{rule.id}", id);
         }
 
-        // Append deferred parts
-        if state.has_deferred() {
-            let deferred_start = self.config.deferred_start.unwrap_or("");
-            let deferred_sep = self.config.deferred_separator.unwrap_or("");
-            let parts: Vec<String> = state.deferred.iter().map(|d| d.finalize()).collect();
-            result = format!("{result}{deferred_start}{}", parts.join(deferred_sep));
-        }
-
         Ok(result)
     }
 
@@ -458,18 +653,26 @@ impl Backend for LynxDbBackend {
         _rule: &SigmaRule,
         query: String,
         _index: usize,
-        _state: &ConversionState,
+        state: &ConversionState,
         output_format: &str,
     ) -> Result<String> {
         match output_format {
             "default" => Ok(query),
             "minimal" => {
-                if let Some(rest) = query.strip_prefix("FROM ")
-                    && let Some(pos) = rest.find("| search ")
-                {
-                    return Ok(rest[pos + "| search ".len()..].to_string());
-                }
-                Ok(query)
+                let index = state
+                    .processing_state
+                    .get("index")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("main");
+                let stage = if self.where_mode { "where" } else { "search" };
+                let Some(expr) = query.strip_prefix(&format!("FROM {index} | {stage} ")) else {
+                    return Ok(query);
+                };
+                Ok(if self.where_mode {
+                    format!("* | where {expr}")
+                } else {
+                    expr.to_string()
+                })
             }
             other => Err(ConvertError::RuleConversion(format!(
                 "unknown output format: {other}"
@@ -643,7 +846,29 @@ detection:
     condition: selection
 "#,
         );
-        assert_eq!(q, vec!["FROM main | search NOT FieldA=*"]);
+        assert_eq!(
+            q,
+            vec!["FROM main | where isnull(json_extract(_raw, \"FieldA\"))"]
+        );
+    }
+
+    #[test]
+    fn empty_string_reads_raw_json() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        FieldA: ''
+    condition: not selection
+"#,
+        );
+        assert_eq!(
+            q,
+            vec!["FROM main | where NOT coalesce(json_extract(_raw, \"FieldA\")=\"\", false)"]
+        );
     }
 
     // --- Wildcards ---
@@ -661,7 +886,7 @@ detection:
     condition: selection
 "#,
         );
-        assert_eq!(q, vec!["FROM main | search CommandLine=*whoami*"]);
+        assert_eq!(q, vec![r#"FROM main | search CommandLine=*"whoami"*"#]);
     }
 
     #[test]
@@ -951,7 +1176,10 @@ detection:
     condition: selection
 "#,
         );
-        assert_eq!(q, vec!["FROM main | search EventCount>=10"]);
+        assert_eq!(
+            q,
+            vec!["FROM main | where coalesce(tonumber(EventCount)>=10, false)"]
+        );
     }
 
     #[test]
@@ -967,10 +1195,13 @@ detection:
     condition: selection
 "#,
         );
-        assert_eq!(q, vec!["FROM main | search Duration<5"]);
+        assert_eq!(
+            q,
+            vec!["FROM main | where coalesce(tonumber(Duration)<5, false)"]
+        );
     }
 
-    // --- Regex (deferred where clause) ---
+    // --- Regex ---
 
     #[test]
     fn regex_modifier() {
@@ -987,12 +1218,31 @@ detection:
         );
         assert_eq!(
             q,
-            vec!["FROM main | search * | where CommandLine =~ \".*whoami.*\""]
+            vec!["FROM main | where match(CommandLine, \".*whoami.*\")"]
         );
     }
 
     #[test]
-    fn neq_negates_deferred_expressions() {
+    fn regex_flags_render_inline() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        CommandLine|re|i|m: '^whoami$'
+    condition: selection
+"#,
+        );
+        assert_eq!(
+            q,
+            vec!["FROM main | where match(CommandLine, \"(?im)^whoami$\")"]
+        );
+    }
+
+    #[test]
+    fn neq_negates_where_expressions() {
         let q = convert(
             r#"
 title: Test
@@ -1008,12 +1258,12 @@ detection:
         assert_eq!(
             q,
             vec![
-                "FROM main | search * | where CommandLine !~ \".*whoami.*\" | where NOT cidrmatch(\"10.0.0.0/8\", SourceIP)"
+                "FROM main | where NOT match(CommandLine, \".*whoami.*\") AND NOT cidrmatch(\"10.0.0.0/8\", SourceIP)"
             ]
         );
     }
 
-    // --- CIDR (deferred where clause) ---
+    // --- CIDR ---
 
     #[test]
     fn cidr_modifier() {
@@ -1030,7 +1280,7 @@ detection:
         );
         assert_eq!(
             q,
-            vec!["FROM main | search * | where cidrmatch(\"10.0.0.0/8\", SourceIP)"]
+            vec!["FROM main | where cidrmatch(\"10.0.0.0/8\", SourceIP)"]
         );
     }
 
@@ -1102,7 +1352,10 @@ detection:
     condition: selection
 "#,
         );
-        assert_eq!(q, vec!["FROM main | search CommandLine=CASE(\"Whoami\")"]);
+        assert_eq!(
+            q,
+            vec!["FROM main | where match(CommandLine, \"^Whoami$\")"]
+        );
     }
 
     // --- Index from pipeline state ---
@@ -1175,6 +1428,165 @@ detection:
         );
     }
 
+    // --- Values search cannot match exactly ---
+
+    #[test]
+    fn regex_under_or_stays_inside_the_or() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    sel1:
+        FieldA: val1
+    sel2:
+        CommandLine|re: 'who.mi'
+    condition: sel1 or sel2
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![
+                "FROM main | where match(FieldA, \"(?i)^val1$\") OR match(CommandLine, \"who.mi\")"
+            ]
+        );
+    }
+
+    #[test]
+    fn where_uses_standard_precedence() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    sel1:
+        FieldA: a
+    sel2:
+        FieldB: b
+    sel3:
+        FieldC|cased: C
+    condition: sel1 or sel2 and not sel3
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![
+                "FROM main | where match(FieldA, \"(?i)^a$\") OR match(FieldB, \"(?i)^b$\") AND NOT match(FieldC, \"^C$\")"
+            ]
+        );
+    }
+
+    #[test]
+    fn special_characters_render_as_anchored_regex() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        CommandLine|contains: ' /q "a.b" '
+    condition: selection
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![r#"FROM main | where match(CommandLine, "(?i) /q \"a\\.b\" ")"#]
+        );
+    }
+
+    #[test]
+    fn single_wildcard_and_literal_star() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        Image: 'c:\a?b\*x*'
+    condition: selection
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![r#"FROM main | where match(Image, "(?is)^c:\\\\a.b\\*x.*$")"#]
+        );
+    }
+
+    #[test]
+    fn cased_contains_keeps_contains() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        CommandLine|contains|cased: Whoami
+    condition: selection
+"#,
+        );
+        assert_eq!(q, vec!["FROM main | where match(CommandLine, \"Whoami\")"]);
+    }
+
+    #[test]
+    fn keyword_in_where_matches_raw_json() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    keywords:
+        - 'C:\Temp'
+    selection:
+        CommandLine|re: 'x'
+    condition: keywords and selection
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![
+                r#"FROM main | where match(_raw, "(?i)C:\\\\\\\\Temp") AND match(CommandLine, "x")"#
+            ]
+        );
+    }
+
+    #[test]
+    fn keyword_with_slash_renders_in_where() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    keywords:
+        - '/c whoami'
+    condition: keywords
+"#,
+        );
+        assert_eq!(q, vec!["FROM main | where match(_raw, \"(?i)/c whoami\")"]);
+    }
+
+    #[test]
+    fn minimal_format_where() {
+        let q = convert_minimal(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        CommandLine|re: 'x'
+    condition: selection
+"#,
+        );
+        assert_eq!(q, vec!["* | where match(CommandLine, \"x\")"]);
+    }
+
     // --- Mixed regex and normal fields ---
 
     #[test]
@@ -1193,7 +1605,87 @@ detection:
         );
         assert_eq!(
             q,
-            vec!["FROM main | search status=500 | where Path =~ \"/api/.*\""]
+            vec![
+                "FROM main | where coalesce(tonumber(status)=500, false) AND match(Path, \"/api/.*\")"
+            ]
         );
+    }
+
+    #[test]
+    fn search_quotes_literals_between_outer_wildcards() {
+        let q = convert(
+            r#"
+title: T
+logsource: { category: test }
+detection:
+    image:
+        Image: '*\cmd.exe'
+    cmd:
+        CommandLine: '* -enc *'
+    tool:
+        Tool: 'net *'
+    condition: image or cmd or tool
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![
+                r#"FROM main | search Image=*"\\cmd.exe" OR CommandLine=*" -enc "* OR Tool="net "*"#
+            ]
+        );
+    }
+
+    #[test]
+    fn search_keywords_drop_outer_wildcards() {
+        let q = convert(
+            r#"
+title: T
+logsource: { category: test }
+detection:
+    keywords:
+        - '*foo*'
+        - 'foo bar*'
+    condition: keywords
+"#,
+        );
+        assert_eq!(q, vec![r#"FROM main | search "foo" OR "foo bar""#]);
+    }
+
+    #[test]
+    fn where_keywords_match_raw_json_text() {
+        let q = convert(
+            "title: T\nlogsource: { category: test }\ndetection:\n    keywords:\n        - \"a\\tb/\"\n        - 'foo*bar/'\n        - 'x?y/'\n    condition: keywords\n",
+        );
+        assert_eq!(
+            q,
+            vec![
+                r#"FROM main | where match(_raw, "(?i)a\\\\tb/") OR match(_raw, "(?is)foo(?:[^\"\\\\]|\\\\.)*bar/") OR match(_raw, "(?is)x(?:[^\"\\\\]|\\\\u[0-9a-fA-F]{4}|\\\\.)y/")"#
+            ]
+        );
+    }
+
+    #[test]
+    fn minimal_where_keeps_values_containing_search() {
+        let q = convert_minimal(
+            r#"
+title: T
+logsource: { category: test }
+detection:
+    selection:
+        CommandLine|contains: '| search x'
+    condition: selection
+"#,
+        );
+        assert_eq!(
+            q,
+            vec![r#"* | where match(CommandLine, "(?i)\\| search x")"#]
+        );
+    }
+
+    #[test]
+    fn large_numbers_keep_their_magnitude() {
+        assert_eq!(format_num(4688.0), "4688");
+        assert_eq!(format_num(12345678901234567890.0), "12345678901234567000");
+        assert_eq!(format_num(1e300), 1e300.to_string());
     }
 }

@@ -12,7 +12,7 @@ rsigma backend convert [OPTIONS] --target <TARGET> [RULES]...
 
 ## Description
 
-Reads one or more rule files (or a directory) and emits backend-native query strings, one per rule. Output goes to stdout by default; use `-o` to write to a file. Use [`backend targets`](targets.md) to list available backends and [`backend formats`](formats.md) to list the output formats supported by a specific backend.
+Reads one or more rule files (or a directory) and emits backend-native query strings, one per rule. Output goes to stdout by default; use `-o` to write to a file. Sigma filters among the input files are merged into the rules they reference before pipelines run, and a correlation rule fails with `UnsupportedCorrelation` on a backend without correlation support. {{ added "unreleased" }} Use [`backend targets`](targets.md) to list available backends and [`backend formats`](formats.md) to list the output formats supported by a specific backend.
 
 Targets with no native backend are delegated to an external [sigma-cli](https://github.com/SigmaHQ/sigma-cli) when one is installed, unlocking the full pySigma backend ecosystem (`splunk`, `elasticsearch`, `kusto`, `qradar`, `loki`, …). See [sigma-cli delegation](../../reference/backends/sigma-cli.md) for discovery, the `RSIGMA_SIGMA_CLI` override, the flag mapping, and limitations.
 
@@ -47,7 +47,7 @@ Global `--output-format json` wraps queries in a `{target, format, queries:[…]
 
 | Flag | Description |
 |------|-------------|
-| `-O, --option <KEY=VALUE>` | Backend-specific option. Repeatable. PostgreSQL examples: `-O table=okta_events`, `-O json_field=data`, `-O timestamp_field=time`, `-O case_sensitive_re=true`. Correlation engines that advertise methods also accept `-O correlation_method=NAME` (see [`backend formats`](formats.md)). See [PostgreSQL backend reference](../../reference/backends/postgres.md) for the full list. |
+| `-O, --option <KEY=VALUE>` | Backend-specific option. Repeatable. PostgreSQL examples: `-O table=okta_events`, `-O json_field=data`, `-O timestamp_field=time`. Correlation engines that advertise methods also accept `-O correlation_method=NAME` (see [`backend formats`](formats.md)). See [PostgreSQL backend reference](../../reference/backends/postgres.md) for the full list. |
 | `-s, --skip-unsupported` | Skip rules that the backend cannot represent instead of failing the run with exit `2`. The skipped rules are reported on stderr. |
 
 Dynamic pipeline sources are not resolved by `backend convert`. A pipeline that references `${source.<id>}` still converts with unresolved placeholders; use [`pipeline resolve`](../pipeline/resolve.md) to inspect sources or [`engine daemon`](../engine/daemon.md) to evaluate with live resolution.
@@ -87,7 +87,7 @@ rsigma backend convert -t postgres \
 
 ```sql
 SELECT * FROM okta_events
-WHERE data->>'eventType' = 'group.user_membership.add'
+WHERE data->>'eventType' ILIKE 'group.user\_membership.add'
   AND data->'actor'->>'alternateId' ILIKE '%@partner.example.com'
 ```
 

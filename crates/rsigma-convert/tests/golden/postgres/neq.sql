@@ -1,1 +1,1 @@
-SELECT * FROM security_events WHERE NOT "Field" = 'foo' AND (lower(("Image")::text) = lower(("ParentImage")::text)) IS NOT TRUE AND NOT ("User" = 'root' OR "User" = 'admin') AND NOT ("CommandLine" ILIKE '%whoami%' AND "CommandLine" ILIKE '%/all%')
+SELECT * FROM security_events WHERE ("Field" ILIKE 'foo') IS NOT TRUE AND (lower(("Image")::text) = lower(("ParentImage")::text)) IS NOT TRUE AND ("User" ILIKE 'root' OR "User" ILIKE 'admin') IS NOT TRUE AND ("CommandLine" ILIKE '%whoami%' AND "CommandLine" ILIKE '%/all%') IS NOT TRUE

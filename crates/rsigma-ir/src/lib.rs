@@ -47,6 +47,7 @@
 //!   [`lower::LowerOptions::permissive_placeholders`] is enabled.
 
 pub mod cache;
+pub mod encoding;
 pub mod error;
 pub mod hir;
 pub mod lower;

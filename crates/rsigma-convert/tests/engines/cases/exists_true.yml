@@ -13,19 +13,15 @@ events:
   - {User: null}
 matches: [0, 2, 3]
 known_failures:
-  postgres-jsonb:
-    type: match-mismatch
-    reason: "exists renders as IS NOT NULL on the extracted value, which treats a JSON null as absent"
-    actual: [0, 2]
   postgres-columns:
     type: match-mismatch
     reason: "a typed column stores an absent field and a null value as the same SQL NULL"
     actual: [0, 2]
   fibratus:
     type: match-mismatch
-    reason: "exists renders as a comparison with false, which never matches a string field"
-    actual: []
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so presence fails for an empty or null value"
+    actual: [0]
   fibratus-nomacros:
     type: match-mismatch
-    reason: "exists renders as a comparison with false, which never matches a string field"
-    actual: []
+    reason: "Fibratus reads a field the event lacks, or holds as null, as an empty string, so presence fails for an empty or null value"
+    actual: [0]

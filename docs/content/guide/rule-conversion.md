@@ -55,6 +55,16 @@ Correlation methods for 'postgres' (select with -O correlation_method=NAME, defa
   session  - Gaps-and-islands sessionization (requires a gap)
 ```
 
+## Filters
+
+A collection conversion applies [Sigma filters](https://github.com/SigmaHQ/sigma-specification) the way pySigma does: each filter's detections and condition are merged into the detection rules it references (by `id` or `name`, or `rules: any`), and only where the filter's `logsource` is contained in the rule's. Processing pipelines run after the merge, so a field mapping renames the filter's fields too. Pass the filter files alongside the rules, for example `rsigma backend convert rules/ filters/ -t postgres`. {{ added "unreleased" }}
+
+A backend without correlation support (`lynxdb` and `test`) reports each correlation rule as an `UnsupportedCorrelation` error instead of dropping it, so pass `--skip-unsupported` to convert the rest of a mixed ruleset. {{ added "unreleased" }}
+
+## Encoding modifiers
+
+Every native backend converts the encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) the way pySigma does. Each variant the modifiers produce becomes a plain string match, and the variants are ORed together, so `CommandLine|windash|contains: ' -f '` converts to one `contains` match for each of `-`, `/`, `–`, `—`, and `―`, and `|base64offset|contains` converts to one match for each of the three byte alignments. The OR is grouped under an enclosing AND like any value list. A UTF-16 encoding without a following `base64` or `base64offset` produces NUL characters, which the PostgreSQL and Fibratus backends cannot carry in a query, so those rules fail with `UnsupportedValue`. {{ added "unreleased" }}
+
 ## Delegated targets (sigma-cli)
 
 The targets above are converted natively. For any other target, `rsigma backend convert` delegates to an external [sigma-cli](https://github.com/SigmaHQ/sigma-cli) when one is installed, so the full pySigma backend ecosystem (`splunk`, `elasticsearch`, `kusto`, `qradar`, `loki`, `crowdstrike`, and more) is reachable from the same command. No Python is required unless you actually convert to a delegated target, and native backends always take precedence.
@@ -75,9 +85,9 @@ The PostgreSQL backend is the most fully featured. It leverages native operators
 
 | Sigma modifier | PostgreSQL operator |
 |----------------|---------------------|
-| `contains`, `startswith`, `endswith` | `ILIKE` (case-insensitive) |
-| `cased` variants | `LIKE` |
-| `re` | `~*` (case-insensitive regex), `~` with `cased` |
+| equality, `contains`, `startswith`, `endswith` | `ILIKE` (case-insensitive) |
+| `cased` variants | `LIKE`, or `=` for plain equality |
+| `re` | `~` (case-sensitive regex), `~*` with `i` |
 | `cidr` | `field::inet <<= 'value'::cidr` |
 | `exists` | `IS NOT NULL` / `IS NULL` |
 | keywords | `to_tsvector() @@ plainto_tsquery()` |
@@ -105,7 +115,6 @@ SELECT * FROM security_events WHERE "CommandLine" ILIKE '%whoami%'
 | `database` | Connection-level metadata used by some output formats. |
 | `timestamp_field` | Column name for the timestamp (default `time`). |
 | `json_field` | Treat fields as paths inside a JSONB column with that name (see JSONB mode below). |
-| `case_sensitive_re` | Use `~` instead of `~*` for regex. |
 
 Combine options for production schemas:
 
@@ -225,7 +234,7 @@ GROUP BY "User", session_id
 HAVING COUNT(*) >= 3 AND (MAX(time) - MIN(time)) <= INTERVAL '3600 seconds'
 ```
 
-The `gap` is honored exactly. The `timespan` cap is enforced as the trailing `HAVING` filter, which drops sessions longer than the cap rather than splitting them mid-session as the runtime engine does; `rsigma backend convert` prints a warning to stderr noting this. Tumbling and session apply to every correlation type. For `temporal`/`temporal_ordered`, the combined detections (the `matched` CTE) are bucketed or sessionized and each window counts the distinct referenced rules with `COUNT(DISTINCT rule_name)`; order is not enforced for `temporal_ordered`, the same limitation as the default temporal path.
+The `gap` is honored exactly. The `timespan` cap is enforced as the trailing `HAVING` filter, which drops sessions longer than the cap rather than splitting them mid-session as the runtime engine does; `rsigma backend convert` prints a warning to stderr noting this. Tumbling and session apply to every correlation type. For `temporal`/`temporal_ordered`, the combined detections (the `matched` CTE) are bucketed or sessionized and each window counts the distinct referenced rules with `COUNT(DISTINCT rule_name)`. `temporal_ordered` also requires the rules to hit in `rules` order within the window. {{ added "unreleased" }}
 
 #### Choosing the strategy at conversion time
 
@@ -307,24 +316,26 @@ custom_attributes:
 
 ## LynxDB
 
-The LynxDB backend produces SPL2-compatible queries. Translation favors the native search syntax and falls back to `| where` pipeline stages for features that LynxDB's parser does not support directly (regex, CIDR, single-character wildcards).
+The LynxDB backend produces SPL2-compatible queries. A rule renders as a native `search` expression when LynxDB's search matches every one of its values exactly, and as a `where` expression otherwise. {{ added "unreleased" }}
 
 ::: callout tip "LynxDB's own Sigma guide"
 LynxDB maintains the canonical operator-facing guide for running Sigma rules on a LynxDB cluster, including the REST API path, saved queries, and end-to-end tutorials (whoami, bulk conversion, EVTX, CloudTrail, scheduled detection). See [Sigma rules on LynxDB](https://docs.lynxdb.org/docs/sigma/) and the linked subpages (compatibility, SPL2 mapping, pipelines, cookbook, troubleshooting, limitations, drift runbook). RSigma is the engine that emits the SPL2 in that flow.
 :::
 
-| Sigma feature | LynxDB syntax |
-|---------------|---------------|
-| Field equality | `field=value`, `field="quoted"` |
-| Wildcard `*` | `field=prefix*`, `field=*contains*` |
-| Wildcard `?` | Deferred to a `where field=~"regex"` pipeline stage. |
-| Regex (`re` modifier) | Deferred to a `where field=~"pattern"` pipeline stage. |
-| CIDR (`cidr` modifier) | Deferred to a `where cidrmatch("cidr", field)` pipeline stage. |
-| Case-sensitive (`cased` modifier) | `field=CASE(value)` |
-| Boolean AND/OR/NOT | Explicit parenthesization for LynxDB's non-standard precedence (`NOT > OR > AND`) |
-| IN-list | `field IN (val1, val2, ...)` |
+`search` stays in use for strings of letters, digits, spaces, and `. - _ : \` matched case-insensitively with `*` only at the start or end, for numeric and boolean equality, and for `exists`. Anything else puts the whole condition in `where`: regexes, CIDR, `null`, empty strings, `cased`, numeric comparisons, `?`, a literal `*`, and strings with other characters such as `/` or quotes.
 
-"Deferred" means the feature does not translate to a native LynxDB search term and is instead emitted as an SPL2 pipeline stage downstream of `search`.
+| Sigma feature | `search` | `where` |
+|---------------|----------|---------|
+| Field equality | `field="value"` | `match(field, "(?i)^value$")` |
+| Wildcards | `field="prefix"*`, `field=*"contains"*` | `.*` and `.` in the `match()` regex |
+| Regex (`re` modifier) | | `match(field, "pattern")` |
+| CIDR (`cidr` modifier) | | `cidrmatch("cidr", field)` |
+| Case-sensitive (`cased` modifier) | | `match(field, "^Value$")` |
+| Numeric comparison | | `coalesce(tonumber(field)>1000, false)` |
+| `null` value | | `isnull(json_extract(_raw, "field"))` |
+| Boolean AND/OR/NOT | Explicit parenthesization for `search`'s non-standard precedence (`NOT > OR > AND`) | Standard precedence |
+
+See the [LynxDB backend reference](../reference/backends/lynxdb.md#search-or-where) for the full mapping.
 
 ```bash
 rsigma backend convert rules/ -t lynxdb
@@ -354,12 +365,12 @@ The Fibratus backend produces Fibratus rule YAML — the format consumed by [Fib
 |---------------|------------------|
 | Field equality (literal) | `field ~= 'value'` (case-insensitive; `=` with `\|cased`; `evt.name` always uses `=`) |
 | `contains` / `startswith` / `endswith` | `field icontains 'value'`, `field istartswith 'value'`, `field iendswith 'value'` (case-insensitive by default; bare forms with `\|cased`) |
-| Wildcards (`*`, `?`) | `field imatches '*pat?ern*'` |
+| Wildcards (`*`, `?`) | `field imatches '*pat?ern*'`; `startswith: 'net*user'` becomes `field imatches 'net*user*'` |
 | Multi-value list | `field iin ('a', 'b')` (or `imatches`/`icontains`/... lists); `\|all` stays AND-joined |
 | Regex (`re` modifier) | `regex(field, 'pattern') = true` (multi-value: one variadic call) |
 | CIDR (`cidr` modifier) | `cidr_contains(field, '10.0.0.0/8')` (multi-value: one variadic call) |
 | Numeric compare | `field > N`, `field >= N`, ... |
-| `exists` / `null` | `field != false` / `field = false`; a `null` value compares `field = ''` |
+| `exists` / `null` | `field != ''` / `field = ''`; a `null` value compares `field = ''`, since an absent field reads as an empty string |
 | Fieldref | `field1 = field2` (native) |
 | Boolean AND/OR/NOT | Lowercase tokens, with OR groups inside AND explicitly parenthesized |
 

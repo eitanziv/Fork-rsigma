@@ -13,11 +13,11 @@ The crate provides a generic conversion framework that any backend can plug into
 - **`Backend` trait** with ~30 methods covering condition dispatch, detection item conversion, field/value escaping, regex, CIDR, comparison operators, field existence, field references, keywords, IN-list optimization, deferred expressions, and query finalization.
 - **`TextQueryConfig`** with ~90 configuration fields mirroring pySigma's `TextQueryBackend` class variables: precedence, boolean operators, wildcards, string/field quoting, match expressions (startswith/endswith/contains + case-sensitive variants), regex/CIDR templates, compare ops, IN-list optimization, unbound values, deferred parts, and query envelope.
 - **Condition tree walker** that recursively converts `ConditionExpr` nodes into query strings with selector/quantifier support.
-- **Orchestrator** via `convert_collection()`, which applies pipelines, converts each rule, and collects results and errors.
+- **Orchestrator** via `convert_collection()`, which merges filters into the rules they target, applies pipelines, converts each rule, and collects results and errors. A backend without correlation support reports each correlation as an `UnsupportedCorrelation` error.
 - **Deferred expressions** through the `DeferredExpression` trait and `DeferredTextExpression` for backends that need post-query appendages (e.g. Splunk `| regex`, `| where`).
-- **Test backend** with `TextQueryTestBackend` and `MandatoryPipelineTestBackend` for backend-neutral foundation testing.
-- **PostgreSQL/TimescaleDB backend** with native `ILIKE`, regex (`~*`), CIDR (`inet`/`cidr`), full-text search (`tsvector`/`tsquery`), JSONB field access, correlation via CTEs and window functions, and TimescaleDB-specific output formats (continuous aggregates, `time_bucket` queries, view generation).
-- **LynxDB backend** generating SPL2-compatible `FROM <index> | search ...` queries with glob wildcards, deferred `| where` clauses for regex and CIDR, `CASE()` case-sensitive matching, and correct parenthesization for LynxDB's non-standard boolean precedence (`NOT > OR > AND`).
+- **Test backend** with `TextQueryTestBackend` and `MandatoryPipelineTestBackend` for backend-neutral foundation testing. Its output matches pySigma's `TextQueryTestBackend`: values are escaped and quoted the same way, the expression follows the value's wildcard shape, values of one field become `in` and `contains-all` lists, and CIDR matches render as `cidrmatch('Field', "cidr")`.
+- **PostgreSQL/TimescaleDB backend** with native `ILIKE`, regex (`~`, `~*` with `|i`), CIDR (`inet`/`cidr`), full-text search (`tsvector`/`tsquery`), JSONB field access, correlation via CTEs and window functions, and TimescaleDB-specific output formats (continuous aggregates, `time_bucket` queries, view generation).
+- **LynxDB backend** generating SPL2-compatible `FROM <index> | search ...` queries with glob wildcards and correct parenthesization for LynxDB's non-standard boolean precedence (`NOT > OR > AND`), and `FROM <index> | where ...` queries for rules whose values `search` cannot match exactly.
 
 ## Backends
 
@@ -169,7 +169,7 @@ When a Sigma rule specifies `fields:`, the backend emits `SELECT field1, field2,
 
 ### CLI backend options
 
-Backend configuration can be set via `-O key=value` flags on the CLI, which are wired through to `PostgresBackend::from_options`. Recognized keys: `table`, `schema`, `database`, `timestamp_field`, `json_field`, `case_sensitive_re`, `correlation_method`, `gap`.
+Backend configuration can be set via `-O key=value` flags on the CLI, which are wired through to `PostgresBackend::from_options`. Recognized keys: `table`, `schema`, `database`, `timestamp_field`, `json_field`, `correlation_method`, `gap`.
 
 ```bash
 rsigma backend convert -r rules/ -t postgres -O table=security_logs -O schema=public -O timestamp_field=created_at
@@ -262,7 +262,7 @@ Key methods:
 | `convert_ir_detection` | Walk an `IrDetection` (AllOf/AnyOf/Keywords/array match) |
 | `convert_ir_detection_item` | Convert a single `IrDetectionItem` (field + matcher) |
 | `convert_field_str` | String matching over an `IrStrOp` + wildcard-aware `IrPattern` |
-| `convert_field_regex` | Regex matching with explicit `RegexFlags` |
+| `convert_field_regex` | Regex matching with explicit `RegexFlags`; `RegexFlags::inline_prefix` renders `i`, `m`, and `s` as an inline `(?ims)` group |
 | `convert_field_eq_cidr` | CIDR matching |
 | `convert_field_compare_op` | Numeric comparison via `CompareOp` (`gt`, `gte`, `lt`, `lte`) |
 | `convert_field_exists` | Field existence check |
@@ -296,7 +296,7 @@ For text-based query backends (the vast majority), create a `TextQueryConfig` wi
 3. Override specific methods for backend-specific behavior (e.g. deferred regex for Splunk, SQL-specific CIDR handling for PostgreSQL).
 4. Register your backend in the CLI's `try_native_backend()` registry (a native backend takes precedence over sigma-cli delegation for that target).
 
-See `backends/test.rs` for a complete reference implementation, `backends/postgres.rs` for a production backend with SQL-specific overrides, and `backends/lynxdb/` for a `TextQueryConfig`-based backend with deferred expressions and custom precedence handling.
+See `backends/test.rs` for a complete reference implementation, `backends/postgres.rs` for a production backend with SQL-specific overrides, and `backends/lynxdb/` for a `TextQueryConfig`-based backend with custom precedence handling that switches to a second config for `where` expressions.
 
 ## PostgreSQL Backend Details
 
@@ -307,7 +307,7 @@ The PostgreSQL backend (`PostgresBackend`) leverages native PostgreSQL features 
 | `contains` | `ILIKE` (case-insensitive) |
 | `startswith` / `endswith` | `ILIKE` |
 | `cased` | `LIKE` (case-sensitive) |
-| `re` | `~*` (case-insensitive regex) or `~` (with `cased`) |
+| `re` | `~` (case-sensitive regex) or `~*` (with `i`); `(?w)` prefix with `m` |
 | `cidr` | `field::inet <<= 'value'::cidr` |
 | `exists` | `IS NOT NULL` / `IS NULL` |
 | keywords | `to_tsvector() @@ plainto_tsquery()` |
@@ -344,7 +344,6 @@ Following pySigma's model, the windowing strategy can also be chosen at conversi
 | `table` | `String` | `"security_events"` | Default table name (overridden by pipeline state or `postgres.table` custom attribute) |
 | `timestamp_field` | `String` | `"time"` | Timestamp column for time-windowed queries |
 | `json_field` | `Option<String>` | `None` | If set, fields are accessed via JSONB extraction (see [JSONB field access](#jsonb-field-access)) |
-| `case_sensitive_re` | `bool` | `false` | Use `~` instead of `~*` for regex |
 | `schema` | `Option<String>` | `None` | PostgreSQL schema name (overridden by pipeline state or `postgres.schema` custom attribute) |
 | `database` | `Option<String>` | `None` | PostgreSQL database name (connection-level metadata) |
 | `timescaledb` | `bool` | `false` | Enable TimescaleDB-specific features |
@@ -381,25 +380,27 @@ rsigma backend convert -r rules/ -t postgres -O table=okta_events -O json_field=
 
 ## LynxDB Backend Details
 
-The LynxDB backend (`LynxDbBackend`) generates SPL2/Lynx Flow queries for the [LynxDB](https://github.com/proximax-storage/lynxdb) log analytics engine. It produces `FROM <index> | search <predicates>` queries with deferred `| where` clauses for operations that LynxDB's search syntax does not natively support.
+The LynxDB backend (`LynxDbBackend`) generates SPL2/Lynx Flow queries for the [LynxDB](https://github.com/proximax-storage/lynxdb) log analytics engine. A rule renders as `FROM <index> | search <predicates>` when LynxDB's search matches every value in it exactly, and as `FROM <index> | where <expression>` otherwise.
 
-| Sigma Modifier | LynxDB Query |
-|----------------|-------------|
-| `contains` | `field=*"value"*` |
-| `startswith` | `field="value"*` |
-| `endswith` | `field=*"value"` |
-| `re` | `\| where field=~"pattern"` (deferred) |
-| `cidr` | `\| where cidrmatch("cidr", field)` (deferred) |
-| `cased` (exact) | `field=CASE("value")` |
-| wildcards (`*`) | `field="va*lue"` (glob) |
-| wildcards (`?`) | `\| where field=~"va.lue"` (deferred, converted to regex) |
-| `exists` | `field=*` |
-| `null` | `NOT field=*` |
-| keywords | `"value"` (unbound search) |
+| Sigma Modifier | `search` | `where` |
+|----------------|----------|---------|
+| `contains` | `field=*"value"*` | `match(field, "(?i)value")` |
+| `startswith` | `field="value"*` | `match(field, "(?i)^value")` |
+| `endswith` | `field=*"value"` | `match(field, "(?i)value$")` |
+| `re` | | `match(field, "pattern")` |
+| `cidr` | | `cidrmatch("cidr", field)` |
+| `cased` | | `match(field, "^Value$")` |
+| `lt`, `lte`, `gt`, `gte` | | `coalesce(tonumber(field)>1000, false)` |
+| wildcards (`*`, `?`) | `field="value"*` (leading or trailing `*` only) | `.*` and `.` in the regex |
+| `exists` | `field=*` | `isnotnull(json_extract(_raw, "field"))` |
+| `null` | | `isnull(json_extract(_raw, "field"))` |
+| keywords | `"value"` (unbound search) | `match(_raw, "(?i)value")` |
+
+`search` stays in use for strings of letters, digits, spaces, and `. - _ : \` matched case-insensitively, numeric and boolean equality, and `exists`. Any other value puts the whole condition in `where`, so a regex nested under `OR` or `NOT` keeps its place in the condition.
 
 ### Boolean precedence
 
-LynxDB's parser uses non-standard boolean operator precedence: `NOT > OR > AND`. This differs from most query languages where AND binds tighter than OR. The backend parenthesizes an AND nested under an OR and every compound operand of NOT, and leaves an OR nested under an AND bare because it already binds tighter:
+LynxDB's `search` uses non-standard boolean operator precedence: `NOT > OR > AND`. This differs from most query languages where AND binds tighter than OR. The backend parenthesizes an AND nested under an OR and every compound operand of NOT, and leaves an OR nested under an AND bare because it already binds tighter:
 
 ```
 Sigma: (A and B) or C        Query: (A AND B) OR C
@@ -407,18 +408,10 @@ Sigma: (A or B) and C        Query: A OR B AND C
 Sigma: A and not (B or C)    Query: A AND NOT (B OR C)
 ```
 
-### Deferred expressions
-
-Regex patterns, CIDR matches, and single-character wildcard (`?`) patterns cannot be expressed in LynxDB's `search` syntax and are instead emitted as `| where` pipeline stages appended after the search clause:
+`where` expressions use standard precedence:
 
 ```
-FROM main | search status=500 | where Path=~"/api/.*"
-```
-
-When a detection contains only deferred expressions, the search clause uses `*` (match all) followed by the deferred stages:
-
-```
-FROM main | search * | where SourceIP=~"^10\.0\." | where cidrmatch("192.168.1.0/24", DestIP)
+FROM main | where coalesce(tonumber(status)=500, false) AND match(Path, "/api/.*")
 ```
 
 ## License

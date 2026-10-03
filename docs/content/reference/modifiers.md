@@ -25,6 +25,8 @@ A backslash escapes `*`, `?`, and itself, so `\*` is a literal asterisk.
 
 String matching is case-insensitive unless the key has `|cased`. Case folding uses Unicode lowercase, so `Ä` matches `ä`. Lowercasing the dotted capital `İ` (U+0130) produces `i` followed by a combining dot, so `İ` does not match a plain `i`.
 
+`|fieldref|cased` compares the two fields case-sensitively. This is an rsigma extension that pySigma rejects; the PostgreSQL and Fibratus backends convert it, and the `test` backend, which mirrors pySigma's text output, rejects it with `UnsupportedModifier`. {{ added "unreleased" }}
+
 ## Encodings
 
 The encoding modifiers transform the value before it is matched. When several apply, they run in a fixed order regardless of their position in the key: `windash`, then one of `wide` (alias `utf16le`), `utf16be`, or `utf16`, then one of `base64` or `base64offset`.
@@ -35,6 +37,8 @@ The encoding modifiers transform the value before it is matched. When several ap
 
 A value with a wildcard cannot be combined with `base64` or `base64offset`, because a base64 encoding has no way to represent "any characters". Such a rule is rejected when it is compiled.
 
+Backends convert encoding modifiers as pySigma does: each variant becomes a plain string match, and the variants are ORed together. The windash limit applies to conversion too. Without a base64 step, a UTF-16 variant contains NUL characters, which the PostgreSQL and Fibratus backends reject with `UnsupportedValue`. {{ added "unreleased" }}
+
 ## Placeholders and `expand`
 
 With `|expand`, `%name%` in a value is a placeholder. A backslash escapes `%` as well as `*`, `?`, and itself: `100\%` is a literal percent sign, and `C:\Users\\%user%` is a backslash followed by the `user` placeholder. A placeholder name is non-empty and contains no `*`, `?`, or backslash.
@@ -42,6 +46,14 @@ With `|expand`, `%name%` in a value is a placeholder. A backslash escapes `%` as
 A processing pipeline with a [`value_placeholders`](../guide/processing-pipelines.md) transformation replaces placeholders with the values of its `vars:`. Several multi-value variables in one value expand to their Cartesian product. Every referenced variable must exist; an unresolved variable is a pipeline error unless the transformation sets `allow_unresolved: true` to opt into runtime substitution. When every placeholder is resolved this way, the value is an ordinary string match: wildcards and string modifiers such as `|contains` apply, and backends convert it like any other value. `wildcard_placeholders` replaces every handled placeholder with `*`, whether or not a variable is defined. Pipeline placeholder transformations ignore values without `|expand`. {{ added "unreleased" }}
 
 A placeholder that is not passed through a placeholder transformation is filled in from the event at match time: `%user%` takes the value of the event's `user` field, or an empty string when that field is missing or not a string. Runtime placeholders are an rsigma extension. Backends cannot convert them, and a value with a runtime placeholder cannot use wildcards or encoding modifiers.
+
+## `re`
+
+A regex is case-sensitive unless the key has `|i`. `|m` makes `^` and `$` match at line breaks, and `|s` lets `.` match a line break. Backends render the flags rather than dropping them: the `test`, LynxDB, and Fibratus backends prepend an inline group such as `(?im)`, and PostgreSQL uses `~*` for `|i` and the `(?w)` embedded option for `|m`. `|cased` has no effect on a regex; pySigma and the `test` backend reject it. {{ added "unreleased" }}
+
+## `cidr`
+
+A `cidr` value is an IPv4 or IPv6 network written as `address/prefix`, such as `10.0.0.0/8` or `2001:db8::/32`. As in pySigma, a value with host bits set, such as `10.1.2.3/8`, is rejected when the rule is compiled or converted, because the address would silently stand for a different network. {{ added "unreleased" }}
 
 ## `exists`
 

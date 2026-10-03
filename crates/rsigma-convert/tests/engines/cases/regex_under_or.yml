@@ -1,0 +1,16 @@
+description: A regex in one branch of an OR constrains only that branch.
+rule:
+  title: regex under or
+  logsource: {category: process_creation, product: windows}
+  detection:
+    sel_image:
+      Image: 'cmd.exe'
+    sel_regex:
+      CommandLine|re: '^who[a-z]+$'
+    condition: sel_image or sel_regex
+events:
+  - {Image: 'cmd.exe', CommandLine: 'x'}
+  - {Image: 'x', CommandLine: 'whoami'}
+  - {Image: 'cmd.exe', CommandLine: 'whoami'}
+  - {Image: 'x', CommandLine: 'x'}
+matches: [0, 1, 2]

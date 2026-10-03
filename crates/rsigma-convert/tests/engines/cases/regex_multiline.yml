@@ -1,0 +1,13 @@
+description: re|m makes ^ and $ match at line breaks.
+rule:
+  title: regex multiline
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|re|m: '^whoami$'
+    condition: selection
+events:
+  - {CommandLine: "cmd\nwhoami\nexit"}
+  - {CommandLine: 'cmd whoami'}
+  - {CommandLine: 'whoami'}
+matches: [0, 2]

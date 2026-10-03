@@ -28,6 +28,37 @@ detection:
 }
 
 #[test]
+fn cidr_requires_a_network_address() {
+    let lower = |cidr: &str| {
+        let yaml = format!(
+            "title: T\nlogsource: {{ category: test }}\ndetection:\n    selection:\n        Address|cidr: '{cidr}'\n    condition: selection\n"
+        );
+        let collection = rsigma_parser::parse_sigma_yaml(&yaml).unwrap();
+        rsigma_ir::lower_rule(&collection.rules[0], &rsigma_ir::LowerOptions::default())
+    };
+    for ok in [
+        "10.0.0.0/8",
+        "0.0.0.0/0",
+        "10.0.0.1/32",
+        "2001:db8::/32",
+        "::/0",
+        "2001:db8::1/128",
+    ] {
+        assert!(lower(ok).is_ok(), "{ok} should lower");
+    }
+    for (bad, reason) in [
+        ("10.1.2.3/8", "host bits set"),
+        ("2001:db8::1/32", "host bits set"),
+        ("10.0.0.0/33", "invalid prefix length"),
+        ("10.0.0.0", "expected address/prefix"),
+        ("not-an-ip/8", "invalid IP address"),
+    ] {
+        let err = lower(bad).expect_err(bad).to_string();
+        assert!(err.contains(reason), "{bad}: {err}");
+    }
+}
+
+#[test]
 fn re_rejects_contains() {
     let err = try_compile(
         r#"

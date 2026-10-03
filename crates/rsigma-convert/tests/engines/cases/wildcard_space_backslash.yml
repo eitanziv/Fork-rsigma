@@ -1,0 +1,17 @@
+description: A value with outer wildcards around spaces or a backslash matches the literal text between them.
+rule:
+  title: wildcard space backslash
+  logsource: {category: process_creation, product: windows}
+  detection:
+    image:
+      Image: '*\cmd.exe'
+    cmd:
+      CommandLine: '* -enc *'
+    condition: image or cmd
+events:
+  - {Image: 'C:\Windows\cmd.exe'}
+  - {Image: 'C:\Windows\xcmd.exe'}
+  - {CommandLine: 'powershell -enc AAAA'}
+  - {CommandLine: 'powershell -encoded'}
+  - {Image: 'cmd.exe', CommandLine: 'x'}
+matches: [0, 2]

@@ -1,6 +1,6 @@
-use super::helpers::{base64_offset_patterns, windash_variants};
 use super::*;
 use crate::event::JsonEvent;
+use rsigma_ir::encoding::{base64_offset_patterns, windash_variants};
 use rsigma_ir::{IrPattern, IrPatternPart};
 use rsigma_parser::{FieldSpec, Modifier, SigmaString, SigmaValue};
 use serde_json::json;

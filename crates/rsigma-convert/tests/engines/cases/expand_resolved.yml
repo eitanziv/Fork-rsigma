@@ -20,9 +20,3 @@ events:
   - {CommandLine: 'whoami'}
   - {Image: 'x'}
 matches: [0, 1, 2]
-known_failures:
-  test-pysigma:
-    type: output-difference
-    reason: "values of one field are not rendered as an in-list"
-    actual: ["CommandLine contains \"mimikatz\" or CommandLine contains \"rubeus\""]
-    reference: ["CommandLine in (\"*mimikatz*\", \"*rubeus*\")"]
