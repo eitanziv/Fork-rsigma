@@ -312,7 +312,7 @@ The PostgreSQL backend (`PostgresBackend`) leverages native PostgreSQL features 
 | `exists` | `IS NOT NULL` / `IS NULL` |
 | keywords | `to_tsvector() @@ plainto_tsquery()` |
 
-Correlation rules are converted to SQL using `GROUP BY` / `HAVING` for aggregation types (`event_count`, `value_count`, `value_sum`, `value_avg`, `value_percentile`, `value_median`) and CTEs for temporal correlation. Multi-table temporal correlations automatically generate `UNION ALL` CTEs when referenced rules target different tables. A collection conversion omits referenced standalone detection queries unless at least one referencing correlation has top-level `generate: true`; their detection logic remains embedded in the correlation query.
+Correlation rules are converted to SQL using `GROUP BY` / `HAVING` for aggregation types (`event_count`, `value_count`, `value_sum`, `value_avg`, `value_percentile`, `value_median`) and CTEs for temporal correlation. Multi-table temporal correlations automatically generate `UNION ALL` CTEs when referenced rules target different tables. A collection conversion omits the standalone queries of referenced detection rules and referenced correlations unless at least one referencing correlation has top-level `generate: true`; their detection logic remains embedded in the correlation query.
 
 Non-temporal correlations support CTE-based pre-filtering: when the correlation references detection rules that were converted in the same collection, the backend wraps their queries in a `WITH combined_events AS (q1 UNION ALL q2 ...)` CTE so the aggregate only counts events matching the detection logic.
 

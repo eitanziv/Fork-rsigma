@@ -1,0 +1,34 @@
+title: Failed Login
+name: failed_login
+logsource:
+    category: authentication
+    product: test
+detection:
+    selection:
+        EventType: login_failure
+    condition: selection
+---
+title: Many Failed Logins
+name: many_failed_logins
+correlation:
+    type: event_count
+    rules:
+        - failed_login
+    group-by:
+        - User
+    timespan: 5m
+    condition:
+        gte: 5
+---
+title: Repeated Failure Bursts
+name: repeated_failure_bursts
+correlation:
+    type: event_count
+    generate: true
+    rules:
+        - many_failed_logins
+    group-by:
+        - User
+    timespan: 1h
+    condition:
+        gte: 3

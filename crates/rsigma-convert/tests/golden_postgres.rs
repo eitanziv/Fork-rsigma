@@ -134,3 +134,13 @@ fn golden_custom_table() {
 fn golden_temporal_default_condition() {
     run_golden("temporal_default_condition");
 }
+
+#[test]
+fn golden_chained_correlation() {
+    run_golden("chained_correlation");
+}
+
+#[test]
+fn golden_chained_correlation_generate() {
+    run_golden("chained_correlation_generate");
+}

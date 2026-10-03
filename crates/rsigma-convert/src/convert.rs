@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use rsigma_eval::pipeline::{Pipeline, apply_pipelines_to_correlation, apply_pipelines_with_state};
-use rsigma_parser::{CorrelationRule, SigmaCollection, SigmaRule};
+use rsigma_parser::{CorrelationRule, SigmaCollection};
 
 use crate::backend::Backend;
 use crate::error::{ConvertError, Result};
@@ -35,7 +35,11 @@ pub fn convert_collection(
 
     for rule in &collection.rules {
         let emit_standalone = !backend.supports_correlation()
-            || should_emit_standalone(rule, &collection.correlations);
+            || should_emit_standalone(
+                rule.id.as_deref(),
+                rule.name.as_deref(),
+                &collection.correlations,
+            );
         let mut rule = rule.clone();
         let pipeline_state = if !pipelines.is_empty() {
             apply_pipelines_with_state(pipelines, &mut rule)?
@@ -105,6 +109,11 @@ pub fn convert_collection(
 
     if backend.supports_correlation() {
         for corr in &collection.correlations {
+            let emit_standalone = should_emit_standalone(
+                corr.id.as_deref(),
+                corr.name.as_deref(),
+                &collection.correlations,
+            );
             let mut corr = corr.clone();
             let mut pipeline_state = if !pipelines.is_empty() {
                 apply_pipelines_to_correlation(pipelines, &mut corr)?
@@ -136,12 +145,14 @@ pub fn convert_collection(
                 &mut warnings,
             ) {
                 Ok(queries) => {
-                    output.queries.push(ConversionResult {
-                        rule_title: corr.title.clone(),
-                        rule_id: corr.id.clone(),
-                        queries,
-                        warnings,
-                    });
+                    if emit_standalone {
+                        output.queries.push(ConversionResult {
+                            rule_title: corr.title.clone(),
+                            rule_id: corr.id.clone(),
+                            queries,
+                            warnings,
+                        });
+                    }
                 }
                 Err(e) => {
                     output.errors.push((corr.title.clone(), e));
@@ -153,12 +164,20 @@ pub fn convert_collection(
     Ok(output)
 }
 
-fn should_emit_standalone(rule: &SigmaRule, correlations: &[CorrelationRule]) -> bool {
+/// Whether a detection or correlation rule with this `id` and `name` gets
+/// its own query: it is referenced by no correlation, or by at least one
+/// correlation with `generate: true`.
+fn should_emit_standalone(
+    id: Option<&str>,
+    name: Option<&str>,
+    correlations: &[CorrelationRule],
+) -> bool {
     let mut referenced = false;
     for correlation in correlations {
-        let matches = correlation.rules.iter().any(|rule_ref| {
-            rule.id.as_deref() == Some(rule_ref) || rule.name.as_deref() == Some(rule_ref)
-        });
+        let matches = correlation
+            .rules
+            .iter()
+            .any(|rule_ref| id == Some(rule_ref.as_str()) || name == Some(rule_ref.as_str()));
         if matches {
             referenced = true;
             if correlation.generate {
@@ -231,13 +250,14 @@ correlation:
 "#;
         let collection = parse_sigma_yaml(yaml).unwrap();
         assert!(!should_emit_standalone(
-            &collection.rules[0],
+            None,
+            Some("base"),
             &collection.correlations
         ));
 
         let mut generated = collection.correlations.clone();
         generated[0].generate = true;
-        assert!(should_emit_standalone(&collection.rules[0], &generated));
+        assert!(should_emit_standalone(None, Some("base"), &generated));
     }
 
     #[test]
