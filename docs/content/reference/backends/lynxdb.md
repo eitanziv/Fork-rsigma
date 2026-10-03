@@ -41,7 +41,7 @@ Verified against the LynxDB backend's golden tests at [`crates/rsigma-convert/sr
 | Field equality | `field=value`, `field="quoted with spaces"` |
 | Wildcard `*` | `field=prefix*`, `field=*contains*`, `field=*"with quotes"*` |
 | Wildcard `?` (single char) | Deferred to a `where field=~"regex"` pipeline stage. |
-| Regex (`re` modifier) | Deferred to a `where field=~"pattern"` pipeline stage. |
+| Regex (`re` modifier) | Deferred to a `where field=~"pattern"` pipeline stage. The `i`, `m`, and `s` flags are prepended as an inline group, such as `(?i)pattern`. {{ added "unreleased" }} |
 | CIDR (`cidr` modifier) | Deferred to a `where cidrmatch("cidr", field)` pipeline stage. |
 | Case-sensitive (`cased` modifier) | `field=CASE(value)` |
 | `exists: true`/`false` | `field=*`/`NOT field=*` |

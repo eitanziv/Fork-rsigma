@@ -50,14 +50,36 @@ pub enum CompareOp {
 
 /// Regex match flags for [`Backend::convert_field_regex`].
 ///
-/// `case_insensitive` is the `|i` flag; `cased` records the `|cased` modifier
-/// (which some backends use to select a case-sensitive regex operator).
+/// A Sigma regex is case-sensitive unless it has the `|i` flag
+/// (`case_insensitive`). `cased` records a redundant `|cased` modifier, which
+/// pySigma rejects on a regex.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RegexFlags {
     pub case_insensitive: bool,
     pub multiline: bool,
     pub dotall: bool,
     pub cased: bool,
+}
+
+impl RegexFlags {
+    /// The `i`, `m`, and `s` flags as an inline group such as `(?im)`, or an
+    /// empty string when none is set. RE2, Rust `regex`, PCRE, and Python
+    /// read this prefix the same way.
+    pub fn inline_prefix(&self) -> String {
+        let flags: String = [
+            (self.case_insensitive, 'i'),
+            (self.multiline, 'm'),
+            (self.dotall, 's'),
+        ]
+        .into_iter()
+        .filter_map(|(set, flag)| set.then_some(flag))
+        .collect();
+        if flags.is_empty() {
+            flags
+        } else {
+            format!("(?{flags})")
+        }
+    }
 }
 
 /// Reconstruct a parser `SigmaString` from a faithful [`IrPattern`].

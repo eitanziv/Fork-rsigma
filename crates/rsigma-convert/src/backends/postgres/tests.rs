@@ -245,8 +245,28 @@ detection:
     );
     assert_eq!(
         queries,
-        vec![r#"SELECT * FROM security_events WHERE "CommandLine" ~* '.*whoami.*'"#]
+        vec![r#"SELECT * FROM security_events WHERE "CommandLine" ~ '.*whoami.*'"#]
     );
+}
+
+#[test]
+fn test_regex_flags() {
+    for (modifiers, expected) in [
+        ("re|i", r#""F" ~* 'ab.c'"#),
+        ("re|s", r#""F" ~ 'ab.c'"#),
+        ("re|m", r#""F" ~ '(?w)ab.c'"#),
+        ("re|i|m|s", r#""F" ~* '(?w)ab.c'"#),
+        ("re|cased", r#""F" ~ 'ab.c'"#),
+    ] {
+        let queries = convert(&format!(
+            "title: Test\nlogsource:\n    category: test\ndetection:\n    selection:\n        F|{modifiers}: 'ab.c'\n    condition: selection\n"
+        ));
+        assert_eq!(
+            queries,
+            vec![format!("SELECT * FROM security_events WHERE {expected}")],
+            "{modifiers}"
+        );
+    }
 }
 
 #[test]
@@ -708,7 +728,7 @@ detection:
     );
     assert_eq!(
         queries,
-        vec!["SELECT * FROM security_events WHERE data->'actor'->>'displayName' ~* '.*admin.*'"]
+        vec!["SELECT * FROM security_events WHERE data->'actor'->>'displayName' ~ '.*admin.*'"]
     );
 }
 
@@ -1070,21 +1090,12 @@ fn test_from_options_json_field() {
 }
 
 #[test]
-fn test_from_options_case_sensitive_re() {
-    let mut opts = HashMap::new();
-    opts.insert("case_sensitive_re".to_string(), "true".to_string());
-    let backend = PostgresBackend::from_options(&opts);
-    assert!(backend.case_sensitive_re);
-}
-
-#[test]
 fn test_from_options_empty_uses_defaults() {
     let opts = HashMap::new();
     let backend = PostgresBackend::from_options(&opts);
     assert_eq!(backend.table, "security_events");
     assert_eq!(backend.timestamp_field, "time");
     assert_eq!(backend.json_field, None);
-    assert!(!backend.case_sensitive_re);
     assert_eq!(backend.schema, None);
 }
 

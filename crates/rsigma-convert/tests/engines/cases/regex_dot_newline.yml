@@ -1,0 +1,25 @@
+description: Without re|s, . does not match a line break.
+rule:
+  title: regex dot newline
+  logsource: {category: process_creation, product: windows}
+  detection:
+    selection:
+      CommandLine|re: 'who.mi'
+    condition: selection
+events:
+  - {CommandLine: "who\nmi"}
+  - {CommandLine: 'whoami'}
+matches: [1]
+known_failures:
+  postgres-jsonb:
+    type: match-mismatch
+    reason: "PostgreSQL's default regex mode lets . match a line break; the backend accepts this over-match rather than a mode that would make [^...] miss one"
+    actual: [0, 1]
+  postgres-columns:
+    type: match-mismatch
+    reason: "PostgreSQL's default regex mode lets . match a line break; the backend accepts this over-match rather than a mode that would make [^...] miss one"
+    actual: [0, 1]
+  lynxdb:
+    type: match-mismatch
+    reason: "the =~ operator matches nothing once events are flushed to segments, while match() does"
+    actual: []

@@ -247,11 +247,20 @@ impl Backend for TextQueryTestBackend {
         &self,
         field: &str,
         pattern: &str,
-        _flags: RegexFlags,
+        flags: RegexFlags,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
+        if flags.cased {
+            return Err(ConvertError::UnsupportedModifier(
+                "cased regex (re|cased); a regex is case-sensitive unless it has |i".into(),
+            ));
+        }
         let f = text_escape_and_quote_field(self.config, field);
-        let re_val = text_convert_value_re(self.config, pattern);
+        let re_val = format!(
+            "{}{}",
+            flags.inline_prefix(),
+            text_convert_value_re(self.config, pattern)
+        );
         let expr = self
             .config
             .re_expression
@@ -1437,6 +1446,30 @@ detection:
                 "expected UnsupportedModifier for `{modifier}`, got: {err}",
             );
         }
+    }
+
+    #[test]
+    fn test_regex_flags_render_inline() {
+        for (modifiers, expected) in [
+            ("re", "F=/ab.c/"),
+            ("re|i", "F=/(?i)ab.c/"),
+            ("re|m", "F=/(?m)ab.c/"),
+            ("re|s", "F=/(?s)ab.c/"),
+            ("re|i|m|s", "F=/(?ims)ab.c/"),
+        ] {
+            let yaml = format!(
+                "title: Test\nlogsource:\n    category: test\ndetection:\n    selection:\n        F|{modifiers}: 'ab.c'\n    condition: selection\n"
+            );
+            assert_eq!(convert_rule_yaml(&yaml), vec![expected], "{modifiers}");
+        }
+    }
+
+    #[test]
+    fn test_cased_regex_is_rejected() {
+        let err = convert_rule_yaml_err(
+            "title: Test\nlogsource:\n    category: test\ndetection:\n    selection:\n        F|re|cased: 'ab.c'\n    condition: selection\n",
+        );
+        assert!(err.to_string().contains("re|cased"), "{err}");
     }
 
     #[test]

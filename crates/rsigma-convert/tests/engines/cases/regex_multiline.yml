@@ -1,15 +1,16 @@
-description: re is case-sensitive by default.
+description: re|m makes ^ and $ match at line breaks.
 rule:
-  title: regex case sensitive
+  title: regex multiline
   logsource: {category: process_creation, product: windows}
   detection:
     selection:
-      CommandLine|re: 'who.mi'
+      CommandLine|re|m: '^whoami$'
     condition: selection
 events:
-  - {CommandLine: 'x whoami'}
-  - {CommandLine: 'x WHOAMI'}
-matches: [0]
+  - {CommandLine: "cmd\nwhoami\nexit"}
+  - {CommandLine: 'cmd whoami'}
+  - {CommandLine: 'whoami'}
+matches: [0, 2]
 known_failures:
   lynxdb:
     type: match-mismatch

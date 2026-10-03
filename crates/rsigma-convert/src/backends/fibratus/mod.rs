@@ -416,13 +416,30 @@ impl Backend for FibratusBackend {
             if ms.iter().all(|m| matches!(m, IrMatcher::Regex { .. })) {
                 let mut quoted = Vec::with_capacity(ms.len());
                 for m in ms {
-                    if let IrMatcher::Regex { pattern, .. } = m {
+                    if let IrMatcher::Regex {
+                        pattern,
+                        case_insensitive,
+                        multiline,
+                        dotall,
+                        cased,
+                    } = m
+                    {
                         if !shared::is_re2_compatible(pattern) {
                             return Err(ConvertError::UnsupportedModifier(format!(
                                 "regex pattern uses PCRE-only construct (lookaround/backreference) Fibratus's RE2 engine does not support: {pattern}"
                             )));
                         }
-                        quoted.push(shared::quote_plain_str(pattern));
+                        reject_nul("Fibratus", pattern)?;
+                        let flags = RegexFlags {
+                            case_insensitive: *case_insensitive,
+                            multiline: *multiline,
+                            dotall: *dotall,
+                            cased: *cased,
+                        };
+                        quoted.push(shared::quote_plain_str(&format!(
+                            "{}{pattern}",
+                            flags.inline_prefix()
+                        )));
                     }
                 }
                 let f = self.escape_and_quote_field(field);
@@ -572,7 +589,7 @@ impl Backend for FibratusBackend {
         &self,
         field: &str,
         pattern: &str,
-        _flags: RegexFlags,
+        flags: RegexFlags,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
         if !shared::is_re2_compatible(pattern) {
@@ -582,7 +599,7 @@ impl Backend for FibratusBackend {
         }
         reject_nul("Fibratus", pattern)?;
         let f = self.escape_and_quote_field(field);
-        let quoted = shared::quote_plain_str(pattern);
+        let quoted = shared::quote_plain_str(&format!("{}{pattern}", flags.inline_prefix()));
         Ok(ConvertResult::Query(format!("regex({f}, {quoted}) = true")))
     }
 

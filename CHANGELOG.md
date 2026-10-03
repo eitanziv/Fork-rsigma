@@ -10,7 +10,13 @@ Every native backend now converts the encoding modifiers (`windash`, `wide`, `ut
 
 A `cidr` value with host bits set (`10.1.2.3/8`), or one that is not `address/prefix`, is now rejected when the rule is lowered, so evaluation and every backend refuse it as pySigma does instead of converting it. Library users of `rsigma-eval` see `EvalError::IncompatibleValue` for such values instead of `EvalError::InvalidCidr`. The `test` backend rejects `|fieldref|cased` with `UnsupportedModifier` instead of dropping `cased`.
 
+Regex flags now reach every backend. A plain `re` converts to PostgreSQL's case-sensitive `~` instead of `~*`, as the Sigma specification requires, and `|i` selects `~*`. `|m` adds PostgreSQL's `(?w)` embedded option so `^` and `$` match at line breaks. The `test`, LynxDB, and Fibratus backends prepend the `i`, `m`, and `s` flags as an inline group such as `(?i)`, which they previously dropped, and the `test` backend rejects `re|cased` as pySigma does. The new `RegexFlags::inline_prefix` renders the group for custom backends.
+
 Conversion now applies Sigma filters, as pySigma does when a collection loads: `convert_collection`, and so `backend convert`, `hunt`, and the MCP `convert_rules` tool, merges each filter into the detection rules it references before pipelines run, so field mappings reach the filter's fields. The new `rsigma_eval::apply_filters` performs the merge and targets rules the same way `Engine::apply_filter` does. A correlation rule converted with a backend that has no correlation support (`lynxdb` and `test`) is now an `UnsupportedCorrelation` error instead of being dropped silently; pass `--skip-unsupported` to convert the rest.
+
+Migration notes:
+
+- Add `|i` to a `re` value that should keep matching case-insensitively in PostgreSQL. The `case_sensitive_re` PostgreSQL option is removed, and the `PostgresBackend::case_sensitive_re` field with it, because plain `re` is now case-sensitive; `-O case_sensitive_re=...` is ignored like any unknown option.
 
 ### Chained correlations follow Sigma output semantics, and corpus replay counts referenced rules (#541)
 

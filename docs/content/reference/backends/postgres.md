@@ -15,7 +15,6 @@ Pass options via `-O key=value` on the command line. Unknown keys are silently i
 | `database` | unset | Connection-level metadata used by some output formats. |
 | `timestamp_field` | `time` | Column used for time-windowed queries (correlation `timespan`, `time_bucket` in TimescaleDB mode). |
 | `json_field` | unset | When set, fields are accessed via JSONB extraction. See [JSONB mode](#jsonb-mode). |
-| `case_sensitive_re` | `false` | Use `~` instead of `~*` for regex. Setting to `true` makes regex matches case-sensitive globally. |
 | `correlation_method` | unset | Windowing strategy for correlation rules (`sliding`/`tumbling`/`session`), overriding each rule's own `window`. See [Window modes](#window-modes). |
 | `gap` | unset | Default session gap (e.g. `5m`) used when a session window is requested and the rule declares no `gap`. A rule's own `gap` wins. |
 
@@ -32,7 +31,7 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 | `startswith` | `"field" ILIKE 'value%'` |
 | `endswith` | `"field" ILIKE '%value'` |
 | `cased` (any of the above) | switches `ILIKE` to `LIKE` (case-sensitive) |
-| `re` | `"field" ~* 'pattern'` (case-insensitive regex); `~` with `cased` or with `case_sensitive_re=true` backend option |
+| `re` | `"field" ~ 'pattern'` (case-sensitive, as the Sigma specification requires); `~*` with `\|i`. `\|m` adds the `(?w)` embedded option so `^` and `$` match at line breaks. PostgreSQL's `.` matches a line break even without `\|s`, so a regex can over-match a multi-line value but never misses one. {{ added "unreleased" }} |
 | `cidr` | `("field")::inet <<= 'value'::cidr` |
 | `exists: true` | `"field" IS NOT NULL` |
 | `exists: false` | `"field" IS NULL` |

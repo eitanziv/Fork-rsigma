@@ -551,6 +551,29 @@ detection:
 }
 
 #[test]
+fn regex_flags_render_inline() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    ps.cmdline|re|i|s:
+      - '^safe.x'
+      - '^trusted'
+  single:
+    ps.exe|re|m: '^cmd$'
+  condition: s and single
+"#,
+    );
+    assert_eq!(
+        q,
+        vec![
+            "regex(ps.cmdline, '(?is)^safe.x', '(?is)^trusted') = true and regex(ps.exe, '(?m)^cmd$') = true"
+        ]
+    );
+}
+
+#[test]
 fn multi_value_re_with_all_modifier_uses_and() {
     let q = convert(
         r#"

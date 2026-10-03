@@ -16,7 +16,7 @@ The crate provides a generic conversion framework that any backend can plug into
 - **Orchestrator** via `convert_collection()`, which merges filters into the rules they target, applies pipelines, converts each rule, and collects results and errors. A backend without correlation support reports each correlation as an `UnsupportedCorrelation` error.
 - **Deferred expressions** through the `DeferredExpression` trait and `DeferredTextExpression` for backends that need post-query appendages (e.g. Splunk `| regex`, `| where`).
 - **Test backend** with `TextQueryTestBackend` and `MandatoryPipelineTestBackend` for backend-neutral foundation testing.
-- **PostgreSQL/TimescaleDB backend** with native `ILIKE`, regex (`~*`), CIDR (`inet`/`cidr`), full-text search (`tsvector`/`tsquery`), JSONB field access, correlation via CTEs and window functions, and TimescaleDB-specific output formats (continuous aggregates, `time_bucket` queries, view generation).
+- **PostgreSQL/TimescaleDB backend** with native `ILIKE`, regex (`~`, `~*` with `|i`), CIDR (`inet`/`cidr`), full-text search (`tsvector`/`tsquery`), JSONB field access, correlation via CTEs and window functions, and TimescaleDB-specific output formats (continuous aggregates, `time_bucket` queries, view generation).
 - **LynxDB backend** generating SPL2-compatible `FROM <index> | search ...` queries with glob wildcards, deferred `| where` clauses for regex and CIDR, `CASE()` case-sensitive matching, and correct parenthesization for LynxDB's non-standard boolean precedence (`NOT > OR > AND`).
 
 ## Backends
@@ -169,7 +169,7 @@ When a Sigma rule specifies `fields:`, the backend emits `SELECT field1, field2,
 
 ### CLI backend options
 
-Backend configuration can be set via `-O key=value` flags on the CLI, which are wired through to `PostgresBackend::from_options`. Recognized keys: `table`, `schema`, `database`, `timestamp_field`, `json_field`, `case_sensitive_re`, `correlation_method`, `gap`.
+Backend configuration can be set via `-O key=value` flags on the CLI, which are wired through to `PostgresBackend::from_options`. Recognized keys: `table`, `schema`, `database`, `timestamp_field`, `json_field`, `correlation_method`, `gap`.
 
 ```bash
 rsigma backend convert -r rules/ -t postgres -O table=security_logs -O schema=public -O timestamp_field=created_at
@@ -262,7 +262,7 @@ Key methods:
 | `convert_ir_detection` | Walk an `IrDetection` (AllOf/AnyOf/Keywords/array match) |
 | `convert_ir_detection_item` | Convert a single `IrDetectionItem` (field + matcher) |
 | `convert_field_str` | String matching over an `IrStrOp` + wildcard-aware `IrPattern` |
-| `convert_field_regex` | Regex matching with explicit `RegexFlags` |
+| `convert_field_regex` | Regex matching with explicit `RegexFlags`; `RegexFlags::inline_prefix` renders `i`, `m`, and `s` as an inline `(?ims)` group |
 | `convert_field_eq_cidr` | CIDR matching |
 | `convert_field_compare_op` | Numeric comparison via `CompareOp` (`gt`, `gte`, `lt`, `lte`) |
 | `convert_field_exists` | Field existence check |
@@ -307,7 +307,7 @@ The PostgreSQL backend (`PostgresBackend`) leverages native PostgreSQL features 
 | `contains` | `ILIKE` (case-insensitive) |
 | `startswith` / `endswith` | `ILIKE` |
 | `cased` | `LIKE` (case-sensitive) |
-| `re` | `~*` (case-insensitive regex) or `~` (with `cased`) |
+| `re` | `~` (case-sensitive regex) or `~*` (with `i`); `(?w)` prefix with `m` |
 | `cidr` | `field::inet <<= 'value'::cidr` |
 | `exists` | `IS NOT NULL` / `IS NULL` |
 | keywords | `to_tsvector() @@ plainto_tsquery()` |
@@ -344,7 +344,6 @@ Following pySigma's model, the windowing strategy can also be chosen at conversi
 | `table` | `String` | `"security_events"` | Default table name (overridden by pipeline state or `postgres.table` custom attribute) |
 | `timestamp_field` | `String` | `"time"` | Timestamp column for time-windowed queries |
 | `json_field` | `Option<String>` | `None` | If set, fields are accessed via JSONB extraction (see [JSONB field access](#jsonb-field-access)) |
-| `case_sensitive_re` | `bool` | `false` | Use `~` instead of `~*` for regex |
 | `schema` | `Option<String>` | `None` | PostgreSQL schema name (overridden by pipeline state or `postgres.schema` custom attribute) |
 | `database` | `Option<String>` | `None` | PostgreSQL database name (connection-level metadata) |
 | `timescaledb` | `bool` | `false` | Enable TimescaleDB-specific features |

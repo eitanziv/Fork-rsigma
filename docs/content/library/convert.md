@@ -80,7 +80,6 @@ for result in &output.queries {
 | `database` | Connection-level metadata for some output formats. |
 | `timestamp_field` | Column name for the timestamp (default `time`). |
 | `json_field` | Treat field references as JSONB extraction paths in this column. |
-| `case_sensitive_re` | Use `~` instead of `~*` for regex. |
 
 LynxDB has no CLI `-O` options; its only knob is the target index, controlled via pipeline `set_state` with `key: index` (default `main`).
 

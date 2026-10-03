@@ -1,15 +1,16 @@
-description: re is case-sensitive by default.
+description: re|s lets . match a line break.
 rule:
-  title: regex case sensitive
+  title: regex dotall
   logsource: {category: process_creation, product: windows}
   detection:
     selection:
-      CommandLine|re: 'who.mi'
+      CommandLine|re|s: 'who.mi'
     condition: selection
 events:
-  - {CommandLine: 'x whoami'}
-  - {CommandLine: 'x WHOAMI'}
-matches: [0]
+  - {CommandLine: "who\nmi"}
+  - {CommandLine: 'whoami'}
+  - {CommandLine: "who\n\nmi"}
+matches: [0, 1]
 known_failures:
   lynxdb:
     type: match-mismatch

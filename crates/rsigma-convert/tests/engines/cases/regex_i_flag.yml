@@ -14,18 +14,5 @@ matches: [0, 1]
 known_failures:
   lynxdb:
     type: match-mismatch
-    reason: "the i flag is dropped from the regex"
+    reason: "the =~ operator matches nothing once events are flushed to segments, while match() does"
     actual: []
-  test-pysigma:
-    type: output-difference
-    reason: "the i flag is dropped instead of rendered as (?i)"
-    actual: ["CommandLine=/who.mi/"]
-    reference: ["CommandLine=/(?i)who.mi/"]
-  fibratus:
-    type: match-mismatch
-    reason: "the i flag is dropped from the regex"
-    actual: [0]
-  fibratus-nomacros:
-    type: match-mismatch
-    reason: "the i flag is dropped from the regex"
-    actual: [0]

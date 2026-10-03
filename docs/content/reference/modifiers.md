@@ -47,6 +47,10 @@ A processing pipeline with a [`value_placeholders`](../guide/processing-pipeline
 
 A placeholder that is not passed through a placeholder transformation is filled in from the event at match time: `%user%` takes the value of the event's `user` field, or an empty string when that field is missing or not a string. Runtime placeholders are an rsigma extension. Backends cannot convert them, and a value with a runtime placeholder cannot use wildcards or encoding modifiers.
 
+## `re`
+
+A regex is case-sensitive unless the key has `|i`. `|m` makes `^` and `$` match at line breaks, and `|s` lets `.` match a line break. Backends render the flags rather than dropping them: the `test`, LynxDB, and Fibratus backends prepend an inline group such as `(?im)`, and PostgreSQL uses `~*` for `|i` and the `(?w)` embedded option for `|m`. `|cased` has no effect on a regex; pySigma and the `test` backend reject it. {{ added "unreleased" }}
+
 ## `cidr`
 
 A `cidr` value is an IPv4 or IPv6 network written as `address/prefix`, such as `10.0.0.0/8` or `2001:db8::/32`. As in pySigma, a value with host bits set, such as `10.1.2.3/8`, is rejected when the rule is compiled or converted, because the address would silently stand for a different network. {{ added "unreleased" }}

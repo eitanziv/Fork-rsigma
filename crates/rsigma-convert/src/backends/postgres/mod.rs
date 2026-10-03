@@ -126,8 +126,8 @@ pub static POSTGRES_CONFIG: TextQueryConfig = TextQueryConfig {
     case_sensitive_endswith_expression: Some("{field} LIKE {value}"),
     case_sensitive_contains_expression: Some("{field} LIKE {value}"),
 
-    re_expression: Some("{field} ~* {regex}"),
-    not_re_expression: Some("{field} !~* {regex}"),
+    re_expression: Some("{field} ~ {regex}"),
+    not_re_expression: Some("{field} !~ {regex}"),
     re_escape_char: None,
     re_escape: &[],
     re_escape_escape_char: None,
@@ -180,8 +180,6 @@ pub struct PostgresBackend {
     pub timestamp_field: String,
     /// If set, fields are accessed via JSONB extraction (`metadata->>'fieldName'`).
     pub json_field: Option<String>,
-    /// Use case-sensitive regex (`~`) instead of case-insensitive (`~*`).
-    pub case_sensitive_re: bool,
     /// PostgreSQL schema name (e.g. `public`).
     pub schema: Option<String>,
     /// PostgreSQL database name (connection-level metadata, not used in queries).
@@ -206,7 +204,6 @@ impl PostgresBackend {
             table: "security_events".to_string(),
             timestamp_field: "time".to_string(),
             json_field: None,
-            case_sensitive_re: false,
             schema: None,
             database: None,
             timescaledb: false,
@@ -218,8 +215,8 @@ impl PostgresBackend {
     /// Create a backend from CLI-style key=value option pairs.
     ///
     /// Recognized keys: `table`, `schema`, `database`, `timestamp_field`,
-    /// `json_field`, `case_sensitive_re` (true/false), `correlation_method`
-    /// (sliding/tumbling/session), `gap` (default session gap, e.g. `5m`).
+    /// `json_field`, `correlation_method` (sliding/tumbling/session), `gap`
+    /// (default session gap, e.g. `5m`).
     /// Unknown keys are silently ignored so forward-compatible options can be
     /// added without breaking existing invocations.
     pub fn from_options(options: &HashMap<String, String>) -> Self {
@@ -238,9 +235,6 @@ impl PostgresBackend {
         }
         if let Some(v) = options.get("json_field") {
             backend.json_field = Some(v.clone());
-        }
-        if let Some(v) = options.get("case_sensitive_re") {
-            backend.case_sensitive_re = v == "true";
         }
         if let Some(v) = options.get("correlation_method") {
             backend.correlation_method = Some(v.clone());
@@ -510,7 +504,6 @@ impl PostgresBackend {
             table: self.table.clone(),
             timestamp_field: self.timestamp_field.clone(),
             json_field,
-            case_sensitive_re: self.case_sensitive_re,
             schema: self.schema.clone(),
             database: self.database.clone(),
             timescaledb: self.timescaledb,
@@ -812,9 +805,13 @@ impl Backend for PostgresBackend {
     ) -> Result<ConvertResult> {
         reject_nul("PostgreSQL", pattern)?;
         let f = self.field_expr(field)?;
-        let escaped_pattern = self.escape_sql_str(pattern);
-        let is_cased = flags.cased || self.case_sensitive_re;
-        let op = if is_cased { "~" } else { "~*" };
+        // PostgreSQL's default regex mode lets `.` match a newline even
+        // without `|s`, so a regex can over-match a multi-line value but never
+        // misses one. The `w` embedded option makes `^` and `$` match at line
+        // breaks for `|m` without changing what `.` matches.
+        let options = if flags.multiline { "(?w)" } else { "" };
+        let escaped_pattern = self.escape_sql_str(&format!("{options}{pattern}"));
+        let op = if flags.case_insensitive { "~*" } else { "~" };
         Ok(ConvertResult::Query(format!(
             "{f} {op} '{escaped_pattern}'"
         )))

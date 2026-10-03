@@ -263,11 +263,12 @@ impl Backend for LynxDbBackend {
         &self,
         field: &str,
         pattern: &str,
-        _flags: RegexFlags,
+        flags: RegexFlags,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
         let f = text_escape_and_quote_field(self.config, field);
-        let re_val = text_convert_value_re(self.config, pattern);
+        let re_val =
+            text_convert_value_re(self.config, &format!("{}{pattern}", flags.inline_prefix()));
         Ok(ConvertResult::Deferred(Box::new(DeferredTextExpression {
             template: "{field} {op} \"{value}\"".to_string(),
             field: f,
@@ -988,6 +989,25 @@ detection:
         assert_eq!(
             q,
             vec!["FROM main | search * | where CommandLine =~ \".*whoami.*\""]
+        );
+    }
+
+    #[test]
+    fn regex_flags_render_inline() {
+        let q = convert(
+            r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        CommandLine|re|i|m: '^whoami$'
+    condition: selection
+"#,
+        );
+        assert_eq!(
+            q,
+            vec!["FROM main | search * | where CommandLine =~ \"(?im)^whoami$\""]
         );
     }
 

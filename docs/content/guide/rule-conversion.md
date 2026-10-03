@@ -87,7 +87,7 @@ The PostgreSQL backend is the most fully featured. It leverages native operators
 |----------------|---------------------|
 | `contains`, `startswith`, `endswith` | `ILIKE` (case-insensitive) |
 | `cased` variants | `LIKE` |
-| `re` | `~*` (case-insensitive regex), `~` with `cased` |
+| `re` | `~` (case-sensitive regex), `~*` with `i` |
 | `cidr` | `field::inet <<= 'value'::cidr` |
 | `exists` | `IS NOT NULL` / `IS NULL` |
 | keywords | `to_tsvector() @@ plainto_tsquery()` |
@@ -115,7 +115,6 @@ SELECT * FROM security_events WHERE "CommandLine" ILIKE '%whoami%'
 | `database` | Connection-level metadata used by some output formats. |
 | `timestamp_field` | Column name for the timestamp (default `time`). |
 | `json_field` | Treat fields as paths inside a JSONB column with that name (see JSONB mode below). |
-| `case_sensitive_re` | Use `~` instead of `~*` for regex. |
 
 Combine options for production schemas:
 
