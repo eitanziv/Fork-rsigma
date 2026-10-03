@@ -353,9 +353,14 @@ impl Backend for TextQueryTestBackend {
         field1: &str,
         field2: &str,
         op: IrStrOp,
-        _case_insensitive: bool,
+        case_insensitive: bool,
         _state: &mut ConversionState,
     ) -> Result<ConvertResult> {
+        if !case_insensitive {
+            return Err(ConvertError::UnsupportedModifier(
+                "cased field reference (fieldref|cased)".into(),
+            ));
+        }
         if !matches!(op, IrStrOp::Exact) {
             let f1 = text_escape_and_quote_field(self.config, field1);
             let f2 = text_escape_and_quote_field(self.config, field2);
@@ -1371,6 +1376,29 @@ detection:
             matches!(&err, ConvertError::UnsupportedValue(_)),
             "got: {err}"
         );
+    }
+
+    #[test]
+    fn test_values_pysigma_rejects_fail_conversion() {
+        for (detection, expected) in [
+            ("Ip|cidr: '10.1.2.3/8'", "host bits set"),
+            ("Count|gt: 'abc'", "abc"),
+            ("A|fieldref|cased: B", "fieldref|cased"),
+        ] {
+            let yaml = format!(
+                r#"
+title: Test
+logsource:
+    category: test
+detection:
+    selection:
+        {detection}
+    condition: selection
+"#
+            );
+            let err = convert_rule_yaml_err(&yaml);
+            assert!(err.to_string().contains(expected), "{detection}: {err}");
+        }
     }
 
     #[test]

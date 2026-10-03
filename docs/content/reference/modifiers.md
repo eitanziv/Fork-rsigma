@@ -25,6 +25,8 @@ A backslash escapes `*`, `?`, and itself, so `\*` is a literal asterisk.
 
 String matching is case-insensitive unless the key has `|cased`. Case folding uses Unicode lowercase, so `Ä` matches `ä`. Lowercasing the dotted capital `İ` (U+0130) produces `i` followed by a combining dot, so `İ` does not match a plain `i`.
 
+`|fieldref|cased` compares the two fields case-sensitively. This is an rsigma extension that pySigma rejects; the PostgreSQL and Fibratus backends convert it, and the `test` backend, which mirrors pySigma's text output, rejects it with `UnsupportedModifier`. {{ added "unreleased" }}
+
 ## Encodings
 
 The encoding modifiers transform the value before it is matched. When several apply, they run in a fixed order regardless of their position in the key: `windash`, then one of `wide` (alias `utf16le`), `utf16be`, or `utf16`, then one of `base64` or `base64offset`.
@@ -44,6 +46,10 @@ With `|expand`, `%name%` in a value is a placeholder. A backslash escapes `%` as
 A processing pipeline with a [`value_placeholders`](../guide/processing-pipelines.md) transformation replaces placeholders with the values of its `vars:`. Several multi-value variables in one value expand to their Cartesian product. Every referenced variable must exist; an unresolved variable is a pipeline error unless the transformation sets `allow_unresolved: true` to opt into runtime substitution. When every placeholder is resolved this way, the value is an ordinary string match: wildcards and string modifiers such as `|contains` apply, and backends convert it like any other value. `wildcard_placeholders` replaces every handled placeholder with `*`, whether or not a variable is defined. Pipeline placeholder transformations ignore values without `|expand`. {{ added "unreleased" }}
 
 A placeholder that is not passed through a placeholder transformation is filled in from the event at match time: `%user%` takes the value of the event's `user` field, or an empty string when that field is missing or not a string. Runtime placeholders are an rsigma extension. Backends cannot convert them, and a value with a runtime placeholder cannot use wildcards or encoding modifiers.
+
+## `cidr`
+
+A `cidr` value is an IPv4 or IPv6 network written as `address/prefix`, such as `10.0.0.0/8` or `2001:db8::/32`. As in pySigma, a value with host bits set, such as `10.1.2.3/8`, is rejected when the rule is compiled or converted, because the address would silently stand for a different network. {{ added "unreleased" }}
 
 ## `exists`
 
