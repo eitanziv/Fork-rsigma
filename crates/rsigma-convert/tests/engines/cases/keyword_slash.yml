@@ -12,3 +12,4 @@ events:
   - {CommandLine: 'CMD /C WHOAMI /all'}
   - {CommandLine: 'cmd /c who ami'}
 matches: [0, 2]
+unsupported: [fibratus, fibratus-nomacros]

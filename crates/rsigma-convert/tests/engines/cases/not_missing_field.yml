@@ -18,11 +18,3 @@ known_failures:
     reason: "backslashes in values are doubled"
     actual: ["Image endswith \"\\\\cmd.exe\" and not ParentImage endswith \"\\\\explorer.exe\""]
     reference: ["Image endswith \"\\cmd.exe\" and not ParentImage endswith \"\\explorer.exe\""]
-  fibratus:
-    type: match-mismatch
-    reason: "NOT over a field the event lacks evaluates to false, so the event is dropped"
-    actual: []
-  fibratus-nomacros:
-    type: match-mismatch
-    reason: "NOT over a field the event lacks evaluates to false, so the event is dropped"
-    actual: []

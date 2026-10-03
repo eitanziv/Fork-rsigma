@@ -178,6 +178,81 @@ detection:
     assert_eq!(q, vec!["file.name matches '*Cmd*'"]);
 }
 
+#[test]
+fn substring_operator_with_wildcard_lowers_to_imatches() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    ps.cmdline|startswith: 'net*user'
+  e:
+    ps.exe|endswith: 'sys?.exe'
+  c:
+    ps.cmdline|contains: 'a*b'
+  condition: s and e and c
+"#,
+    );
+    assert_eq!(
+        q,
+        vec![
+            "ps.cmdline imatches 'net*user*' and ps.exe imatches '*sys?.exe' and ps.cmdline imatches '*a*b*'"
+        ]
+    );
+}
+
+#[test]
+fn substring_list_with_wildcard_converts_per_value() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    ps.cmdline|startswith:
+      - 'net*user'
+      - 'whoami'
+  condition: s
+"#,
+    );
+    assert_eq!(
+        q,
+        vec!["(ps.cmdline imatches 'net*user*' or ps.cmdline istartswith 'whoami')"]
+    );
+}
+
+#[test]
+fn literal_star_stays_verbatim_outside_globs() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    ps.cmdline|contains: 'a\*b'
+  condition: s
+"#,
+    );
+    assert_eq!(q, vec!["ps.cmdline icontains 'a*b'"]);
+}
+
+#[test]
+fn literal_star_in_glob_lowers_to_regex() {
+    let q = convert(
+        r#"
+title: T
+detection:
+  s:
+    file.name: 'a\*b?c*'
+  t:
+    ps.cmdline|endswith|cased: 'x\?.y'
+  condition: s or t
+"#,
+    );
+    assert_eq!(
+        q,
+        vec![r"(regex(file.name, '(?is)^a\\*b.c.*$') = true or ps.cmdline endswith 'x?.y')"]
+    );
+}
+
 // ---------------------------------------------------------------------
 // Boolean logic and grouping
 // ---------------------------------------------------------------------
@@ -221,7 +296,7 @@ detection:
 }
 
 #[test]
-fn condition_not_uses_native_not() {
+fn condition_not_compares_with_false() {
     let q = convert(
         r#"
 title: T
@@ -235,7 +310,7 @@ detection:
     );
     assert_eq!(
         q,
-        vec!["ps.name ~= 'cmd.exe' and not (ps.parent.name ~= 'explorer.exe')"]
+        vec!["ps.name ~= 'cmd.exe' and (ps.parent.name ~= 'explorer.exe') = false"]
     );
 }
 
@@ -389,9 +464,9 @@ detection:
 }
 
 #[test]
-fn field_eq_null_compares_to_empty_string() {
-    // Fibratus has no `null` token; a Sigma `field: null` lowers to an
-    // empty-string comparison.
+fn field_eq_null_tests_absence() {
+    // Fibratus has no `null` token; an absent field compared with a
+    // boolean reads as `false`, while a string never equals `false`.
     let q = convert(
         r#"
 title: T
@@ -401,7 +476,7 @@ detection:
   condition: s
 "#,
     );
-    assert_eq!(q, vec!["ps.username = ''"]);
+    assert_eq!(q, vec!["ps.username = false"]);
 }
 
 // ---------------------------------------------------------------------
@@ -463,7 +538,7 @@ detection:
 }
 
 #[test]
-fn regex_negated_uses_native_not() {
+fn regex_negated_compares_with_false() {
     let q = convert(
         r#"
 title: T
@@ -477,7 +552,7 @@ detection:
     );
     assert_eq!(
         q,
-        vec!["ps.name ~= 'cmd.exe' and not (regex(ps.cmdline, '^safe') = true)"]
+        vec!["ps.name ~= 'cmd.exe' and (regex(ps.cmdline, '^safe') = true) = false"]
     );
 }
 
@@ -641,18 +716,18 @@ detection:
 
 #[test]
 fn field_exists_true() {
-    // Fibratus has no `null`; field presence is expressed against the
-    // zero value (`!= false` set, `= false` absent).
+    // Presence is the negated absence test, compared with `false` so the
+    // negation holds for an absent field.
     let q = convert(
         r#"
 title: T
 detection:
   s:
-    thread.callstack.is_unbacked|exists: true
+    ps.cmdline|exists: true
   condition: s
 "#,
     );
-    assert_eq!(q, vec!["thread.callstack.is_unbacked != false"]);
+    assert_eq!(q, vec!["(ps.cmdline = false) = false"]);
 }
 
 #[test]
@@ -662,11 +737,11 @@ fn field_exists_false() {
 title: T
 detection:
   s:
-    thread.callstack.is_unbacked|exists: false
+    ps.cmdline|exists: false
   condition: s
 "#,
     );
-    assert_eq!(q, vec!["thread.callstack.is_unbacked = false"]);
+    assert_eq!(q, vec!["ps.cmdline = false"]);
 }
 
 #[test]
@@ -942,7 +1017,7 @@ detection:
         "got: {raw_out}"
     );
     assert!(
-        raw_out.contains("not (file.operation ~= 'OPEN')"),
+        raw_out.contains("(file.operation ~= 'OPEN') = false"),
         "expected OPEN disposition excluded, got: {raw_out}",
     );
     assert!(
@@ -1030,9 +1105,9 @@ detection:
         raw_out.starts_with("evt.name = 'CreateThread'"),
         "got: {raw_out}",
     );
-    assert!(raw_out.contains("not (evt.pid = 4)"), "got: {raw_out}");
+    assert!(raw_out.contains("(evt.pid = 4) = false"), "got: {raw_out}");
     assert!(
-        raw_out.contains("not (evt.pid ~= thread.pid)"),
+        raw_out.contains("(evt.pid ~= thread.pid) = false"),
         "got: {raw_out}",
     );
 }

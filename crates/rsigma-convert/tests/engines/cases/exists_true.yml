@@ -19,9 +19,9 @@ known_failures:
     actual: [0, 2]
   fibratus:
     type: match-mismatch
-    reason: "exists renders as a comparison with false, which never matches a string field"
-    actual: []
+    reason: "Fibratus events have no null values, so a field whose value is null is absent"
+    actual: [0, 2]
   fibratus-nomacros:
     type: match-mismatch
-    reason: "exists renders as a comparison with false, which never matches a string field"
-    actual: []
+    reason: "Fibratus events have no null values, so a field whose value is null is absent"
+    actual: [0, 2]

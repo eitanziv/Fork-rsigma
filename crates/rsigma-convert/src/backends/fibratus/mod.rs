@@ -50,7 +50,7 @@ mod tests;
 use std::collections::HashMap;
 
 use rsigma_eval::pipeline::state::PipelineState;
-use rsigma_ir::{IrDetectionItem, IrMatcher, IrPattern, IrStrOp};
+use rsigma_ir::{IrDetectionItem, IrMatcher, IrPattern, IrPatternPart, IrStrOp};
 use rsigma_parser::*;
 
 use crate::backend::*;
@@ -144,13 +144,13 @@ pub static FIBRATUS_CONFIG: TextQueryConfig = TextQueryConfig {
     cidr_expression: None,
     not_cidr_expression: None,
 
-    // Fibratus has no `null` token. A Sigma `field: null` (value is
-    // null/empty) lowers to an empty-string comparison; field presence
-    // (`|exists`) lowers to a `false` comparison (`!= false` present,
-    // `= false` absent), which is how Fibratus expresses set/unset for
-    // its zero-valued fields.
-    field_null_expression: "{field} = ''",
-    field_exists_expression: Some("{field} != false"),
+    // Fibratus has no `null` token, and an event has no null values. An
+    // absent field compared with a boolean reads as `false`, so `= false`
+    // is true for an absent field and false for a string or number. A
+    // Sigma `field: null` and `|exists: false` both test absence; the
+    // negated form tests presence.
+    field_null_expression: "{field} = false",
+    field_exists_expression: Some("({field} = false) = false"),
     field_not_exists_expression: Some("{field} = false"),
 
     compare_op_expression: Some("{field} {op} {value}"),
@@ -193,6 +193,34 @@ pub static FIBRATUS_CONFIG: TextQueryConfig = TextQueryConfig {
     query_expression: "{query}",
     state_defaults: &[],
 };
+
+/// Whether a literal part of the pattern contains `*` or `?`.
+fn has_literal_glob_char(pattern: &IrPattern) -> bool {
+    pattern
+        .parts
+        .iter()
+        .any(|p| matches!(p, IrPatternPart::Literal(s) if s.contains(['*', '?'])))
+}
+
+/// The RE2 regex a Sigma pattern matches, anchored for `op`. Wildcards match
+/// a line break, as in a Fibratus glob.
+fn glob_regex(pattern: &IrPattern, op: IrStrOp, case_insensitive: bool) -> String {
+    let mut re = String::from(if case_insensitive { "(?is)" } else { "(?s)" });
+    if matches!(op, IrStrOp::Exact | IrStrOp::StartsWith) {
+        re.push('^');
+    }
+    for part in &pattern.parts {
+        match part {
+            IrPatternPart::Literal(s) => re.push_str(&regex::escape(s)),
+            IrPatternPart::WildcardMulti => re.push_str(".*"),
+            IrPatternPart::WildcardSingle => re.push('.'),
+        }
+    }
+    if matches!(op, IrStrOp::Exact | IrStrOp::EndsWith) {
+        re.push('$');
+    }
+    re
+}
 
 // =============================================================================
 // FibratusBackend
@@ -259,6 +287,11 @@ impl FibratusBackend {
         let op = op?;
         let cased = self.fibratus.case_sensitive || !ci?;
         let any_wild = patterns.iter().any(|p| p.has_wildcards());
+        // Substring operators take no wildcards, and a glob cannot carry a
+        // literal `*` or `?`; those values convert one at a time.
+        if any_wild && (op != IrStrOp::Exact || patterns.iter().any(|p| has_literal_glob_char(p))) {
+            return None;
+        }
         let f = self.escape_and_quote_field(field);
 
         let list_op = match op {
@@ -366,19 +399,20 @@ impl Backend for FibratusBackend {
         }
     }
 
+    /// `not` over a comparison on an absent field is null, which drops the
+    /// event, while Sigma treats the negated detection as true. Comparing
+    /// the group with `false` reads null as `false`, so the negation holds.
     fn convert_condition_not(&self, expr: &str) -> Result<String> {
-        // Fibratus has a native `not` operator; no De Morgan push-down
-        // is required. Wrap in parens so precedence is unambiguous.
         if expr.is_empty() {
             return Ok(String::new());
         }
-        Ok(format!("not ({expr})"))
+        Ok(format!("({expr}) = false"))
     }
 
-    /// Fibratus groups in its own combinators: unary `not` only accepts a
-    /// parenthesized expression, OR groups are always parenthesized, and a
-    /// value list collapses into a single list clause, so walker grouping
-    /// would only add redundant parentheses.
+    /// Fibratus groups in its own combinators: a negation parenthesizes its
+    /// operand, OR groups are always parenthesized, and a value list
+    /// collapses into a single list clause, so walker grouping would only
+    /// add redundant parentheses.
     fn convert_condition_group(
         &self,
         expr: &str,
@@ -486,8 +520,35 @@ impl Backend for FibratusBackend {
     ) -> Result<ConvertResult> {
         reject_nul_pattern("Fibratus", pattern)?;
         let f = self.escape_and_quote_field(field);
-        let val = shared::quote_sigma_string(&crate::backend::ir_pattern_to_sigma(pattern));
         let is_cased = self.fibratus.case_sensitive || !case_insensitive;
+
+        // A glob has no escape for a literal `*` or `?`, so such a pattern
+        // matches through an anchored regex instead.
+        if pattern.has_wildcards() && has_literal_glob_char(pattern) {
+            let re = shared::quote_plain_str(&glob_regex(pattern, op, !is_cased));
+            return Ok(ConvertResult::Query(format!("regex({f}, {re}) = true")));
+        }
+
+        // The substring operators treat `*` and `?` as literal characters,
+        // so a wildcard pattern matches as a glob with the operator's own
+        // leading or trailing `*`.
+        let globbed;
+        let (op, pattern) = if pattern.has_wildcards() && op != IrStrOp::Exact {
+            let mut parts = Vec::with_capacity(pattern.parts.len() + 2);
+            if matches!(op, IrStrOp::Contains | IrStrOp::EndsWith) {
+                parts.push(IrPatternPart::WildcardMulti);
+            }
+            parts.extend(pattern.parts.iter().cloned());
+            if matches!(op, IrStrOp::Contains | IrStrOp::StartsWith) {
+                parts.push(IrPatternPart::WildcardMulti);
+            }
+            globbed = IrPattern { parts };
+            (IrStrOp::Exact, &globbed)
+        } else {
+            (op, pattern)
+        };
+
+        let val = shared::quote_sigma_string(&crate::backend::ir_pattern_to_sigma(pattern));
         let is_contains = matches!(op, IrStrOp::Contains);
         let is_startswith = matches!(op, IrStrOp::StartsWith);
         let is_endswith = matches!(op, IrStrOp::EndsWith);

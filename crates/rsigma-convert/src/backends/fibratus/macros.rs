@@ -17,7 +17,7 @@
 //! (`field ~= 'literal'`, the default for non-`evt.name` literals), the
 //! literal inequality (`field != value`), or the De Morgan negated
 //! equality the `add_condition` pipeline emits for an inequality clause
-//! (`not (field ~= 'literal')`), which is how a disposition guard such as
+//! (`(field ~= 'literal') = false`), which is how a disposition guard such as
 //! `create_file`'s `file.operation != 'OPEN'` reaches the recognizer.
 
 use std::sync::LazyLock;
@@ -117,9 +117,9 @@ pub const EXPRESSION_MACROS: &[(&str, &str)] = &[
 ///   for a non-`evt.name` literal);
 /// - literal inequality (`field != value`); and
 /// - the De Morgan negated equality the `add_condition` pipeline emits for
-///   an inequality macro clause (`not (field = value)` for a number,
-///   `not (field ~= 'literal')` for a string, and `not (field ~= other)`
-///   for a field reference).
+///   an inequality macro clause (`(field = value) = false` for a number,
+///   `(field ~= 'literal') = false` for a string, and
+///   `(field ~= other) = false` for a field reference).
 ///
 /// Each clause is matched independently against its own form set, so a
 /// macro whose `evt.name` clause renders with `=` while a sibling status
@@ -349,7 +349,7 @@ fn split_clauses(src: &str) -> Vec<&str> {
 /// (`field = 'literal'`) it adds the case-insensitive default
 /// (`field ~= 'literal'`). For an inequality clause (`field != value`) it
 /// adds the De Morgan negated equalities the `add_condition` pipeline
-/// produces: `not (field = value)` always, and `not (field ~= value)` when
+/// produces: `(field = value) = false` always, and `(field ~= value) = false` when
 /// the right-hand side is a quoted literal or another field. A numeric or
 /// boolean right-hand side stays on `=`.
 fn accepted_clause_forms(clause: &str) -> Vec<String> {
@@ -362,9 +362,9 @@ fn accepted_clause_forms(clause: &str) -> Vec<String> {
     if let Some((lhs, rhs)) = split_top_level_neq(clause) {
         let lhs = lhs.trim();
         let rhs = rhs.trim();
-        forms.push(format!("not ({lhs} = {rhs})"));
+        forms.push(format!("({lhs} = {rhs}) = false"));
         if rhs.starts_with('\'') || is_field_operand(rhs) {
-            forms.push(format!("not ({lhs} ~= {rhs})"));
+            forms.push(format!("({lhs} ~= {rhs}) = false"));
         }
     }
     forms
@@ -565,7 +565,7 @@ mod tests {
     #[test]
     fn recognize_create_remote_thread_field_inequality() {
         let out = recognize(
-            "evt.name = 'CreateThread' and not (evt.pid = 4) and not (evt.pid ~= thread.pid)",
+            "evt.name = 'CreateThread' and (evt.pid = 4) = false and (evt.pid ~= thread.pid) = false",
         );
         assert_eq!(out, "create_remote_thread");
     }
@@ -590,16 +590,16 @@ mod tests {
     #[test]
     fn recognize_create_file_from_negated_equality_disposition() {
         // The `add_condition` pipeline injects the OPEN-disposition guard
-        // as a negated equality (`not (file.operation ~= 'OPEN')`), the
+        // as a negated equality (`(file.operation ~= 'OPEN') = false`), the
         // De Morgan equivalent of the macro's `file.operation != 'OPEN'`.
         // The recognizer accepts that form and still folds the run.
         let out = recognize(
-            "evt.name = 'CreateFile' and not (file.operation ~= 'OPEN') and file.status ~= 'Success'",
+            "evt.name = 'CreateFile' and (file.operation ~= 'OPEN') = false and file.status ~= 'Success'",
         );
         assert_eq!(out, "create_file");
         // And it keeps trailing rule-body clauses verbatim.
         let out2 = recognize(
-            "evt.name = 'CreateFile' and not (file.operation ~= 'OPEN') and file.status ~= 'Success' and file.path iendswith '.rdp'",
+            "evt.name = 'CreateFile' and (file.operation ~= 'OPEN') = false and file.status ~= 'Success' and file.path iendswith '.rdp'",
         );
         assert_eq!(out2, "create_file and file.path iendswith '.rdp'");
     }

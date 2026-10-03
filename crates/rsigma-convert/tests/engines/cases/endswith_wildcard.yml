@@ -15,14 +15,6 @@ events:
   - {CommandLine: 'x'}
 matches: [0, 1, 2]
 known_failures:
-  fibratus:
-    type: match-mismatch
-    reason: "iendswith treats an inner * as a literal character"
-    actual: []
-  fibratus-nomacros:
-    type: match-mismatch
-    reason: "iendswith treats an inner * as a literal character"
-    actual: []
   test-pysigma:
     type: output-difference
     reason: "endswith with a wildcard is not rendered as a match with a leading wildcard"

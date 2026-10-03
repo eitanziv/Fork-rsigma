@@ -15,14 +15,6 @@ events:
   - {Image: 'x'}
 matches: [0, 1, 2]
 known_failures:
-  fibratus:
-    type: match-mismatch
-    reason: "istartswith treats an inner * as a literal character"
-    actual: []
-  fibratus-nomacros:
-    type: match-mismatch
-    reason: "istartswith treats an inner * as a literal character"
-    actual: []
   test-pysigma:
     type: output-difference
     reason: "startswith with a wildcard is not rendered as a match with a trailing wildcard"

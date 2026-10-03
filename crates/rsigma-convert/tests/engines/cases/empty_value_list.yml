@@ -12,12 +12,3 @@ events:
   - {User: ''}
   - {User: 'bob'}
 matches: [0, 1]
-known_failures:
-  fibratus:
-    type: match-mismatch
-    reason: "null renders as = '', which matches an empty string instead of an absent field"
-    actual: [2]
-  fibratus-nomacros:
-    type: match-mismatch
-    reason: "null renders as = '', which matches an empty string instead of an absent field"
-    actual: [2]

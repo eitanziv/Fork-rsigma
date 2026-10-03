@@ -18,9 +18,9 @@ known_failures:
     actual: [1, 2]
   fibratus:
     type: match-mismatch
-    reason: "the comparison with false treats a null value as absent"
+    reason: "Fibratus events have no null values, so a field whose value is null is absent"
     actual: [1, 2]
   fibratus-nomacros:
     type: match-mismatch
-    reason: "the comparison with false treats a null value as absent"
+    reason: "Fibratus events have no null values, so a field whose value is null is absent"
     actual: [1, 2]

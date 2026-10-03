@@ -19,11 +19,3 @@ known_failures:
     reason: "backslashes in values are doubled"
     actual: ["Image endswith \"\\\\cmd.exe\" and User is null"]
     reference: ["Image endswith \"\\cmd.exe\" and User is null"]
-  fibratus:
-    type: match-mismatch
-    reason: "null renders as = '', which matches an empty string instead of an absent field"
-    actual: [3]
-  fibratus-nomacros:
-    type: match-mismatch
-    reason: "null renders as = '', which matches an empty string instead of an absent field"
-    actual: [3]
