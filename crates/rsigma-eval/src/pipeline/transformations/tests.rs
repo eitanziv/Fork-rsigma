@@ -1,4 +1,5 @@
 use super::*;
+use crate::pipeline::conditions::ValueMatch;
 use rsigma_parser::{
     ConditionExpr, Detection, DetectionItem, Detections, FieldSpec, LogSource, Modifier,
     SigmaString,
@@ -320,6 +321,7 @@ fn test_replace_string() {
         regex: r"whoami".to_string(),
         replacement: "REPLACED".to_string(),
         skip_special: false,
+        interpret_special: false,
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
@@ -349,6 +351,8 @@ fn test_add_condition() {
         field_refs: HashMap::new(),
         negated: false,
         prepend: false,
+        name: None,
+        template: false,
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
@@ -387,6 +391,8 @@ fn test_add_condition_prepend_puts_added_condition_first() {
         field_refs: HashMap::new(),
         negated: false,
         prepend: true,
+        name: None,
+        template: false,
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
@@ -603,44 +609,138 @@ fn test_field_name_transform_snake_case() {
     }
 }
 
+fn hashes_rule(values: &[&str]) -> SigmaRule {
+    let mut rule = make_test_rule();
+    rule.detection.named.insert(
+        "selection".to_string(),
+        Detection::AllOf(vec![
+            DetectionItem {
+                field: FieldSpec::new(Some("Image".to_string()), vec![Modifier::EndsWith]),
+                values: vec![SigmaValue::String(SigmaString::new("\\x.exe"))],
+            },
+            DetectionItem {
+                field: FieldSpec::new(Some("Hashes".to_string()), vec![Modifier::Contains]),
+                values: values
+                    .iter()
+                    .map(|v| SigmaValue::String(SigmaString::new(v)))
+                    .collect(),
+            },
+        ]),
+    );
+    rule
+}
+
+fn hashes_transformation(algos: &[&str], prefix: &str) -> Transformation {
+    Transformation::HashesFields {
+        valid_hash_algos: algos.iter().map(|a| a.to_string()).collect(),
+        field_prefix: prefix.to_string(),
+        drop_algo_prefix: false,
+        field_to_parse: vec!["Hashes".to_string(), "Hash".to_string()],
+    }
+}
+
+fn single_item(detection: &Detection) -> (&str, Vec<&str>) {
+    let Detection::AllOf(items) = detection else {
+        panic!("expected AllOf, got {detection:?}");
+    };
+    assert_eq!(items.len(), 1);
+    assert!(items[0].field.modifiers.is_empty());
+    let values = items[0]
+        .values
+        .iter()
+        .map(|v| match v {
+            SigmaValue::String(s) => s.original.as_str(),
+            other => panic!("expected string, got {other:?}"),
+        })
+        .collect();
+    (items[0].field.name.as_deref().unwrap(), values)
+}
+
 #[test]
 fn test_hashes_fields_decomposition() {
-    let mut named = HashMap::new();
-    named.insert(
-        "selection".to_string(),
-        Detection::AllOf(vec![DetectionItem {
-            field: FieldSpec::new(Some("Hashes".to_string()), vec![]),
-            values: vec![SigmaValue::String(SigmaString::new(
-                "SHA1=abc123,MD5=def456",
-            ))],
-        }]),
-    );
-
-    let mut rule = make_test_rule();
-    rule.detection.named = named;
-
+    let mut rule = hashes_rule(&["SHA1=abc123", "MD5=def456", "md5|0011"]);
     let mut state = PipelineState::default();
-    let t = Transformation::HashesFields {
-        valid_hash_algos: vec!["SHA1".to_string(), "MD5".to_string()],
-        field_prefix: "File".to_string(),
-        drop_algo_prefix: false,
-    };
-    t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
+    hashes_transformation(&["SHA1", "MD5"], "File")
+        .apply(&mut rule, &mut state, &[], &[], false)
+        .unwrap();
 
-    let det = &rule.detection.named["selection"];
-    if let Detection::AllOf(items) = det {
-        assert_eq!(items.len(), 2);
-        assert_eq!(items[0].field.name, Some("FileSHA1".to_string()));
-        assert_eq!(items[1].field.name, Some("FileMD5".to_string()));
-        if let SigmaValue::String(s) = &items[0].values[0] {
-            assert_eq!(s.original, "abc123");
-        }
-        if let SigmaValue::String(s) = &items[1].values[0] {
-            assert_eq!(s.original, "def456");
-        }
-    } else {
-        panic!("Expected AllOf");
-    }
+    let Detection::And(parts) = &rule.detection.named["selection"] else {
+        panic!("expected And");
+    };
+    let Detection::AllOf(kept) = &parts[0] else {
+        panic!("expected the kept items first");
+    };
+    assert_eq!(kept[0].field.name.as_deref(), Some("Image"));
+    let Detection::AnyOf(groups) = &parts[1] else {
+        panic!("expected an OR over hash fields");
+    };
+    assert_eq!(single_item(&groups[0]), ("FileSHA1", vec!["abc123"]));
+    assert_eq!(single_item(&groups[1]), ("FileMD5", vec!["def456", "0011"]));
+}
+
+#[test]
+fn test_hashes_fields_infers_algorithm_from_length_and_strips_wildcards() {
+    let md5 = "0123456789abcdef0123456789abcdef";
+    let sha256 = "0".repeat(64);
+    let mut rule = hashes_rule(&[&format!("*{md5}*"), &sha256, "SHA512=short"]);
+    let mut state = PipelineState::default();
+    hashes_transformation(&["MD5", "SHA256"], "")
+        .apply(&mut rule, &mut state, &[], &[], false)
+        .unwrap();
+
+    let Detection::And(parts) = &rule.detection.named["selection"] else {
+        panic!("expected And");
+    };
+    let Detection::AnyOf(groups) = &parts[1] else {
+        panic!("expected an OR over hash fields");
+    };
+    assert_eq!(groups.len(), 2);
+    assert_eq!(single_item(&groups[0]), ("MD5", vec![md5]));
+    assert_eq!(single_item(&groups[1]), ("SHA256", vec![sha256.as_str()]));
+}
+
+#[test]
+fn test_hashes_fields_without_valid_algorithm_is_an_error() {
+    let mut rule = hashes_rule(&["SHA256=abc123", "IMPHASH=def456"]);
+    let mut state = PipelineState::default();
+    let err = hashes_transformation(&[], "File")
+        .apply(&mut rule, &mut state, &[], &[], false)
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("no valid hash algorithm found in field 'Hashes'"),
+        "{err}"
+    );
+}
+
+#[test]
+fn test_hashes_fields_honors_field_to_parse_and_item_conditions() {
+    let mut rule = hashes_rule(&["MD5=abc"]);
+    let mut state = PipelineState::default();
+    let only_hash = Transformation::HashesFields {
+        valid_hash_algos: vec!["MD5".to_string()],
+        field_prefix: String::new(),
+        drop_algo_prefix: false,
+        field_to_parse: vec!["Hash".to_string()],
+    };
+    only_hash
+        .apply(&mut rule, &mut state, &[], &[], false)
+        .unwrap();
+    assert!(matches!(
+        rule.detection.named["selection"],
+        Detection::AllOf(_)
+    ));
+
+    let excluded = vec![FieldNameCondition::ExcludeFields {
+        matcher: crate::pipeline::conditions::FieldMatcher::Plain(vec!["Hashes".to_string()]),
+    }];
+    hashes_transformation(&["MD5"], "")
+        .apply(&mut rule, &mut state, &[], &excluded, false)
+        .unwrap();
+    assert!(matches!(
+        rule.detection.named["selection"],
+        Detection::AllOf(_)
+    ));
 }
 
 #[test]
@@ -1126,8 +1226,9 @@ fn test_detection_item_failure_fires_on_match() {
 
     // Condition that matches the "whoami" value in CommandLine
     let det_conds = vec![DetectionItemCondition::MatchString {
-        regex: regex::Regex::new("whoami").unwrap(),
+        regex: regex::Regex::new(r"\*whoami").unwrap(),
         negate: false,
+        cond: ValueMatch::Any,
     }];
 
     let t = Transformation::DetectionItemFailure {
@@ -1148,6 +1249,7 @@ fn test_detection_item_failure_skips_on_no_match() {
     let det_conds = vec![DetectionItemCondition::MatchString {
         regex: regex::Regex::new("nonexistent_value").unwrap(),
         negate: false,
+        cond: ValueMatch::Any,
     }];
 
     let t = Transformation::DetectionItemFailure {
@@ -1189,6 +1291,8 @@ fn test_add_condition_negated() {
         field_refs: HashMap::new(),
         negated: true,
         prepend: false,
+        name: None,
+        template: false,
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
@@ -1225,6 +1329,8 @@ fn test_add_condition_negated_multi_value() {
         field_refs: HashMap::new(),
         negated: true,
         prepend: false,
+        name: None,
+        template: false,
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
@@ -1278,6 +1384,8 @@ fn test_add_condition_field_refs_lowers_to_fieldref_modifier() {
         // the shape the Fibratus create_remote_thread macro needs.
         negated: true,
         prepend: true,
+        name: None,
+        template: false,
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
@@ -1357,14 +1465,16 @@ fn test_replace_string_with_detection_item_condition() {
 
     // Only replace in items where value matches "whoami"
     let det_conds = vec![DetectionItemCondition::MatchString {
-        regex: regex::Regex::new("whoami").unwrap(),
+        regex: regex::Regex::new(r"\*whoami").unwrap(),
         negate: false,
+        cond: ValueMatch::Any,
     }];
 
     let t = Transformation::ReplaceString {
         regex: r"whoami".to_string(),
         replacement: "REPLACED".to_string(),
         skip_special: false,
+        interpret_special: false,
     };
     t.apply(&mut rule, &mut state, &det_conds, &[], false)
         .unwrap();
@@ -1407,7 +1517,10 @@ fn test_set_value_with_is_null_condition() {
     let mut state = PipelineState::default();
 
     // Only apply set_value to items with null values
-    let det_conds = vec![DetectionItemCondition::IsNull { negate: false }];
+    let det_conds = vec![DetectionItemCondition::IsNull {
+        negate: false,
+        cond: ValueMatch::Any,
+    }];
 
     let t = Transformation::SetValue {
         value: SigmaValue::String(SigmaString::new("DEFAULT")),
@@ -1439,8 +1552,9 @@ fn test_drop_detection_item_with_match_string_condition() {
 
     // Drop items where values match "whoami"
     let det_conds = vec![DetectionItemCondition::MatchString {
-        regex: regex::Regex::new("whoami").unwrap(),
+        regex: regex::Regex::new(r"\*whoami").unwrap(),
         negate: false,
+        cond: ValueMatch::Any,
     }];
 
     let t = Transformation::DropDetectionItem;
@@ -1549,70 +1663,25 @@ fn test_map_string_empty_mapping() {
 }
 
 #[test]
-fn test_hashes_fields_empty_algos() {
-    // When valid_hash_algos is empty, all algorithms should be accepted
-    let mut named = HashMap::new();
-    named.insert(
-        "selection".to_string(),
-        Detection::AllOf(vec![DetectionItem {
-            field: FieldSpec::new(Some("Hashes".to_string()), vec![]),
-            values: vec![SigmaValue::String(SigmaString::new(
-                "SHA256=abc123,IMPHASH=def456",
-            ))],
-        }]),
-    );
-
-    let mut rule = make_test_rule();
-    rule.detection.named = named;
-
-    let mut state = PipelineState::default();
-    let t = Transformation::HashesFields {
-        valid_hash_algos: vec![], // empty = accept all
-        field_prefix: "File".to_string(),
-        drop_algo_prefix: false,
-    };
-    t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
-
-    let det = &rule.detection.named["selection"];
-    if let Detection::AllOf(items) = det {
-        assert_eq!(items.len(), 2);
-        assert_eq!(items[0].field.name, Some("FileSHA256".to_string()));
-        assert_eq!(items[1].field.name, Some("FileIMPHASH".to_string()));
-    } else {
-        panic!("Expected AllOf");
-    }
-}
-
-#[test]
 fn test_hashes_fields_drop_algo_prefix() {
-    let mut named = HashMap::new();
-    named.insert(
-        "selection".to_string(),
-        Detection::AllOf(vec![DetectionItem {
-            field: FieldSpec::new(Some("Hashes".to_string()), vec![]),
-            values: vec![SigmaValue::String(SigmaString::new("MD5=abc123"))],
-        }]),
-    );
-
-    let mut rule = make_test_rule();
-    rule.detection.named = named;
+    let mut rule = hashes_rule(&["MD5=abc123"]);
     let mut state = PipelineState::default();
 
     let t = Transformation::HashesFields {
         valid_hash_algos: vec!["MD5".to_string()],
         field_prefix: "Hash".to_string(),
         drop_algo_prefix: true,
+        field_to_parse: vec!["Hashes".to_string()],
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
-    let det = &rule.detection.named["selection"];
-    if let Detection::AllOf(items) = det {
-        assert_eq!(items.len(), 1);
-        // drop_algo_prefix = true → field name is just the prefix
-        assert_eq!(items[0].field.name, Some("Hash".to_string()));
-    } else {
-        panic!("Expected AllOf");
-    }
+    let Detection::And(parts) = &rule.detection.named["selection"] else {
+        panic!("expected And");
+    };
+    let Detection::AnyOf(groups) = &parts[1] else {
+        panic!("expected an OR over hash fields");
+    };
+    assert_eq!(single_item(&groups[0]), ("Hash", vec!["abc123"]));
 }
 
 // =========================================================================
@@ -1627,6 +1696,7 @@ fn test_replace_string_invalid_regex() {
         regex: r"[invalid".to_string(), // unclosed bracket
         replacement: "x".to_string(),
         skip_special: false,
+        interpret_special: false,
     };
     let result = t.apply(&mut rule, &mut state, &[], &[], false);
     assert!(result.is_err());
@@ -1648,8 +1718,9 @@ fn test_case_transformation_with_negated_match_string() {
 
     // Negate: transform items that do NOT match "whoami"
     let det_conds = vec![DetectionItemCondition::MatchString {
-        regex: regex::Regex::new("whoami").unwrap(),
+        regex: regex::Regex::new(r"\*whoami").unwrap(),
         negate: true,
+        cond: ValueMatch::Any,
     }];
 
     let t = Transformation::CaseTransformation {
@@ -1857,6 +1928,7 @@ level: medium
         regex: r"whoami".to_string(),
         replacement: "REPLACED".to_string(),
         skip_special: true,
+        interpret_special: false,
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
@@ -1902,6 +1974,7 @@ level: medium
         regex: r"\*".to_string(),
         replacement: "STAR".to_string(),
         skip_special: false,
+        interpret_special: false,
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 
@@ -1931,6 +2004,7 @@ fn test_replace_string_skip_special_plain_string() {
         regex: r"whoami".to_string(),
         replacement: "REPLACED".to_string(),
         skip_special: true,
+        interpret_special: false,
     };
     t.apply(&mut rule, &mut state, &[], &[], false).unwrap();
 

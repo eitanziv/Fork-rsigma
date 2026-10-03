@@ -4,13 +4,13 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use regex::Regex;
-use rsigma_parser::SigmaValue;
+use rsigma_parser::{SigmaString, SigmaValue};
 
 use crate::error::{EvalError, Result};
 
 use super::conditions::{
     ConditionOp, ConditionSet, DetectionItemCondition, FieldMatcher, FieldNameCondition,
-    NamedCondition, RuleCondition, StateOperator, validate_condition_expr,
+    NamedCondition, RuleCondition, StateOperator, ValueMatch, validate_condition_expr,
 };
 use super::finalizers::Finalizer;
 use super::sources::{
@@ -230,7 +230,14 @@ fn validate_transformation_item_keys(obj: &yaml_serde::Mapping) -> Result<()> {
             Some("drop_detection_item") => &[],
             Some("value_placeholders") => &["allow_unresolved", "include", "exclude"],
             Some("wildcard_placeholders") => &["include", "exclude"],
-            Some("add_condition") => &["conditions", "field_refs", "negated", "prepend"],
+            Some("add_condition") => &[
+                "conditions",
+                "field_refs",
+                "negated",
+                "prepend",
+                "name",
+                "template",
+            ],
             Some("change_logsource") => &["category", "product", "service"],
             Some("replace_string") => {
                 &["regex", "replacement", "skip_special", "interpret_special"]
@@ -240,7 +247,7 @@ fn validate_transformation_item_keys(obj: &yaml_serde::Mapping) -> Result<()> {
             }
             Some("set_state") => &["key", "val", "value"],
             Some("rule_failure" | "detection_item_failure") => &["message"],
-            Some("field_name_transform") => &["transform_func", "mapping"],
+            Some("field_name_transform") => &["transform_func", "mapping", "apply_keyword"],
             Some("hashes_fields") => &[
                 "valid_hash_algos",
                 "field_prefix",
@@ -323,11 +330,25 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
                 .get(ykey("prepend"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
+            let name = obj
+                .get(ykey("name"))
+                .map(|value| {
+                    value.as_str().map(str::to_string).ok_or_else(|| {
+                        EvalError::InvalidModifiers("add_condition 'name' must be a string".into())
+                    })
+                })
+                .transpose()?;
+            let template = obj
+                .get(ykey("template"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             Ok(Transformation::AddCondition {
                 conditions,
                 field_refs,
                 negated,
                 prepend,
+                name,
+                template,
             })
         }
 
@@ -366,10 +387,15 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
                 .get(ykey("skip_special"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
+            let interpret_special = obj
+                .get(ykey("interpret_special"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             Ok(Transformation::ReplaceString {
                 regex,
                 replacement,
                 skip_special,
+                interpret_special,
             })
         }
 
@@ -392,7 +418,15 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
         }
 
         "query_expression_placeholders" => {
-            let _ = parse_placeholder_filter(obj)?;
+            if let Some(key) = ["mapping", "include", "exclude"]
+                .into_iter()
+                .find(|key| obj.contains_key(ykey(key)))
+            {
+                return Err(EvalError::InvalidModifiers(format!(
+                    "query_expression_placeholders '{key}' is not supported: placeholders are \
+                     not rendered as query expressions"
+                )));
+            }
             let expression = obj
                 .get(ykey("expression"))
                 .and_then(|v| v.as_str())
@@ -450,6 +484,16 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
                 .unwrap_or("lower")
                 .to_string();
             let mapping = parse_string_mapping(obj.get(ykey("mapping"))).unwrap_or_default();
+            if obj
+                .get(ykey("apply_keyword"))
+                .is_some_and(|value| value.as_bool() != Some(false))
+            {
+                return Err(EvalError::InvalidModifiers(
+                    "field_name_transform 'apply_keyword' is not supported: keyword detections \
+                     have no field name to transform"
+                        .to_string(),
+                ));
+            }
             Ok(Transformation::FieldNameTransform {
                 transform_func,
                 mapping,
@@ -457,20 +501,32 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
         }
 
         "hashes_fields" => {
-            let valid_hash_algos = parse_string_list(obj.get(ykey("valid_hash_algos")));
+            let valid_hash_algos = obj
+                .get(ykey("valid_hash_algos"))
+                .map(|value| parse_string_list(Some(value)))
+                .ok_or_else(|| {
+                    EvalError::InvalidModifiers(
+                        "hashes_fields requires 'valid_hash_algos'".to_string(),
+                    )
+                })?;
             let field_prefix = obj
                 .get(ykey("field_prefix"))
                 .and_then(|v| v.as_str())
-                .unwrap_or("File")
+                .unwrap_or("")
                 .to_string();
             let drop_algo_prefix = obj
                 .get(ykey("drop_algo_prefix"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
+            let field_to_parse = obj
+                .get(ykey("field_to_parse"))
+                .map(|value| parse_string_list(Some(value)))
+                .unwrap_or_else(|| vec!["Hashes".to_string(), "Hash".to_string()]);
             Ok(Transformation::HashesFields {
                 valid_hash_algos,
                 field_prefix,
                 drop_algo_prefix,
+                field_to_parse,
             })
         }
 
@@ -480,10 +536,11 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
         }
 
         "set_value" => {
-            let value = obj
-                .get(ykey("value"))
-                .map(SigmaValue::from_yaml)
-                .unwrap_or(SigmaValue::Null);
+            let raw = obj.get(ykey("value"));
+            let value = match obj.get(ykey("force_type")) {
+                None => raw.map(SigmaValue::from_yaml).unwrap_or(SigmaValue::Null),
+                Some(force_type) => force_set_value_type(raw, force_type)?,
+            };
             Ok(Transformation::SetValue { value })
         }
 
@@ -496,7 +553,26 @@ fn parse_transformation(obj: &yaml_serde::Mapping) -> Result<Transformation> {
             Ok(Transformation::ConvertType { target_type })
         }
 
-        "regex" => Ok(Transformation::Regex),
+        "regex" => {
+            match obj.get(ykey("method")).map(|method| method.as_str()) {
+                None | Some(Some("ignore_case_brackets" | "ignore_case_flag")) => {}
+                Some(Some("plain")) => {
+                    return Err(EvalError::InvalidModifiers(
+                        "regex method 'plain' is not supported: rsigma matches strings \
+                         case-insensitively"
+                            .to_string(),
+                    ));
+                }
+                Some(_) => {
+                    return Err(EvalError::InvalidModifiers(
+                        "invalid regex 'method'; expected 'plain', 'ignore_case_flag', or \
+                         'ignore_case_brackets'"
+                            .to_string(),
+                    ));
+                }
+            }
+            Ok(Transformation::Regex)
+        }
 
         "add_field" => {
             let field = obj
@@ -720,7 +796,12 @@ fn parse_detection_item_condition(value: &yaml_serde::Value) -> Result<Detection
             let regex = Regex::new(&pattern).map_err(|e| {
                 EvalError::InvalidModifiers(format!("invalid match_string regex '{pattern}': {e}"))
             })?;
-            Ok(DetectionItemCondition::MatchString { regex, negate })
+            let cond = parse_value_match(obj)?;
+            Ok(DetectionItemCondition::MatchString {
+                regex,
+                negate,
+                cond,
+            })
         }
 
         "is_null" => {
@@ -728,7 +809,8 @@ fn parse_detection_item_condition(value: &yaml_serde::Value) -> Result<Detection
                 .get(ykey("negate"))
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            Ok(DetectionItemCondition::IsNull { negate })
+            let cond = parse_value_match(obj)?;
+            Ok(DetectionItemCondition::IsNull { negate, cond })
         }
 
         "processing_item_applied" => {
@@ -781,12 +863,21 @@ fn parse_field_name_condition(value: &yaml_serde::Value) -> Result<FieldNameCond
             EvalError::InvalidModifiers("field name condition must have a 'type' field".to_string())
         })?;
 
-    let match_type_str = obj
-        .get(ykey("match_type"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("plain");
-
-    let is_regex = matches!(match_type_str, "regex" | "re");
+    let is_regex = match obj
+        .get(ykey("mode"))
+        .or_else(|| obj.get(ykey("match_type")))
+    {
+        None => false,
+        Some(mode) => match mode.as_str() {
+            Some("plain") => false,
+            Some("re" | "regex") => true,
+            _ => {
+                return Err(EvalError::InvalidModifiers(format!(
+                    "invalid field name matching mode {mode:?}; expected 'plain' or 're'"
+                )));
+            }
+        },
+    };
 
     match type_str {
         "include_fields" => {
@@ -921,16 +1012,6 @@ fn parse_condition_set<T>(
         return Err(EvalError::InvalidModifiers(format!(
             "{expression_key} is mutually exclusive with {op_key}"
         )));
-    }
-
-    let mut seen = std::collections::HashSet::new();
-    for condition in &conditions {
-        if !seen.insert(condition.id.as_str()) {
-            return Err(EvalError::InvalidModifiers(format!(
-                "duplicate {prefix} condition identifier '{}'",
-                condition.id
-            )));
-        }
     }
 
     if let Some(expression) = &expression {
@@ -1107,6 +1188,56 @@ fn build_field_matcher(fields: Vec<String>, is_regex: bool) -> Result<FieldMatch
         Ok(FieldMatcher::Regex(regexes))
     } else {
         Ok(FieldMatcher::Plain(fields))
+    }
+}
+
+/// pySigma's `SetValueTransformation` with `force_type`: `str` turns a string
+/// or number into a string, `num` parses it as a number.
+fn force_set_value_type(
+    raw: Option<&yaml_serde::Value>,
+    force_type: &yaml_serde::Value,
+) -> Result<SigmaValue> {
+    let text = match raw {
+        Some(yaml_serde::Value::String(s)) => s.clone(),
+        Some(yaml_serde::Value::Number(n)) => n.to_string(),
+        _ => {
+            return Err(EvalError::InvalidModifiers(
+                "set_value 'force_type' is only allowed for string and numeric values".to_string(),
+            ));
+        }
+    };
+    match force_type.as_str() {
+        Some("str") => Ok(SigmaValue::String(SigmaString::new(&text))),
+        Some("num") => {
+            let trimmed = text.trim();
+            if let Ok(int) = trimmed.parse::<i64>() {
+                Ok(SigmaValue::Integer(int))
+            } else if let Ok(float) = trimmed.parse::<f64>()
+                && float.is_finite()
+            {
+                Ok(SigmaValue::Float(float))
+            } else {
+                Err(EvalError::InvalidModifiers(format!(
+                    "set_value value '{text}' can't be converted to a number"
+                )))
+            }
+        }
+        _ => Err(EvalError::InvalidModifiers(format!(
+            "invalid set_value 'force_type' {force_type:?}; expected 'str' or 'num'"
+        ))),
+    }
+}
+
+fn parse_value_match(obj: &yaml_serde::Mapping) -> Result<ValueMatch> {
+    match obj.get(ykey("cond")) {
+        None => Ok(ValueMatch::Any),
+        Some(value) => match value.as_str() {
+            Some("any") => Ok(ValueMatch::Any),
+            Some("all") => Ok(ValueMatch::All),
+            _ => Err(EvalError::InvalidModifiers(format!(
+                "invalid detection item condition 'cond' value {value:?}; expected 'any' or 'all'"
+            ))),
+        },
     }
 }
 

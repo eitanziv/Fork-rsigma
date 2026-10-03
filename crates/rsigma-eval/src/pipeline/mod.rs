@@ -55,7 +55,7 @@ use crate::error::{EvalError, Result};
 pub use conditions::{
     ConditionOp, ConditionSet, DetectionItemCondition, FieldNameCondition,
     NamedDetectionItemCondition, NamedFieldNameCondition, NamedRuleCondition, RuleCondition,
-    StateOperator, eval_condition_expr,
+    StateOperator, ValueMatch, eval_condition_expr,
 };
 pub use finalizers::Finalizer;
 pub use parsing::{
@@ -113,25 +113,18 @@ impl Pipeline {
     /// Apply this pipeline to a single `SigmaRule`, mutating it in place.
     pub fn apply(&self, rule: &mut SigmaRule, state: &mut PipelineState) -> Result<()> {
         state.reset_rule();
+        state.track_detection_items = uses_detection_item_applied(&self.transformations);
 
         for item in &self.transformations {
-            // Check rule-level conditions
             if !self.check_rule_conditions(rule, state, item) {
                 continue;
             }
 
-            state.reset_detection_item();
+            state.current_item_id = item.id.clone();
+            let applied = item.apply_tracked(rule, state);
+            state.current_item_id = None;
 
-            // Apply the transformation
-            let applied = item.transformation.apply_with_condition_sets(
-                rule,
-                state,
-                &[&item.detection_item_conditions],
-                &[&item.field_name_conditions],
-            )?;
-
-            // Track application in state
-            if applied && let Some(ref id) = item.id {
+            if applied? && let Some(ref id) = item.id {
                 state.mark_applied(id);
             }
         }
@@ -191,21 +184,7 @@ impl Pipeline {
     ) -> Result<()> {
         state.reset_rule();
 
-        for item in &self.transformations {
-            if !self.check_correlation_conditions(corr, state, item) {
-                continue;
-            }
-
-            state.reset_detection_item();
-
-            let applied = apply_correlation_transformation(corr, &item.transformation, state)?;
-
-            if applied && let Some(ref id) = item.id {
-                state.mark_applied(id);
-            }
-        }
-
-        Ok(())
+        apply_correlation_items(corr, &self.transformations, state)
     }
 
     /// Returns `true` if this pipeline contains any `${source.*}` template
@@ -218,18 +197,56 @@ impl Pipeline {
     pub fn dynamic_references(&self) -> &[sources::SourceRef] {
         &self.source_refs
     }
+}
 
-    fn check_correlation_conditions(
-        &self,
-        corr: &CorrelationRule,
-        state: &PipelineState,
-        item: &TransformationItem,
-    ) -> bool {
-        item.rule_conditions.conditions.is_empty()
+/// Whether any item, including nested ones, has a detection-item
+/// `processing_item_applied` condition.
+fn uses_detection_item_applied(items: &[TransformationItem]) -> bool {
+    items.iter().any(|item| {
+        item.detection_item_conditions
+            .conditions
+            .iter()
+            .any(|named| {
+                matches!(
+                    named.condition,
+                    DetectionItemCondition::ProcessingItemApplied { .. }
+                )
+            })
+            || matches!(
+                &item.transformation,
+                Transformation::Nest { items } if uses_detection_item_applied(items)
+            )
+    })
+}
+
+fn apply_correlation_items(
+    corr: &mut CorrelationRule,
+    items: &[TransformationItem],
+    state: &mut PipelineState,
+) -> Result<()> {
+    for item in items {
+        let rule_ok = item.rule_conditions.conditions.is_empty()
             || item
                 .rule_conditions
-                .matches(|condition| condition.matches_correlation(corr, state))
+                .matches(|condition| condition.matches_correlation(corr, state));
+        if !rule_ok {
+            continue;
+        }
+
+        let outer_id = std::mem::replace(&mut state.current_item_id, item.id.clone());
+        let applied = apply_correlation_transformation(
+            corr,
+            &item.transformation,
+            state,
+            &item.field_name_conditions,
+        );
+        state.current_item_id = outer_id;
+
+        if applied? && let Some(ref id) = item.id {
+            state.mark_applied(id);
+        }
     }
+    Ok(())
 }
 
 /// Apply a single transformation to a correlation rule.
@@ -239,105 +256,49 @@ fn apply_correlation_transformation(
     corr: &mut CorrelationRule,
     transformation: &Transformation,
     state: &mut PipelineState,
+    field_name_conditions: &ConditionSet<FieldNameCondition>,
 ) -> Result<bool> {
     match transformation {
         Transformation::FieldNameMapping { mapping } => {
-            // Match pySigma's FieldMappingTransformationBase.apply() for
-            // correlation rules: group_by expands all alternatives, while
-            // aliases and threshold field reject one-to-many mappings.
-            let alias_names: std::collections::HashSet<String> =
-                corr.aliases.iter().map(|a| a.alias.clone()).collect();
-
-            // aliases: error if any mapping value has multiple alternatives
-            for alias in &mut corr.aliases {
-                for (rule_ref, field_name) in &mut alias.mapping {
-                    if let Some(alts) = mapping.get(field_name.as_str())
-                        && alts.len() > 1
-                    {
-                        return Err(EvalError::InvalidModifiers(format!(
-                            "field_name_mapping one-to-many cannot be applied to \
-                             correlation alias mapping (alias '{}', rule '{}', \
-                             field '{}' maps to {} alternatives)",
-                            alias.alias,
-                            rule_ref,
-                            field_name,
-                            alts.len(),
-                        )));
-                    } else if let Some(alts) = mapping.get(field_name.as_str()) {
-                        *field_name = alts[0].clone();
-                    }
-                }
-            }
-
-            // group_by: expand all alternatives (skip alias names)
-            corr.group_by = corr
-                .group_by
-                .iter()
-                .flat_map(|field_name| {
-                    if alias_names.contains(field_name.as_str()) {
-                        vec![field_name.clone()]
-                    } else if let Some(alts) = mapping.get(field_name.as_str()) {
-                        if alts.len() > 1 {
-                            log::warn!(
-                                "correlation '{}': group_by field '{}' has a one-to-many \
-                                 mapping ({} alternatives: {:?}); expanding all — \
-                                 correlation grouping may be broader than intended",
-                                corr.title,
-                                field_name,
-                                alts.len(),
-                                alts,
-                            );
-                        }
-                        alts.clone()
-                    } else {
-                        vec![field_name.clone()]
-                    }
-                })
-                .collect();
-
-            // threshold field: error if multiple alternatives
-            if let rsigma_parser::CorrelationCondition::Threshold { ref mut field, .. } =
-                corr.condition
-                && let Some(fields) = field.as_mut()
-            {
-                for f in fields.iter_mut() {
-                    if let Some(alts) = mapping.get(f.as_str()) {
-                        if alts.len() > 1 {
-                            return Err(EvalError::InvalidModifiers(format!(
-                                "field_name_mapping one-to-many cannot be applied to \
-                                 correlation condition field reference ('{}' maps to \
-                                 {} alternatives)",
-                                f,
-                                alts.len(),
-                            )));
-                        }
-                        *f = alts[0].clone();
-                    }
-                }
-            }
-
+            map_correlation_fields(corr, state, field_name_conditions, |name| {
+                mapping.get(name).cloned()
+            })?;
             Ok(true)
         }
 
         Transformation::FieldNamePrefixMapping { mapping } => {
-            remap_correlation_fields(corr, |name| {
-                for (prefix, replacement) in mapping {
-                    if let Some(rest) = name.strip_prefix(prefix.as_str()) {
-                        return Some(format!("{replacement}{rest}"));
-                    }
-                }
-                None
-            });
+            map_correlation_fields(corr, state, field_name_conditions, |name| {
+                mapping.iter().find_map(|(prefix, replacement)| {
+                    name.strip_prefix(prefix.as_str())
+                        .map(|rest| vec![format!("{replacement}{rest}")])
+                })
+            })?;
             Ok(true)
         }
 
         Transformation::FieldNamePrefix { prefix } => {
-            remap_correlation_fields(corr, |name| Some(format!("{prefix}{name}")));
+            map_correlation_fields(corr, state, field_name_conditions, |name| {
+                Some(vec![format!("{prefix}{name}")])
+            })?;
             Ok(true)
         }
 
         Transformation::FieldNameSuffix { suffix } => {
-            remap_correlation_fields(corr, |name| Some(format!("{name}{suffix}")));
+            map_correlation_fields(corr, state, field_name_conditions, |name| {
+                Some(vec![format!("{name}{suffix}")])
+            })?;
+            Ok(true)
+        }
+
+        Transformation::FieldNameTransform {
+            transform_func,
+            mapping,
+        } => {
+            map_correlation_fields(corr, state, field_name_conditions, |name| {
+                Some(vec![mapping.get(name).cloned().unwrap_or_else(|| {
+                    transformations::apply_named_string_fn(transform_func, name)
+                })])
+            })?;
             Ok(true)
         }
 
@@ -357,41 +318,117 @@ fn apply_correlation_transformation(
             corr.title
         ))),
 
+        Transformation::Nest { items } => {
+            apply_correlation_items(corr, items, state)?;
+            Ok(true)
+        }
+
         // Detection-specific transforms are no-ops for correlations
         _ => Ok(false),
     }
 }
 
-/// Apply a field name mapping function to all field references in a correlation rule:
-/// `group_by` entries, `aliases` mapping values, and the `condition` field.
-fn remap_correlation_fields(corr: &mut CorrelationRule, mapper: impl Fn(&str) -> Option<String>) {
-    for field in &mut corr.group_by {
-        if let Some(new_name) = mapper(field) {
-            *field = new_name;
+/// Rename the field names of a correlation rule like pySigma's
+/// `FieldMappingTransformationBase`: the `fields` list and `group_by` expand
+/// one-to-many mappings (`group_by` entries naming an alias are kept), while
+/// alias mappings and the threshold field reject them. Only names passing the
+/// field-name conditions are renamed.
+fn map_correlation_fields(
+    corr: &mut CorrelationRule,
+    state: &mut PipelineState,
+    field_name_conditions: &ConditionSet<FieldNameCondition>,
+    mapper: impl Fn(&str) -> Option<Vec<String>>,
+) -> Result<()> {
+    let mut renames = Vec::new();
+    let current: &PipelineState = state;
+    let rename = |name: &str| {
+        mapper(name).filter(|names| {
+            !names.is_empty()
+                && field_name_conditions
+                    .matches(|condition| condition.matches_field_name(name, current))
+        })
+    };
+
+    corr.fields = transformations::rename_field_list(
+        std::mem::take(&mut corr.fields),
+        current,
+        &[field_name_conditions],
+        &mapper,
+        &mut renames,
+    );
+
+    let alias_names: std::collections::HashSet<String> =
+        corr.aliases.iter().map(|a| a.alias.clone()).collect();
+    for alias in &mut corr.aliases {
+        for (rule_ref, field_name) in &mut alias.mapping {
+            let Some(names) = rename(field_name) else {
+                continue;
+            };
+            if names.len() > 1 {
+                return Err(EvalError::InvalidModifiers(format!(
+                    "field_name_mapping one-to-many cannot be applied to \
+                     correlation alias mapping (alias '{}', rule '{}', \
+                     field '{}' maps to {} alternatives)",
+                    alias.alias,
+                    rule_ref,
+                    field_name,
+                    names.len(),
+                )));
+            }
+            let renamed = names[0].clone();
+            renames.push((std::mem::replace(field_name, renamed), names));
         }
     }
 
-    for alias in &mut corr.aliases {
-        let remapped: HashMap<String, String> = alias
-            .mapping
-            .iter()
-            .map(|(rule_ref, field_name)| {
-                let new_name = mapper(field_name).unwrap_or_else(|| field_name.clone());
-                (rule_ref.clone(), new_name)
-            })
-            .collect();
-        alias.mapping = remapped;
+    let mut group_by = Vec::with_capacity(corr.group_by.len());
+    for field_name in std::mem::take(&mut corr.group_by) {
+        if alias_names.contains(&field_name) {
+            group_by.push(field_name);
+            continue;
+        }
+        let Some(names) = rename(&field_name) else {
+            group_by.push(field_name);
+            continue;
+        };
+        if names.len() > 1 {
+            log::warn!(
+                "correlation '{}': group_by field '{}' has a one-to-many \
+                 mapping ({} alternatives: {:?}); expanding all, so \
+                 correlation grouping may be broader than intended",
+                corr.title,
+                field_name,
+                names.len(),
+                names,
+            );
+        }
+        group_by.extend(names.iter().cloned());
+        renames.push((field_name, names));
     }
+    corr.group_by = group_by;
 
     if let rsigma_parser::CorrelationCondition::Threshold { ref mut field, .. } = corr.condition
         && let Some(fields) = field.as_mut()
     {
         for f in fields.iter_mut() {
-            if let Some(new_name) = mapper(f) {
-                *f = new_name;
+            let Some(names) = rename(f) else {
+                continue;
+            };
+            if names.len() > 1 {
+                return Err(EvalError::InvalidModifiers(format!(
+                    "field_name_mapping one-to-many cannot be applied to \
+                     correlation condition field reference ('{}' maps to \
+                     {} alternatives)",
+                    f,
+                    names.len(),
+                )));
             }
+            let renamed = names[0].clone();
+            renames.push((std::mem::replace(f, renamed), names));
         }
     }
+
+    state.track_field_renames(renames);
+    Ok(())
 }
 
 // =============================================================================

@@ -10,8 +10,8 @@ use std::collections::{HashMap, HashSet};
 use regex::Regex;
 
 use rsigma_parser::{
-    ConditionExpr, CorrelationRule, Detection, DetectionItem, LogSource, SigmaRule, SigmaValue,
-    parse_condition,
+    ConditionExpr, CorrelationRule, Detection, DetectionItem, LogSource, Modifier, SigmaRule,
+    SigmaString, SigmaValue, SpecialChar, StringPart, parse_condition,
 };
 
 use super::state::PipelineState;
@@ -136,13 +136,22 @@ pub enum StateOperator {
 impl StateOperator {
     fn matches(self, actual: &serde_json::Value, expected: &serde_json::Value) -> bool {
         match self {
-            StateOperator::Eq => actual == expected,
-            StateOperator::Ne => actual != expected,
+            StateOperator::Eq => state_values_equal(actual, expected),
+            StateOperator::Ne => !state_values_equal(actual, expected),
             StateOperator::Gte => compare_state_values(actual, expected).is_some_and(|o| o.is_ge()),
             StateOperator::Gt => compare_state_values(actual, expected).is_some_and(|o| o.is_gt()),
             StateOperator::Lte => compare_state_values(actual, expected).is_some_and(|o| o.is_le()),
             StateOperator::Lt => compare_state_values(actual, expected).is_some_and(|o| o.is_lt()),
         }
+    }
+}
+
+fn state_values_equal(actual: &serde_json::Value, expected: &serde_json::Value) -> bool {
+    match (actual, expected) {
+        (serde_json::Value::Number(_), serde_json::Value::Number(_)) => {
+            compare_state_values(actual, expected).is_some_and(|o| o.is_eq())
+        }
+        _ => actual == expected,
     }
 }
 
@@ -279,14 +288,39 @@ impl RuleCondition {
 // Detection Item Conditions
 // =============================================================================
 
+/// How a value condition combines its per-value results.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ValueMatch {
+    /// At least one value must match.
+    #[default]
+    Any,
+    /// Every value must match.
+    All,
+}
+
+impl ValueMatch {
+    fn combine(self, mut results: impl Iterator<Item = bool>) -> bool {
+        match self {
+            ValueMatch::Any => results.any(|matched| matched),
+            ValueMatch::All => results.all(|matched| matched),
+        }
+    }
+}
+
 /// A condition evaluated against individual detection item values.
 #[derive(Debug, Clone)]
 pub enum DetectionItemCondition {
-    /// String value matches a pre-compiled regex pattern.
-    MatchString { regex: Regex, negate: bool },
+    /// String values match a pre-compiled regex anchored at the start of the
+    /// value. `negate` inverts each value's result before `cond` combines
+    /// them; values that are not strings never match.
+    MatchString {
+        regex: Regex,
+        negate: bool,
+        cond: ValueMatch,
+    },
 
-    /// Detection item value is null.
-    IsNull { negate: bool },
+    /// Detection item values are null. `negate` inverts the combined result.
+    IsNull { negate: bool, cond: ValueMatch },
 
     /// A specific processing item was applied.
     ProcessingItemApplied { processing_item_id: String },
@@ -303,24 +337,30 @@ impl DetectionItemCondition {
     /// Check if this condition matches a detection item's values.
     pub fn matches_item(&self, item: &DetectionItem, state: &PipelineState) -> bool {
         match self {
-            DetectionItemCondition::MatchString { regex, negate } => {
-                let has_match = item.values.iter().any(|v| match v {
-                    SigmaValue::String(s) => {
-                        let plain = s.as_plain().unwrap_or_else(|| s.original.clone());
-                        regex.is_match(&plain)
-                    }
+            DetectionItemCondition::MatchString {
+                regex,
+                negate,
+                cond,
+            } => cond.combine(item.values.iter().map(|value| {
+                let matched = match value {
+                    SigmaValue::String(s) => string_value_text(item, s)
+                        .is_some_and(|text| matches_at_start(regex, &text)),
                     _ => false,
-                });
-                if *negate { !has_match } else { has_match }
-            }
+                };
+                matched != *negate
+            })),
 
-            DetectionItemCondition::IsNull { negate } => {
-                let has_null = item.values.iter().any(|v| matches!(v, SigmaValue::Null));
-                if *negate { !has_null } else { has_null }
+            DetectionItemCondition::IsNull { negate, cond } => {
+                let matched = cond.combine(
+                    item.values
+                        .iter()
+                        .map(|value| matches!(value, SigmaValue::Null)),
+                );
+                matched != *negate
             }
 
             DetectionItemCondition::ProcessingItemApplied { processing_item_id } => {
-                state.was_applied_to_detection_item(processing_item_id)
+                state.detection_item_was_processed_by(item, processing_item_id)
             }
 
             DetectionItemCondition::ProcessingState { key, val, op } => state
@@ -375,19 +415,42 @@ pub enum FieldNameCondition {
 impl FieldNameCondition {
     /// Check if this condition matches a field name.
     pub fn matches_field_name(&self, field_name: &str, state: &PipelineState) -> bool {
+        self.matches_field(Some(field_name), state)
+    }
+
+    /// Check if this condition matches an optional field name. Keyword
+    /// detection items have no field name: include conditions reject them
+    /// and exclude conditions accept them.
+    pub fn matches_field(&self, field_name: Option<&str>, state: &PipelineState) -> bool {
         match self {
-            FieldNameCondition::IncludeFields { matcher } => field_matches(field_name, matcher),
-
-            FieldNameCondition::ExcludeFields { matcher } => !field_matches(field_name, matcher),
-
-            FieldNameCondition::ProcessingItemApplied { processing_item_id } => {
-                state.was_applied(processing_item_id)
+            FieldNameCondition::IncludeFields { matcher } => {
+                field_name.is_some_and(|name| field_matches(name, matcher))
             }
+
+            FieldNameCondition::ExcludeFields { matcher } => {
+                !field_name.is_some_and(|name| field_matches(name, matcher))
+            }
+
+            FieldNameCondition::ProcessingItemApplied { processing_item_id } => field_name
+                .is_some_and(|name| state.field_was_processed_by(name, processing_item_id)),
 
             FieldNameCondition::ProcessingState { key, val, op } => state
                 .get_state(key)
                 .is_some_and(|actual| op.matches(actual, val)),
         }
+    }
+
+    /// Check if this condition matches a detection item: its field name, or
+    /// the target of any of its field references.
+    pub fn matches_detection_item(&self, item: &DetectionItem, state: &PipelineState) -> bool {
+        self.matches_field(item.field.name.as_deref(), state)
+            || (item.field.modifiers.contains(&Modifier::FieldRef)
+                && item.values.iter().any(|value| match value {
+                    SigmaValue::String(target) => target
+                        .as_plain()
+                        .is_some_and(|name| self.matches_field(Some(&name), state)),
+                    _ => false,
+                }))
     }
 }
 
@@ -594,8 +657,78 @@ fn rule_attribute_matches(rule: &SigmaRule, attribute: &str, value: &str) -> boo
 fn field_matches(field_name: &str, matcher: &FieldMatcher) -> bool {
     match matcher {
         FieldMatcher::Plain(fields) => fields.iter().any(|f| f == field_name),
-        FieldMatcher::Regex(regexes) => regexes.iter().any(|re| re.is_match(field_name)),
+        FieldMatcher::Regex(regexes) => regexes.iter().any(|re| matches_at_start(re, field_name)),
     }
+}
+
+/// Python `re.match` semantics: the leftmost match must begin at offset 0.
+fn matches_at_start(regex: &Regex, text: &str) -> bool {
+    regex.find(text).is_some_and(|m| m.start() == 0)
+}
+
+/// The text pySigma matches for a string value once the item's modifiers are
+/// applied: literal `*` and `?` escaped, wildcards bare, and `contains`,
+/// `startswith`, and `endswith` adding their wildcards. `None` when pySigma
+/// holds the value as a non-string type (field references, regular
+/// expressions, CIDR, comparisons, timestamp parts) or as an encoded string.
+fn string_value_text(item: &DetectionItem, s: &SigmaString) -> Option<String> {
+    let modifiers = &item.field.modifiers;
+    let non_string = modifiers.iter().any(|modifier| {
+        matches!(
+            modifier,
+            Modifier::FieldRef
+                | Modifier::Re
+                | Modifier::Cidr
+                | Modifier::Exists
+                | Modifier::Gt
+                | Modifier::Gte
+                | Modifier::Lt
+                | Modifier::Lte
+                | Modifier::Base64
+                | Modifier::Base64Offset
+                | Modifier::Wide
+                | Modifier::Utf16be
+                | Modifier::Utf16
+                | Modifier::WindAsh
+                | Modifier::Minute
+                | Modifier::Hour
+                | Modifier::Day
+                | Modifier::Week
+                | Modifier::Month
+                | Modifier::Year
+        )
+    });
+    if non_string {
+        return None;
+    }
+    let mut text: String = s
+        .parts
+        .iter()
+        .map(|part| match part {
+            StringPart::Plain(plain) => plain.replace('*', "\\*").replace('?', "\\?"),
+            StringPart::Special(SpecialChar::WildcardMulti) => "*".to_string(),
+            StringPart::Special(SpecialChar::WildcardSingle) => "?".to_string(),
+        })
+        .collect();
+    let starts_wild = matches!(
+        s.parts.first(),
+        Some(StringPart::Special(SpecialChar::WildcardMulti))
+    );
+    let ends_wild = matches!(
+        s.parts.last(),
+        Some(StringPart::Special(SpecialChar::WildcardMulti))
+    );
+    let contains = modifiers.contains(&Modifier::Contains);
+    let mut prefixed = false;
+    if (contains || modifiers.contains(&Modifier::EndsWith)) && !starts_wild {
+        text.insert(0, '*');
+        prefixed = true;
+    }
+    let ends_wild = ends_wild || (prefixed && s.parts.is_empty());
+    if (contains || modifiers.contains(&Modifier::StartsWith)) && !ends_wild {
+        text.push('*');
+    }
+    Some(text)
 }
 
 #[cfg(test)]
@@ -614,6 +747,28 @@ mod tests {
         assert!(eval_condition_expr("cond1 and not cond2", &results));
         assert!(eval_condition_expr("cond1 or cond2", &results));
         assert!(!eval_condition_expr("cond1 and cond2", &results));
+    }
+
+    #[test]
+    fn state_operators_at_boundaries() {
+        use serde_json::json;
+        let cases = [
+            (StateOperator::Eq, [false, true, false]),
+            (StateOperator::Ne, [true, false, true]),
+            (StateOperator::Gt, [false, false, true]),
+            (StateOperator::Gte, [false, true, true]),
+            (StateOperator::Lt, [true, false, false]),
+            (StateOperator::Lte, [true, true, false]),
+        ];
+        for (op, expected) in cases {
+            let actual =
+                [json!(4), json!(5.0), json!(6)].map(|value| op.matches(&value, &json!(5)));
+            assert_eq!(actual, expected, "{op:?}");
+        }
+        assert!(StateOperator::Eq.matches(&json!("a"), &json!("a")));
+        assert!(!StateOperator::Eq.matches(&json!("5"), &json!(5)));
+        assert!(StateOperator::Ne.matches(&json!("5"), &json!(5)));
+        assert!(!StateOperator::Gt.matches(&json!("6"), &json!(5)));
     }
 
     #[test]
