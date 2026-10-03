@@ -475,7 +475,8 @@ impl CorrelationEngine {
     /// detection engine. This lets a multi-engine router run detection in a
     /// per-schema engine and still feed every detection into one shared
     /// correlation store. Timestamp extraction and the `timestamp_fallback`
-    /// policy match `process_event`.
+    /// policy match `process_event`. Rule identity is recovered as in
+    /// [`process_with_detections`](Self::process_with_detections).
     pub fn correlate_detections(
         &mut self,
         event: &impl Event,
@@ -531,6 +532,12 @@ impl CorrelationEngine {
     /// Enables external parallelism: callers can run detection (via
     /// [`evaluate`](Self::evaluate)) in parallel, then feed results here
     /// sequentially for stateful correlation.
+    ///
+    /// A result carries its rule's `id` but not its `name`, so a detection
+    /// from a rule without an `id` is matched to its rule by title and feeds
+    /// no correlation when several such rules share that title.
+    /// [`process_event_at`](Self::process_event_at) and
+    /// [`process_batch`](Self::process_batch) keep the compiled identity.
     pub fn process_with_detections(
         &mut self,
         event: &impl Event,

@@ -34,7 +34,7 @@ serde_json = "1"   # only if you use the JsonEvent shim
 |------|---------|
 | `Engine` | Stateless detection engine. Holds compiled rules and (optionally) the pre-filter indexes. |
 | `CorrelationEngine` | Stateful engine that wraps `Engine` and adds the sliding-window correlation state. Use this when any rule in the collection is a correlation rule. |
-| `CorrelationConfig` | Limits on correlation state (`max_state_entries`, `max_event_buffer`). Default `100_000` and `10_000`. |
+| `CorrelationConfig` | Correlation engine settings: state limits (`max_state_entries`, default `100_000`; `max_group_entries`, default unbounded), timestamp extraction, suppression, post-fire action, event inclusion (`correlation_event_mode`, `max_correlation_events`, default `10`), and output. `emit_detections` defaults to `false`, so a rule referenced only by correlations without `generate: true` produces no standalone result; set it to `true` to emit every detection and correlation match. {{ added "unreleased" }} |
 | `Pipeline` | Parsed processing pipeline. Applied to rules at `add_collection` time, in priority order. |
 | `ConditionSet<T>` | One pipeline condition scope: identifier-keyed conditions, `and`/`or` linking, optional negation, and an optional expression. `TransformationItem` has one set each for rule, detection-item, and field-name conditions. {{ added "unreleased" }} |
 | `pipeline::parse_pipeline(&str) -> Result<Pipeline>` | Parse a pipeline YAML string. |
@@ -177,7 +177,9 @@ for raw in events {
 }
 ```
 
-`process_with_detections(event, Vec<EvaluationResult>)` is the lower-overhead variant for hot loops (pre-compute detections in parallel, feed sequentially to correlation). `CorrelationConfig` enforces `max_state_entries` (default 100,000) and the 10-deep correlation-chain limit; see [Security Hardening](../reference/security.md#input-size-and-depth-caps). A correlation whose `rules:` list other correlations (for example a `temporal` of two `event_count` rules) emits the parent result when the chain condition is met, the same way a temporal of detections does.
+`process_with_detections(event, Vec<EvaluationResult>, timestamp_secs)` is the lower-overhead variant for hot loops (pre-compute detections in parallel, feed sequentially to correlation). `CorrelationConfig` enforces `max_state_entries` (default 100,000) and the 10-deep correlation-chain limit; see [Security Hardening](../reference/security.md#input-size-and-depth-caps). A correlation whose `rules:` list other correlations (for example a `temporal` of two `event_count` rules) emits the parent result when the chain condition is met, the same way a temporal of detections does. The referenced child correlations update the parent's state but are output only when a referencing correlation has `generate: true` or `emit_detections` is on. {{ added "unreleased" }}
+
+An `EvaluationResult` carries the rule `id` but not its `name`, so `process_with_detections` and `correlate_detections` match a detection from a rule without an `id` to its rule by title. When two such rules share a title, neither feeds the correlations that reference it by `name`. Give those rules unique titles, or use `process_event`, `process_event_at`, or `process_batch`, which evaluate detections themselves and keep each compiled rule's `id` and `name`. {{ added "unreleased" }}
 
 `rule_draft::correlation::draft_correlation` accepts positive and negative `GroupedExemplar` collections, an optional flat baseline, and `CorrelationDraftConfig`. Each `TimedEvent` carries exactly one RFC3339 timestamp or Sigma offset plus a JSON event. The result contains paste-ready YAML, inferred grouping/order/window evidence, per-slot support, gap distributions, warnings, and the isolated verification matrix. Caller-supplied ids keep the library deterministic; command-line callers generate UUIDs.
 

@@ -130,7 +130,7 @@ Apply to correlation rules (`correlation:` block).
 | `missing_group_by` | `error` | none | `correlation:` has no `group-by:` (required once `type:` is set). |
 | `generate_not_boolean` | `error` | none | The `generate:` field is not a boolean. |
 | `correlation_only_references` | `info` | none | The correlation omits `generate: true`, so referenced rules, detections or correlations, produce no standalone output. {{ added "unreleased" }} |
-| `invalid_condition_operator` | `error` | none | A key in `correlation.condition` is not one of `gt`, `gte`, `lt`, `lte`, `eq`, `neq` (the `field` key is exempt). |
+| `invalid_condition_operator` | `error` | none | A key in `correlation.condition` is not one of `gt`, `gte`, `lt`, `lte`, `eq`, `neq` (the `field` and `percentile` keys are exempt). |
 
 ## Filter rules (9 IDs, 8 emitted)
 

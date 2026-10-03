@@ -50,7 +50,7 @@ This library is part of [rsigma].
 | `process_event(event: &Event)` | Evaluate + update correlation state (wall-clock time) |
 | `process_event_at(event, timestamp_secs)` | Evaluate + update state with explicit timestamp |
 | `evaluate(event: &Event)` | Run detection only (no correlation state update) |
-| `process_with_detections(event, detections, ts)` | Feed pre-computed detections into correlation state |
+| `process_with_detections(event, detections, ts)` | Feed pre-computed detections into correlation state. Rules without an `id` are matched by title, so name-only rules need unique titles here; `process_event_at` and `process_batch` keep the compiled identity |
 | `process_batch(events: &[&Event])` | Parallel detection + sequential correlation for a batch of events |
 | `evict_expired(now)` | Manually evict expired state entries |
 | `introspect()` / `introspect_filtered(id, group)` | Read-only `CorrelationStateSnapshot`: per correlation and group, the current aggregate vs threshold, window contents, last alert and remaining suppression, and seconds to eviction |
