@@ -14,6 +14,8 @@ rsigma rule validate [OPTIONS] <PATH>
 
 Walks a directory, parses every `*.yml`/`*.yaml` Sigma file with `rsigma-parser`, optionally applies one or more processing pipelines, and compiles each rule with the evaluator's compiler. Reports the counts on stdout (human summary by default). Pass `--output-format json|ndjson|table|csv|tsv` for a structured envelope or `PATH,STATUS,ERRORS` rows. Exits with code `2` if any rule fails to parse or compile. See [Output Formats](../../reference/output.md).
 
+Correlation references are checked as compile errors too. A correlation fails validation when it references a rule `id` or `name` that no detection or correlation rule carries. A reference that resolves to more than one rule also fails validation, which happens when rules share the referenced `id` or `name`, or when one rule's `name` equals another rule's `id`. {{ added "unreleased" }}
+
 This is the cheapest CI gate: no events are evaluated, just rules and pipelines. Wire it as the first step of every detection-as-code pipeline before [`rule lint`](lint.md) and [`engine eval`](../engine/eval.md) fixture tests.
 
 For narrative coverage see [Linting Rules](../../guide/linting-rules.md) and [CI/CD](../../guide/ci-cd.md).

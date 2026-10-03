@@ -207,7 +207,7 @@ The backend handles every aggregation type:
 | `temporal` | CTE: base detections matched in one `WITH combined_events AS (...)`, then a `SELECT <group-by>, COUNT(DISTINCT rule_name) AS distinct_rules FROM combined HAVING ... >= N`. |
 | `temporal_ordered` | Same CTE shape as `temporal`. Order among referenced rules is not enforced. |
 
-Non-temporal correlations that reference detection rules in the same collection auto-wrap the detection logic in `WITH combined_events AS (q1 UNION ALL q2 ...)`. Multi-table temporal correlations (where referenced detection rules target different tables via pipeline routing) generate `UNION ALL` CTEs with a `rule_name` discriminator column.
+Non-temporal correlations that reference detection rules in the same collection auto-wrap the detection logic in `WITH combined_events AS (q1 UNION ALL q2 ...)`. A non-temporal correlation that references another correlation, or a detection rule that failed to convert, fails to convert, because there is no detection query to embed. {{ added "unreleased" }} Multi-table temporal correlations (where referenced detection rules target different tables via pipeline routing) generate `UNION ALL` CTEs with a `rule_name` discriminator column.
 
 ### Window modes
 

@@ -117,11 +117,13 @@ rsigma engine eval -r rules/ --correlation-event-mode full --max-correlation-eve
 
 By default, a detection referenced by a correlation contributes to correlation state but does not produce a standalone result. Set top-level `generate: true` on a correlation when its referenced detections should also be standalone output, or pass `--emit-detections` to emit every detection match for that invocation. {{ added "unreleased" }}
 
+The same applies to a correlation referenced by another correlation. In a chain where a detection feeds a child correlation that feeds a parent correlation, only the parent produces a result; the child still updates the parent's state. `generate: true` on the parent also emits the child, and `--emit-detections` emits every detection and correlation match in the chain. {{ added "unreleased" }}
+
 | Flag | Purpose |
 |------|---------|
 | `--suppress 5m` | Suppress duplicate correlation alerts within the window. |
 | `--action <alert,reset>` | After a correlation fires: `alert` keeps state and can re-fire; `reset` clears the window. |
-| `--emit-detections` | Emit detection matches even when they only feed correlations. |
+| `--emit-detections` | Emit detection and correlation matches even when they only feed correlations. |
 | `--no-detections` | Deprecated compatibility flag. Correlation-only detections are already suppressed by default. |
 | `--correlation-event-mode <none,full,refs>` | Include contributing events: `none` (zero overhead), `full` (deflate-compressed bodies), `refs` (timestamp + ID only). |
 | `--max-correlation-events N` | Cap events stored per correlation window. Default 10. |

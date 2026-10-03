@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
 | `parse_condition` | Parse a Sigma condition expression to a parse-tree. |
 | `lint_rules` | Lint rules; findings carry lint rule id, severity, line, and fix availability. |
 | `validate_rules` | Parse + compile + correlation checks, optional pipelines and source resolution. |
-| `evaluate_events` | Evaluate JSON events against rules (detections and correlations). Correlation-only detection matches are suppressed unless `emit_detections` is true. |
+| `evaluate_events` | Evaluate JSON events against rules (detections and correlations). Matches of rules referenced by a correlation, detections and correlations alike, are suppressed unless `emit_detections` is true. |
 | `convert_rules` | Convert rules to backend queries (`postgres`/`lynxdb`/`fibratus` natively; any other target via an installed sigma-cli when the server runs with `--allow-sigma-cli`). |
 | `list_backends` | List conversion targets and their formats (plus installed sigma-cli targets when delegation is enabled). |
 | `list_fields` | List the event fields rules reference, with provenance. |

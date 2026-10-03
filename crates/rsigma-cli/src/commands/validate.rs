@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::PathBuf;
 use std::process;
 
@@ -224,6 +224,7 @@ pub(crate) fn cmd_validate(args: ValidateArgs, ctx: OutputCtx) {
 }
 
 fn validate_correlation_references(collection: &rsigma_parser::SigmaCollection) -> Vec<String> {
+    let mut errors = validate_reference_identities(collection);
     let mut known = HashSet::new();
     for rule in &collection.rules {
         known.extend(rule.id.iter().map(String::as_str));
@@ -234,22 +235,66 @@ fn validate_correlation_references(collection: &rsigma_parser::SigmaCollection) 
         known.extend(correlation.name.iter().map(String::as_str));
     }
 
-    collection
+    errors.extend(collection.correlations.iter().flat_map(|correlation| {
+        correlation
+            .rules
+            .iter()
+            .filter(|rule_ref| !known.contains(rule_ref.as_str()))
+            .map(|rule_ref| {
+                let identity = correlation
+                    .id
+                    .as_deref()
+                    .or(correlation.name.as_deref())
+                    .unwrap_or(&correlation.title);
+                format!("{identity}: unknown rule reference: {rule_ref}")
+            })
+    }));
+    errors
+}
+
+/// Report correlation references that resolve to more than one detection or
+/// correlation rule, through a duplicate id, a duplicate name, or a name that
+/// equals another rule's id.
+fn validate_reference_identities(collection: &rsigma_parser::SigmaCollection) -> Vec<String> {
+    let rules: Vec<(Option<&str>, Option<&str>, &str)> = collection
+        .rules
+        .iter()
+        .map(|rule| {
+            (
+                rule.id.as_deref(),
+                rule.name.as_deref(),
+                rule.title.as_str(),
+            )
+        })
+        .chain(collection.correlations.iter().map(|correlation| {
+            (
+                correlation.id.as_deref(),
+                correlation.name.as_deref(),
+                correlation.title.as_str(),
+            )
+        }))
+        .collect();
+
+    let referenced: BTreeSet<&str> = collection
         .correlations
         .iter()
-        .flat_map(|correlation| {
-            correlation
-                .rules
+        .flat_map(|correlation| correlation.rules.iter().map(String::as_str))
+        .collect();
+
+    referenced
+        .into_iter()
+        .filter_map(|rule_ref| {
+            let matches: Vec<String> = rules
                 .iter()
-                .filter(|rule_ref| !known.contains(rule_ref.as_str()))
-                .map(|rule_ref| {
-                    let identity = correlation
-                        .id
-                        .as_deref()
-                        .or(correlation.name.as_deref())
-                        .unwrap_or(&correlation.title);
-                    format!("{identity}: unknown rule reference: {rule_ref}")
-                })
+                .filter(|(id, name, _)| *id == Some(rule_ref) || *name == Some(rule_ref))
+                .map(|(_, _, title)| format!("'{title}'"))
+                .collect();
+            (matches.len() > 1).then(|| {
+                format!(
+                    "{rule_ref}: ambiguous rule reference matches {}",
+                    matches.join(", ")
+                )
+            })
         })
         .collect()
 }

@@ -1,0 +1,43 @@
+title: Failed Login
+name: failed_login
+logsource:
+    category: authentication
+    product: test
+detection:
+    selection:
+        EventType: login_failure
+    condition: selection
+---
+title: Successful Login
+name: successful_login
+logsource:
+    category: authentication
+    product: test
+detection:
+    selection:
+        EventType: login_success
+    condition: selection
+---
+title: Many Failed Logins
+name: many_failed_logins
+correlation:
+    type: event_count
+    rules:
+        - failed_login
+    group-by:
+        - User
+    timespan: 5m
+    condition:
+        gte: 5
+---
+title: Brute Force Then Login
+name: brute_force_then_login
+generate: true
+correlation:
+    type: temporal
+    rules:
+        - many_failed_logins
+        - successful_login
+    group-by:
+        - User
+    timespan: 1h

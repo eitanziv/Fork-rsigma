@@ -112,6 +112,71 @@ fn hygiene_corpus_replay_is_offline_fire_source() {
 }
 
 #[test]
+fn hygiene_corpus_replay_counts_correlation_referenced_rules() {
+    let rules = temp_file(
+        ".yml",
+        r#"
+title: Login Failure
+name: login_failure
+status: test
+logsource:
+    category: test
+    product: test
+detection:
+    selection:
+        EventType: login_failure
+    condition: selection
+level: low
+---
+title: Brute Force
+name: brute_force
+correlation:
+    type: event_count
+    rules:
+        - login_failure
+    group-by:
+        - User
+    timespan: 5m
+    condition:
+        gte: 2
+level: high
+"#,
+    );
+    let corpus = temp_file(
+        ".ndjson",
+        r#"{"EventType": "login_failure", "User": "admin", "@timestamp": "2025-01-01T00:00:01Z"}
+{"EventType": "login_failure", "User": "admin", "@timestamp": "2025-01-01T00:00:02Z"}
+"#,
+    );
+    let output = rsigma()
+        .args([
+            "rule",
+            "hygiene",
+            "-r",
+            rules.path().to_str().unwrap(),
+            "--corpus",
+            corpus.path().to_str().unwrap(),
+            "--output-format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let doc: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(doc["summary"]["metrics_source"], true);
+    let silent: Vec<&str> = doc["never_fired"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert!(!silent.contains(&"Login Failure"), "silent: {silent:?}");
+    assert!(!silent.contains(&"Brute Force"), "silent: {silent:?}");
+}
+
+#[test]
 fn hygiene_corpus_missing_path_is_config_error() {
     rsigma()
         .args([

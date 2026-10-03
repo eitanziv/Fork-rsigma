@@ -50,7 +50,7 @@ This library is part of [rsigma].
 | `process_event(event: &Event)` | Evaluate + update correlation state (wall-clock time) |
 | `process_event_at(event, timestamp_secs)` | Evaluate + update state with explicit timestamp |
 | `evaluate(event: &Event)` | Run detection only (no correlation state update) |
-| `process_with_detections(event, detections, ts)` | Feed pre-computed detections into correlation state |
+| `process_with_detections(event, detections, ts)` | Feed pre-computed detections into correlation state. Rules without an `id` are matched by title, so name-only rules need unique titles here; `process_event_at` and `process_batch` keep the compiled identity |
 | `process_batch(events: &[&Event])` | Parallel detection + sequential correlation for a batch of events |
 | `evict_expired(now)` | Manually evict expired state entries |
 | `introspect()` / `introspect_filtered(id, group)` | Read-only `CorrelationStateSnapshot`: per correlation and group, the current aggregate vs threshold, window contents, last alert and remaining suppression, and seconds to eviction |
@@ -243,14 +243,14 @@ Stateful processing with sliding time windows, group-by aggregation, and all 8 c
 | `max_group_entries` | `Option<usize>` | `None` | Cap on retained entries within a single group's window state; `None` = unbounded. Oldest entries dropped on overflow (session windows keep their span anchor) |
 | `suppress` | `Option<u64>` | `None` | Default suppression window in seconds |
 | `action_on_match` | `CorrelationAction` | `Alert` | `Alert` (keep state) or `Reset` (clear window state) |
-| `emit_detections` | `bool` | `false` | Whether to emit detection-level matches for correlation-only rules |
+| `emit_detections` | `bool` | `false` | Whether to emit matches for correlation-only rules, including correlations referenced by another correlation |
 | `correlation_event_mode` | `CorrelationEventMode` | `None` | `None`, `Full` (deflate-compressed), or `Refs` (timestamp + ID) |
 | `max_correlation_events` | `usize` | `10` | Max events stored per `(correlation, group_key)` window |
 
 ### Core Features
 
 - **Group-by partitioning**: composite keys with field aliasing across referenced rules
-- **Correlation chaining**: correlation results propagate to higher-level correlations and those parent firings are emitted (max depth: **10**, `MAX_CHAIN_DEPTH`)
+- **Correlation chaining**: correlation results propagate to higher-level correlations and those parent firings are emitted (max depth: **10**, `MAX_CHAIN_DEPTH`). A correlation referenced by another correlation follows the generate flag below, so by default only the top of a chain is output
 - **Temporal counting**: `temporal` and `temporal_ordered` thresholds count distinct referenced rules, so a rule listed twice in `rules` counts once
 - **Extended temporal conditions**: boolean expressions over rule references (e.g. `rule_a and rule_b and not rule_c`)
 - **Cycle detection**: DFS-based validation of the correlation reference graph at load time
@@ -259,7 +259,7 @@ Stateful processing with sliding time windows, group-by aggregation, and all 8 c
 
 - **Suppression**: per-correlation or global suppression windows to prevent alert floods. After a `(correlation, group_key)` fires, suppress re-alerts for the configured duration
 - **Action-on-fire**: `Alert` (keep state, re-fire on next match) or `Reset` (clear window state, require fresh threshold)
-- **Generate flag**: referenced detection output is suppressed by default; top-level `generate: true` on a correlation emits its referenced rules, and `emit_detections: true` emits every detection match
+- **Generate flag**: output of referenced detections and referenced correlations is suppressed by default; top-level `generate: true` on a correlation emits its referenced rules, and `emit_detections: true` emits every detection and correlation match
 
 ### Event Inclusion
 

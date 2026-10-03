@@ -149,7 +149,8 @@ daemon:
     # timestamp_fields: ["@timestamp"]
     # Behavior when no timestamp field is found: wallclock | skip
     timestamp_fallback: wallclock
-    # Emit detection output for rules referenced by correlations.
+    # Emit output for rules referenced by correlations, including
+    # correlations that feed another correlation.
     emit_detections: false
 
   state:

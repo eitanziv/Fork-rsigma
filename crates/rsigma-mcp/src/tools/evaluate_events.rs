@@ -41,7 +41,8 @@ pub struct EvaluateInput {
     /// Extra event field names to try for correlation timestamp extraction.
     #[serde(default)]
     pub timestamp_fields: Vec<String>,
-    /// Emit detection matches for rules referenced by correlations.
+    /// Emit matches for rules referenced by correlations, including
+    /// correlations that feed another correlation.
     #[serde(default)]
     pub emit_detections: bool,
     /// Inline enrichers config (YAML/JSON) applied to results before returning.
