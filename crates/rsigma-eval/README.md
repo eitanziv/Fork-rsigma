@@ -203,10 +203,10 @@ Contrasts false-positive events with required true-positive exemplars and emits 
 ### Filter Rule Behavior
 
 - Filters match `filter.rules` references by rule `id` or `name`. Matching by title remains as a deprecated compatibility fallback.
-- Selector patterns in filter conditions, including `1 of selection_*` and `all of them`, are scoped to the filter's own detection items after injection.
-- If the filter has a `logsource`, every dimension it specifies must match the target rule; omitted dimensions act as wildcards.
+- Selector patterns in filter conditions, including `1 of selection_*` and `all of them`, are scoped to the filter's own detection items after injection. As in a detection rule, `them` and patterns that do not start with `_` skip the filter's `_`-prefixed items.
+- If the filter has a `logsource`, each of `category`, `product`, and `service` that it specifies must match the target rule (case-insensitively); omitted fields act as wildcards, and custom logsource keys are not compared.
 - Empty `filter.rules` applies the filter to all rules.
-- Filter detections are added as `__filter_{counter}_{name}` (counter prevents key collisions when multiple filters share detection names); the condition is wrapped as `original AND filter condition`, so suppression filters must write the negation explicitly.
+- Filter detections are added as `__filter_{counter}_v_{name}`, or `__filter_{counter}_h_{name}` for `_`-prefixed names (the counter prevents key collisions when multiple filters share detection names); the condition is wrapped as `original AND filter condition`, so suppression filters must write the negation explicitly.
 
 ### Selector Pattern Matching
 

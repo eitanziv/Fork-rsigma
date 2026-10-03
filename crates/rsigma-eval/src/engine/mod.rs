@@ -35,7 +35,7 @@ use crate::rule_metadata::{RuleBundleMetadata, RuleMetadataLookup};
 use bloom_index::{BloomCache, FieldBloomIndex};
 
 use filters::{
-    filter_logsource_contains, logsource_compatible, logsource_matches,
+    filter_detection_key, filter_logsource_contains, logsource_compatible, logsource_matches,
     rewrite_condition_identifiers,
 };
 
@@ -572,18 +572,18 @@ impl Engine {
         };
 
         // Rewrite the filter's own condition expression with namespaced identifiers
-        // so that `selection` becomes `__filter_0_selection`, etc.
+        // so that `selection` becomes `__filter_0_v_selection`, etc.
         let rewritten_cond = if let Some(cond_expr) = filter.detection.conditions.first() {
             rewrite_condition_identifiers(cond_expr, fc)
         } else {
             // No explicit condition: AND all detections (legacy fallback)
             if filter_detections.len() == 1 {
-                ConditionExpr::Identifier(format!("__filter_{fc}_{}", filter_detections[0].0))
+                ConditionExpr::Identifier(filter_detection_key(fc, &filter_detections[0].0))
             } else {
                 ConditionExpr::And(
                     filter_detections
                         .iter()
-                        .map(|(name, _)| ConditionExpr::Identifier(format!("__filter_{fc}_{name}")))
+                        .map(|(name, _)| ConditionExpr::Identifier(filter_detection_key(fc, name)))
                         .collect(),
                 )
             }
@@ -623,7 +623,7 @@ impl Engine {
                 // Inject filter detections into the rule
                 for (name, compiled) in &filter_detections {
                     rule.detections
-                        .insert(format!("__filter_{fc}_{name}"), compiled.clone());
+                        .insert(filter_detection_key(fc, name), compiled.clone());
                 }
 
                 // Wrap each existing rule condition with the filter condition

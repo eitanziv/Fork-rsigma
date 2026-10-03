@@ -703,6 +703,84 @@ filter:
 }
 
 #[test]
+fn test_filter_suffix_pattern_does_not_select_bare_name() {
+    let yaml = r#"
+title: User Activity
+name: user_activity
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Exclude Bob
+filter:
+    rules: [user_activity]
+    main:
+        User: alice
+    sel_main:
+        User: bob
+    condition: not 1 of *_main
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = Engine::new();
+    engine.add_collection(&collection).unwrap();
+
+    let alice = json!({"EventID": 1, "User": "alice"});
+    assert_eq!(engine.evaluate(&JsonEvent::borrow(&alice)).len(), 1);
+
+    let bob = json!({"EventID": 1, "User": "bob"});
+    assert!(engine.evaluate(&JsonEvent::borrow(&bob)).is_empty());
+}
+
+#[test]
+fn test_filter_them_skips_underscore_detections() {
+    let yaml = r#"
+title: User Activity
+name: user_activity
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: Exclude Alice
+filter:
+    rules: [user_activity]
+    selection:
+        User: alice
+    _helper:
+        Host: never
+    condition: not all of them
+---
+title: Exclude Helper Host
+filter:
+    rules: [user_activity]
+    _helper:
+        Host: excluded
+    condition: not 1 of _*
+"#;
+    let collection = parse_sigma_yaml(yaml).unwrap();
+    let mut engine = Engine::new();
+    engine.add_collection(&collection).unwrap();
+
+    let alice = json!({"EventID": 1, "User": "alice"});
+    assert!(engine.evaluate(&JsonEvent::borrow(&alice)).is_empty());
+
+    let excluded_host = json!({"EventID": 1, "User": "bob", "Host": "excluded"});
+    assert!(
+        engine
+            .evaluate(&JsonEvent::borrow(&excluded_host))
+            .is_empty()
+    );
+
+    let bob = json!({"EventID": 1, "User": "bob"});
+    assert_eq!(engine.evaluate(&JsonEvent::borrow(&bob)).len(), 1);
+}
+
+#[test]
 fn test_filter_multiple_detections() {
     // Filter with multiple detection items (AND exclusion)
     let yaml = r#"

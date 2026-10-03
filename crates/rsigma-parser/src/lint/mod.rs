@@ -570,6 +570,9 @@ fn is_action_fragment(m: &yaml_serde::Mapping) -> bool {
 /// directory-global for directory linting.
 struct RuleIndex {
     majors: HashMap<String, u32>,
+    /// Detection-rule ids and names: the only stable identities a filter can
+    /// target, since filters never apply to correlation rules.
+    detection_identities: HashMap<String, u32>,
     detection_titles: HashMap<String, u32>,
     /// Whether the index covers the whole set being linted. Only then is an
     /// unresolved reference genuinely missing rather than living in a file
@@ -581,6 +584,7 @@ impl RuleIndex {
     fn new(complete: bool) -> Self {
         Self {
             majors: HashMap::new(),
+            detection_identities: HashMap::new(),
             detection_titles: HashMap::new(),
             complete,
         }
@@ -613,6 +617,9 @@ impl RuleIndex {
             for id_key in ["id", "name"] {
                 if let Some(v) = get_str(m, id_key) {
                     self.majors.insert(v.to_string(), major);
+                    if doc_type == DocType::Detection {
+                        self.detection_identities.insert(v.to_string(), major);
+                    }
                 }
             }
             if doc_type == DocType::Detection
@@ -692,7 +699,12 @@ fn lint_cross_references(docs: &[Value], index: &RuleIndex, warnings: &mut Vec<L
             .or_else(|| get_str(m, "name"))
             .unwrap_or("<rule>");
         for r in refs {
-            let mut target = index.majors.get(&r).copied();
+            let identities = if doc_type == DocType::Filter {
+                &index.detection_identities
+            } else {
+                &index.majors
+            };
+            let mut target = identities.get(&r).copied();
             if target.is_none()
                 && doc_type == DocType::Filter
                 && let Some(title_target) = index.detection_titles.get(&r).copied()
@@ -2236,6 +2248,79 @@ filter:
             &lint_yaml_str(yaml),
             LintRule::FilterReferenceByTitle
         ));
+    }
+
+    #[test]
+    fn filter_reference_by_name_wins_over_another_rules_title() {
+        let yaml = r#"
+title: Stable Target
+name: target
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 1
+    condition: selection
+---
+title: target
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 2
+    condition: selection
+---
+title: Filter by Name
+logsource:
+    category: test
+filter:
+    rules: [target]
+    selection:
+        User: admin
+    condition: not selection
+"#;
+        assert!(has_no_rule(
+            &lint_yaml_str(yaml),
+            LintRule::FilterReferenceByTitle
+        ));
+    }
+
+    #[test]
+    fn filter_reference_ignores_correlation_identities() {
+        let yaml = r#"
+title: brute_force
+logsource:
+    category: test
+detection:
+    selection:
+        EventID: 4625
+    condition: selection
+---
+title: Brute Force Correlation
+name: brute_force
+correlation:
+    type: event_count
+    rules: [brute_force]
+    group-by: [User]
+    timespan: 5m
+    condition:
+        gte: 10
+---
+title: Filter Brute Force
+logsource:
+    category: test
+filter:
+    rules: [brute_force]
+    selection:
+        User: admin
+    condition: not selection
+"#;
+        let warnings = lint_yaml_str(yaml);
+        let filter_title_refs = warnings
+            .iter()
+            .filter(|w| w.rule == LintRule::FilterReferenceByTitle)
+            .count();
+        assert_eq!(filter_title_refs, 1);
     }
 
     #[test]
