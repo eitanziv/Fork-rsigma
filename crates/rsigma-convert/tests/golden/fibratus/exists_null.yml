@@ -1,4 +1,6 @@
 title: Exists Null
+logsource:
+  category: test
 detection:
   s:
     ps.exe|exists: true

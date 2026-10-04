@@ -11,9 +11,10 @@ mod value;
 
 use std::collections::HashMap;
 
+use rsigma_parser::validate::{check_detection_item, check_regex, exists_flag};
 use rsigma_parser::{
-    ConditionExpr, CorrelationRule, Detection, DetectionItem, Detections, FilterRule, SigmaRule,
-    SigmaValue,
+    ConditionExpr, CorrelationRule, Detection, DetectionItem, Detections, FilterRule, Modifier,
+    SigmaParserError, SigmaRule, SigmaValue,
 };
 
 use crate::error::IrError;
@@ -23,7 +24,7 @@ use crate::{
 };
 
 use helpers::{Result, yaml_to_json_map};
-use mod_ctx::{ModCtx, validate_modifiers};
+use mod_ctx::ModCtx;
 use value::{lower_value, lower_value_keywords};
 
 /// Options controlling the lowering strictness.
@@ -161,29 +162,47 @@ pub fn lower_detection_item(item: &DetectionItem, opts: &LowerOptions) -> Result
     }
 
     let ctx = ModCtx::from_modifiers(&item.field.modifiers);
-    validate_modifiers(&ctx, &item.field.modifiers)?;
+    match check_detection_item(item) {
+        Ok(()) => {}
+        Err(SigmaParserError::InvalidModifiers(message)) => {
+            return Err(IrError::InvalidModifiers(message));
+        }
+        // The evaluator compiles regexes after lowering and preserves its
+        // established InvalidRegex error for ASTs rewritten after parsing.
+        Err(SigmaParserError::InvalidValue(_))
+            if item.field.modifiers.contains(&Modifier::Re)
+                && item.values.iter().any(
+                    |value| matches!(value, SigmaValue::String(s) if check_regex(&s.original).is_err()),
+                ) => {}
+        Err(SigmaParserError::InvalidValue(message))
+            if item.field.modifiers.iter().any(|modifier| {
+                matches!(
+                    modifier,
+                    Modifier::Gt | Modifier::Gte | Modifier::Lt | Modifier::Lte
+                )
+            }) =>
+        {
+            return Err(IrError::ExpectedNumeric(message));
+        }
+        Err(other) => return Err(IrError::IncompatibleValue(other.to_string())),
+    }
 
     if ctx.exists {
-        let expect = match item.values.first() {
-            Some(SigmaValue::Bool(b)) => *b,
-            Some(SigmaValue::String(s)) => match s.as_plain().as_deref() {
-                Some("true") | Some("yes") => true,
-                Some("false") | Some("no") => false,
-                _ => true,
-            },
-            _ => true,
-        };
+        if item.field.name.is_none() {
+            return Err(IrError::IncompatibleValue(
+                "|exists must be applied to a field".into(),
+            ));
+        }
+        let expect = match item.values.as_slice() {
+            [value] => exists_flag(value),
+            _ => None,
+        }
+        .ok_or_else(|| IrError::IncompatibleValue("|exists takes a single boolean value".into()))?;
         return Ok(IrDetectionItem {
             field: item.field.name.clone(),
             matcher: IrMatcher::Exists(expect),
             exists: Some(expect),
         });
-    }
-
-    if ctx.all && item.values.len() <= 1 {
-        return Err(IrError::InvalidModifiers(
-            "|all modifier requires more than one value".to_string(),
-        ));
     }
 
     // An empty value list is a null check, as in pySigma.

@@ -1,4 +1,6 @@
 title: And Or Not
+logsource:
+  category: test
 detection:
   sel_a:
     ps.name: cmd.exe

@@ -51,6 +51,8 @@ fn field_eq_string_default_case_insensitive() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.name: cmd.exe
@@ -67,6 +69,8 @@ fn field_eq_string_cased_modifier_uses_exact_equality() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.name|cased: Cmd.exe
@@ -81,6 +85,8 @@ fn field_eq_string_contains_uses_icontains() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.name|contains: cmd
@@ -95,6 +101,8 @@ fn field_eq_string_cased_modifier_switches_to_contains() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.name|contains|cased: Cmd
@@ -109,6 +117,8 @@ fn field_eq_string_startswith() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.name|startswith: cmd
@@ -123,6 +133,8 @@ fn field_eq_string_endswith() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.exe|endswith: '.exe'
@@ -141,6 +153,8 @@ fn wildcard_multi_lowers_to_imatches() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline: '*whoami*'
@@ -155,6 +169,8 @@ fn wildcard_single_lowers_to_imatches() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     file.name: 'a?c.exe'
@@ -169,6 +185,8 @@ fn wildcard_cased_lowers_to_matches() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     file.name|cased: '*Cmd*'
@@ -183,6 +201,8 @@ fn substring_operator_with_wildcard_lowers_to_imatches() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|startswith: 'net*user'
@@ -206,6 +226,8 @@ fn substring_list_with_wildcard_converts_per_value() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|startswith:
@@ -225,6 +247,8 @@ fn literal_star_stays_verbatim_outside_globs() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|contains: 'a\*b'
@@ -239,6 +263,8 @@ fn literal_star_in_glob_lowers_to_regex() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     file.name: 'a\*b?c*'
@@ -262,6 +288,8 @@ fn condition_and() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   a:
     ps.name: cmd.exe
@@ -281,6 +309,8 @@ fn condition_or() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   a:
     ps.name: cmd.exe
@@ -300,6 +330,8 @@ fn condition_not_uses_native_not() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   a:
     ps.name: cmd.exe
@@ -319,6 +351,8 @@ fn grouping_for_or_inside_and() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   a:
     ps.name: cmd.exe
@@ -349,6 +383,8 @@ fn multi_value_string_eq_collapses_to_iin() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.name:
@@ -367,6 +403,8 @@ fn multi_value_string_eq_with_wildcards_uses_imatches_list() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.name:
@@ -383,6 +421,8 @@ fn multi_value_contains_collapses_to_icontains_list() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|contains:
@@ -401,6 +441,8 @@ fn multi_value_exact_list_emits_iin_for_or() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   sel:
     ps.name:
@@ -417,6 +459,8 @@ fn multi_value_string_with_all_modifier_joins_with_and() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|contains|all:
@@ -440,6 +484,8 @@ fn field_eq_integer() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.pid: 4
@@ -454,6 +500,8 @@ fn field_eq_boolean() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.is_protected: true
@@ -470,6 +518,8 @@ fn field_eq_null_compares_to_empty_string() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.username: null
@@ -488,6 +538,8 @@ fn compare_gte() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     file.io.size|gte: 1024
@@ -502,6 +554,8 @@ fn compare_lt() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.handles|lt: 10
@@ -520,6 +574,8 @@ fn regex_lowers_to_function_call() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|re: 'power.*(shell|hell)\.dll'
@@ -542,6 +598,8 @@ fn regex_negated_uses_native_not() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|re: '^safe'
@@ -564,6 +622,8 @@ fn condition_or_inside_and_uses_explicit_grouping() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   a:
     ps.name: a.exe
@@ -584,6 +644,8 @@ detection:
 fn regex_rejects_lookarounds() {
     let yaml = r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|re: 'foo(?=bar)'
@@ -614,6 +676,8 @@ fn multi_value_re_collapses_to_single_regex_call() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|re:
@@ -630,6 +694,8 @@ fn regex_flags_render_inline() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|re|i|s:
@@ -653,6 +719,8 @@ fn multi_value_re_with_all_modifier_uses_and() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|re|all:
@@ -677,6 +745,8 @@ fn multi_value_cidr_collapses_to_single_call() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     net.dip|cidr:
@@ -701,6 +771,8 @@ fn cidr_lowers_to_function_call() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     net.dip|cidr: '10.0.0.0/8'
@@ -721,6 +793,8 @@ fn field_exists_true() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|exists: true
@@ -735,6 +809,8 @@ fn field_exists_false() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|exists: false
@@ -749,6 +825,8 @@ fn fieldref_renders_as_native_equality() {
     let q = convert(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.pid|fieldref: thread.pid
@@ -766,6 +844,8 @@ detection:
 fn keyword_returns_unsupported_keyword_error() {
     let yaml = r#"
 title: T
+logsource:
+  category: test
 detection:
   keywords:
     - whoami
@@ -797,6 +877,8 @@ id: 11111111-2222-3333-4444-555555555555
 description: Detect cmd.exe spawned by explorer.
 tags:
   - attack.execution
+logsource:
+  category: test
 detection:
   s:
     ps.name: cmd.exe
@@ -823,6 +905,8 @@ fn yaml_format_is_alias_of_default() {
     let backend = FibratusBackend::new();
     let yaml = r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.name: cmd.exe
@@ -839,12 +923,16 @@ detection:
 fn multi_doc_default_format_joins_with_separator() {
     let yaml = r#"
 title: First
+logsource:
+  category: test
 detection:
   s:
     ps.name: a.exe
   condition: s
 ---
 title: Second
+logsource:
+  category: test
 detection:
   s:
     ps.name: b.exe
@@ -1286,6 +1374,8 @@ fn option_case_sensitive_forces_bare_operators() {
     let q = convert_with(
         r#"
 title: T
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|contains: Whoami
@@ -1303,6 +1393,8 @@ fn nul_from_wide_is_rejected() {
         let yaml = format!(
             r#"
 title: Test
+logsource:
+  category: test
 detection:
   selection:
     ps.cmdline|wide|contains: {value}

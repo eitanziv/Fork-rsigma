@@ -2,7 +2,7 @@
 
 {{ added "0.12.0" }}
 
-Parse all Sigma rules in a directory (recursive) and report results.
+Parse a Sigma rule file, or all Sigma rules in a directory (recursive), and report results.
 
 ## Synopsis
 
@@ -12,7 +12,7 @@ rsigma rule validate [OPTIONS] <PATH>
 
 ## Description
 
-Walks a directory, parses every `*.yml`/`*.yaml` Sigma file with `rsigma-parser`, optionally applies one or more processing pipelines, and compiles each rule with the evaluator's compiler. Reports the counts on stdout (human summary by default). Pass `--output-format json|ndjson|table|csv|tsv` for a structured envelope or `PATH,STATUS,ERRORS` rows. Exits with code `2` if any rule fails to parse or compile. See [Output Formats](../../reference/output.md).
+Parses a single Sigma file, or walks a directory and parses every `*.yml`/`*.yaml` Sigma file, with `rsigma-parser`, optionally applies one or more processing pipelines, and compiles each rule with the evaluator's compiler. Reports the counts on stdout (human summary by default). Pass `--output-format json|ndjson|table|csv|tsv` for a structured envelope or `PATH,STATUS,ERRORS` rows. Exits with code `2` if any rule fails to parse or compile. See [Output Formats](../../reference/output.md).
 
 Correlation references are checked as compile errors too. A correlation fails validation when it references a rule `id` or `name` that no detection or correlation rule carries. A reference that resolves to more than one rule also fails validation, which happens when rules share the referenced `id` or `name`, or when one rule's `name` equals another rule's `id`. {{ added "unreleased" }}
 
@@ -24,7 +24,7 @@ For narrative coverage see [Linting Rules](../../guide/linting-rules.md) and [CI
 
 | Flag | Description |
 |------|-------------|
-| `<PATH>` | Path to a directory containing Sigma YAML files (recursive). |
+| `<PATH>` | A Sigma YAML file, or a directory searched recursively for Sigma YAML files. Single files are accepted. {{ added "unreleased" }} |
 | `-v, --verbose` | Show details for each file, not just the summary. |
 | `-p, --pipeline <PIPELINES>` | Processing pipeline(s) to apply. Builtin names (`ecs_windows`, `fibratus_windows`, `sysmon`) or YAML file paths. Repeatable. |
 | `--source <FILE_OR_DIR>` | External source file(s) or directory of source files. Repeatable. Same standalone `sources:` YAML shape as the daemon's `--source`. Required for meaningful `--resolve-sources` runs after the v1.0 removal of pipeline-embedded `sources:`. |
@@ -50,6 +50,16 @@ Parsed 24 documents from rules/
   Compiled OK:       24
   Compile errors:    0
 ```
+
+### Validate a single file
+
+{{ added "unreleased" }}
+
+```bash
+rsigma rule validate rules/windows/proc_creation_whoami.yml
+```
+
+A YAML syntax error in the file counts as a parse error and exits with code `2`, the same as a broken file inside a directory.
 
 ### Validate with a pipeline applied
 

@@ -1,4 +1,6 @@
 title: Evt Name
+logsource:
+  category: test
 detection:
   s:
     evt.name: CreateProcess

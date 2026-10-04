@@ -537,6 +537,8 @@ mod tests {
     fn cased_substring_rule_still_matches_under_ac() {
         let yaml = r#"
 title: Cased Substring
+logsource:
+    category: test
 detection:
     selection:
         CommandLine|contains|cased: 'PowerShell'
@@ -554,6 +556,8 @@ detection:
     fn non_ascii_cased_needle_is_not_prunable() {
         let yaml = r#"
 title: Cased Unicode
+logsource:
+    category: test
 detection:
     selection:
         User|contains|cased: 'Ärzte'
@@ -570,12 +574,16 @@ detection:
     fn non_string_field_values_still_match_under_ac() {
         let yaml = r#"
 title: Array Field
+logsource:
+    category: test
 detection:
     selection:
         Image|endswith: '\wmic.exe'
     condition: selection
 ---
 title: Numeric Field
+logsource:
+    category: test
 detection:
     selection:
         EventID|contains: '468'

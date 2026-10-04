@@ -165,13 +165,13 @@ rsigma rule parse rule.yml --pretty   # same (default)
 
 Note: pretty-print is on by default and cannot be disabled.
 
-### `rule validate`: Validate rules in a directory
+### `rule validate`: Validate a rule file or a directory of rules
 
-Parse and compile all rules in a directory, reporting errors.
+Parse and compile a rule file, or all rules in a directory, reporting errors.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|
-| `path` | positional | required | Path to a directory of Sigma YAML files |
+| `path` | positional | required | Sigma YAML file, or directory searched recursively for Sigma YAML files |
 | `--verbose` / `-v` | flag | `false` | Show details for each file (parse errors, compile errors) |
 | `--pipeline` / `-p` | repeatable | `[]` | Processing pipeline YAML file(s) to apply before compilation |
 | `--resolve-sources` | flag | `false` | Also resolve dynamic pipeline sources during validation. Sources must be reachable (file/command/HTTP) for validation to pass |
@@ -179,6 +179,7 @@ Parse and compile all rules in a directory, reporting errors.
 
 ```bash
 rsigma rule validate path/to/rules/ -v              # verbose output
+rsigma rule validate path/to/rule.yml               # validate a single file
 rsigma rule validate rules/ -p pipelines/ecs.yml    # validate with pipeline
 rsigma rule validate rules/ -p dynamic.yml --resolve-sources  # validate + test source resolution
 rsigma rule validate rules/ -p pipe.yml --source sources.yml --resolve-sources  # validate with external sources
@@ -186,7 +187,7 @@ rsigma rule validate rules/ -p pipe.yml --source sources.yml --resolve-sources  
 
 ### `rule lint`: Lint rules against the Sigma specification
 
-Run 85 built-in lint rules with optional JSON schema validation.
+Run 90 built-in lint rules with optional JSON schema validation.
 
 | Argument | Type | Default | Description |
 |----------|------|---------|-------------|

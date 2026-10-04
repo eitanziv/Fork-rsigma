@@ -50,6 +50,48 @@ fn validate_directory_with_errors() {
 }
 
 #[test]
+fn validate_single_file() {
+    let rule = temp_file(".yml", SIMPLE_RULE);
+    rsigma()
+        .args(["rule", "validate", rule.path().to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Detection rules:   1"))
+        .stdout(predicate::str::contains("Compiled OK:       1"));
+}
+
+#[test]
+fn validate_single_file_with_invalid_rule() {
+    let rule = temp_file(
+        ".yml",
+        &SIMPLE_RULE_WINDASH.replace("CommandLine|windash|contains", "CommandLine|gt"),
+    );
+    rsigma()
+        .args([
+            "rule",
+            "validate",
+            rule.path().to_str().unwrap(),
+            "--verbose",
+        ])
+        .assert()
+        .code(2)
+        .stdout(predicate::str::contains("Parse errors:      1"))
+        .stdout(predicate::str::contains("|gt"));
+}
+
+#[test]
+fn validate_single_file_with_yaml_syntax_error() {
+    let rule = temp_file(".yml", "title: [unclosed\n");
+    let path = rule.path().to_str().unwrap();
+    rsigma()
+        .args(["rule", "validate", path, "--verbose"])
+        .assert()
+        .code(2)
+        .stdout(predicate::str::contains("Parse errors:      1"))
+        .stdout(predicate::str::contains(path));
+}
+
+#[test]
 fn validate_nonexistent_directory() {
     rsigma()
         .args(["rule", "validate", "/tmp/nonexistent_rsigma_dir"])

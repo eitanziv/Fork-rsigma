@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::rule_from;
+use common::{rule_from, rule_with_condition};
 use rsigma_ir::lower::{LowerOptions, lower_rule};
 use rsigma_ir::{IrCondition, IrError, IrRuleMetadata};
 use rsigma_parser::{Quantifier, SelectorPattern};
@@ -32,16 +32,7 @@ fn expected_hir_stubs_are_well_formed() {
 
 #[test]
 fn lower_rejects_a_selector_over_zero_names() {
-    let rule = rule_from(
-        r#"
-title: Vacuous All Of Zero
-logsource: { category: test }
-detection:
-    filter_main:
-        Image: 'notepad.exe'
-    condition: all of selection_*
-"#,
-    );
+    let rule = rule_with_condition("all of selection_*");
     let err = lower_rule(&rule, &LowerOptions::default()).unwrap_err();
     assert!(
         matches!(&err, IrError::NoSelectorMatches(s) if s == "all of selection_*"),

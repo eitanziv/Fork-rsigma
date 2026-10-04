@@ -242,6 +242,9 @@ detection:
     condition: selection
 ---
 title: Exclude admins
+logsource:
+    category: process_creation
+    product: windows
 filter:
     rules: [whoami]
     selection:

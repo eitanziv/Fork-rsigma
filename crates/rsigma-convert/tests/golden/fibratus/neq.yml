@@ -1,4 +1,6 @@
 title: Neq
+logsource:
+  category: test
 detection:
   s:
     ps.name|neq: cmd.exe

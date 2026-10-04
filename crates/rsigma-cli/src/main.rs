@@ -215,7 +215,7 @@ enum RuleCommands {
     /// Parse a single Sigma YAML file and print the AST as JSON
     Parse(ParseArgs),
 
-    /// Parse all Sigma rules in a directory (recursive) and report results
+    /// Parse a Sigma rule file, or all rules in a directory (recursive), and report results
     Validate(ValidateArgs),
 
     /// Lint Sigma rules against the specification

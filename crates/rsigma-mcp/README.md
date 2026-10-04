@@ -70,7 +70,7 @@ Engineer-cycle tools always register. Operate-cycle tools appear in `tools/list`
 
 ## Resources
 
-Four read-only resources expose reference data: `rsigma://lint/catalogue` (the 90-rule lint catalogue), `rsigma://ads/schema` (the ADS section catalogue), `rsigma://reference/modifiers`, and `rsigma://reference/mitre-tactics`.
+Four read-only resources expose reference data: `rsigma://lint/catalogue` (91 entries: 90 emitted lint rules plus the reserved `empty_filter_rules` rule), `rsigma://ads/schema` (the ADS section catalogue), `rsigma://reference/modifiers`, and `rsigma://reference/mitre-tactics`.
 
 ## Design
 

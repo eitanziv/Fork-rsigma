@@ -1,4 +1,6 @@
 title: Numeric Compare
+logsource:
+  category: test
 detection:
   s:
     ps.sessionid|gt: 1000

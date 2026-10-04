@@ -81,7 +81,10 @@ TOOL_CALLS = [
     ("list_builtin_pipelines", {}),
     ("fix_rules", {"yaml": LINT_RULE}),
     ("author_ads", {"yaml": VALID_RULE}),
-    ("reverse_convert", {"query": "CommandLine:*whoami*", "title": "Smoke reverse"}),
+    (
+        "reverse_convert",
+        {"query": "CommandLine:*whoami*", "title": "Smoke reverse", "logsource_product": "windows"},
+    ),
     (
         "tune_rules",
         {

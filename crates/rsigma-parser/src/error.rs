@@ -48,6 +48,9 @@ pub enum SigmaParserError {
     #[error("Invalid field specification: {0}")]
     InvalidFieldSpec(String),
 
+    #[error("Invalid modifier combination: {0}")]
+    InvalidModifiers(String),
+
     #[error("Invalid rule: {0}")]
     InvalidRule(String),
 

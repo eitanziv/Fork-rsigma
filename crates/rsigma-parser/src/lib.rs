@@ -20,6 +20,10 @@
 //!   precedence (`NOT` > `AND` > `OR`) and Pratt parsing
 //! - **yaml_serde** for YAML structure deserialization
 //! - **Custom parsing** for field modifiers, wildcard strings, and timespan values
+//! - **Semantic validation** ([`validate`]) rejects invalid rules before lowering: a
+//!   missing or unusable logsource, conflicting modifiers, values of the wrong type
+//!   for their modifiers, invalid regular expressions and CIDR networks, empty
+//!   detections, and conditions that reference undefined detections
 //!
 //! ## Quick Start
 //!
@@ -63,6 +67,7 @@ pub mod lint;
 pub mod parser;
 pub mod reference;
 pub mod selector;
+pub mod validate;
 pub mod value;
 pub mod version;
 

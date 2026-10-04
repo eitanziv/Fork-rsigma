@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/timescale/rsigma/actions/workflows/ci.yml/badge.svg)](https://github.com/timescale/rsigma/actions/workflows/ci.yml)
 
-`rsigma-parser` is a parser for [Sigma](https://github.com/SigmaHQ/sigma) detection rules, correlations, and filters. It parses Sigma YAML into a strongly-typed AST covering the full Sigma 2.0 specification, and includes an 89-rule linter derived from the Sigma v2.1.0 spec.
+`rsigma-parser` is a parser for [Sigma](https://github.com/SigmaHQ/sigma) detection rules, correlations, and filters. It parses Sigma YAML into a strongly-typed AST covering the full Sigma 2.0 specification, and includes a 90-rule linter derived from the Sigma v2.1.0 spec.
 
 This library is part of [rsigma].
 
@@ -17,6 +17,18 @@ This library is part of [rsigma].
 | `parse_sigma_directory(dir: &Path)` | Recursively parse all `.yml`/`.yaml` files in a directory |
 | `parse_condition(input: &str)` | Parse a condition expression string into a `ConditionExpr` |
 | `parse_field_spec(key: &str)` | Parse a field specification like `"CommandLine\|contains\|all"` into a `FieldSpec` |
+
+### Validation
+
+The parser runs these checks on every detection item, and `rsigma-ir` reruns them when it lowers a rule that code or a processing pipeline may have rewritten.
+
+| Function | Description |
+|----------|-------------|
+| `validate::check_detection_item(item: &DetectionItem)` | Check modifiers, value types, regular expressions, CIDR networks, and `exists` values of one detection item |
+| `validate::check_modifiers(modifiers: &[Modifier])` | Reject conflicting modifiers, such as two operators or two UTF-16 encodings |
+| `validate::check_regex(pattern: &str)` | Reject an invalid regular expression; lookaround and backreferences are accepted, as in pySigma |
+| `validate::check_cidr(cidr: &str)` | Reject a CIDR network that is not `address/prefix` or has host bits set |
+| `validate::exists_flag(value: &SigmaValue)` | Return an `exists` value when it is a boolean, or `None` for every other type |
 
 ### Emitting
 
@@ -109,7 +121,8 @@ The auto-fix implementation is enabled by the default `fix` feature. Disable def
 - **Condition expressions**: PEG grammar (pest) with Pratt parsing and correct operator precedence (`NOT` > `AND` > `OR`). Supports `and`, `or`, `not`, `1 of`, `all of`, `any of`, `N of`, parenthesized groups, wildcard patterns — `them` excludes `_`-prefixed identifiers per spec
 - **Value types**: strings with wildcards (`*`, `?`), escape sequences (`\*`, `\?`, `\\`), integers, floats, booleans, null
 - **Timespan parsing**: `15s`, `30m`, `1h`, `7d`, `1w`, `1M`, `1y`
-- **Logsource**: `category`, `product`, `service`, `definition`, custom fields
+- **Logsource**: `category`, `product`, `service`, `definition`, custom fields. Detection and filter rules must have a `logsource` that sets at least one of `category`, `product`, or `service`.
+- **Semantic validation**: conflicting modifiers, values of the wrong type for their modifiers, invalid regular expressions and CIDR networks, empty detections, and conditions that reference undefined detections are parse errors, as in pySigma
 
 ### Multi-Document Behavior
 
@@ -285,9 +298,9 @@ filter:
 
 The string must be at least 2 characters (e.g. `1h`). The last character is the unit; the prefix must be a positive integer.
 
-## Linter (89 rules)
+## Linter (90 rules)
 
-89 emitted lint rules (plus the reserved `empty_filter_rules`) derived from the Sigma v2.1.0 specification, including the opt-in ADS detection-strategy checks. Four severity levels: **Error** (spec violation), **Warning** (best-practice issue), **Info** (soft suggestion), **Hint** (stylistic). Info/Hint findings don't cause lint failure.
+90 emitted lint rules (plus the reserved `empty_filter_rules`) derived from the Sigma v2.1.0 specification, including the opt-in ADS detection-strategy checks. Four severity levels: **Error** (spec violation), **Warning** (best-practice issue), **Info** (soft suggestion), **Hint** (stylistic). Info/Hint findings don't cause lint failure.
 
 The linter operates on raw YAML values to catch issues the parser silently ignores.
 
@@ -321,7 +334,7 @@ The linter operates on raw YAML values to catch issues the parser silently ignor
 | `taxonomy_too_long` | Warning | | `taxonomy` exceeds 256 characters |
 | `non_lowercase_key` | Warning | Yes | Top-level key is not lowercase |
 
-### Detection Rules (18)
+### Detection Rules (19)
 
 | Rule | Severity | Fix | Trigger |
 |------|----------|-----|---------|
@@ -343,6 +356,7 @@ The linter operates on raw YAML values to catch issues the parser silently ignor
 | `logsource_value_not_lowercase` | Warning | Yes | Logsource `category`/`product`/`service` not lowercase |
 | `condition_references_unknown` | Error | | Condition references non-existent detection identifier |
 | `deprecated_aggregation_syntax` | Warning | | Condition uses deprecated Sigma v1.x pipe-aggregation syntax (`\| count/min/max/avg/sum/near`); use a correlation rule instead |
+| `deprecated_detection_timeframe` | Warning | | `timeframe` inside `detection` is deprecated Sigma v1.x syntax and has no effect; use a correlation rule with a timespan instead |
 
 ### Correlation Rules (17)
 

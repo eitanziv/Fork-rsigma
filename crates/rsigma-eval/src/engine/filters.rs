@@ -376,6 +376,7 @@ detection:
     condition: selection
 ---
 title: Exclude admins
+logsource: { category: process_creation }
 filter:
     rules: [whoami]
     selection:

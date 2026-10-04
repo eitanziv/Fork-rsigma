@@ -6,6 +6,7 @@ use crate::ast::*;
 use crate::condition::parse_condition;
 use crate::error::{Result, SigmaParserError};
 use crate::fieldpath::{ends_with_unescaped, escape_brackets, first_unescaped};
+use crate::validate::{check_condition, check_detection, check_detection_item};
 use crate::value::SigmaValue;
 
 use super::{
@@ -44,11 +45,10 @@ pub(super) fn parse_detection_rule(value: &Value, warnings: &mut Vec<String>) ->
         crate::version::array_matching_enabled(sigma_version),
     )?;
 
-    let logsource = m
-        .get(val_key("logsource"))
-        .map(parse_logsource)
-        .transpose()?
-        .unwrap_or_default();
+    let logsource = parse_logsource(
+        m.get(val_key("logsource"))
+            .ok_or_else(|| SigmaParserError::MissingField("logsource".into()))?,
+    )?;
 
     // Custom attributes: merge arbitrary top-level keys and the entries of the
     // dedicated `custom_attributes:` mapping. Entries in `custom_attributes:`
@@ -129,6 +129,11 @@ pub(super) fn parse_detections(value: &Value, array_matching: bool) -> Result<De
     let condition_strings = match condition_val {
         Value::String(s) => vec![s.clone()],
         Value::Sequence(seq) => {
+            if seq.is_empty() {
+                return Err(SigmaParserError::InvalidDetection(
+                    "condition list must not be empty".into(),
+                ));
+            }
             let mut strings = Vec::with_capacity(seq.len());
             for v in seq {
                 match v.as_str() {
@@ -165,7 +170,14 @@ pub(super) fn parse_detections(value: &Value, array_matching: bool) -> Result<De
         if key_str == "condition" || key_str == "timeframe" {
             continue;
         }
-        named.insert(key_str.to_string(), parse_detection(val, array_matching)?);
+        let detection = parse_detection(val, array_matching)?;
+        check_detection(key_str, &detection)?;
+        named.insert(key_str.to_string(), detection);
+    }
+
+    let names: Vec<&str> = named.keys().map(String::as_str).collect();
+    for condition in &conditions {
+        check_condition(condition, &names)?;
     }
 
     Ok(Detections {
@@ -206,6 +218,11 @@ fn parse_detection(value: &Value, array_matching: bool) -> Result<Detection> {
             Ok(combine_entries(items, blocks))
         }
         Value::Sequence(seq) => {
+            if seq.iter().any(Value::is_sequence) {
+                return Err(SigmaParserError::InvalidDetection(
+                    "a detection list must not contain nested lists".into(),
+                ));
+            }
             // Check if all items are plain values (strings/numbers/etc.)
             let all_plain = seq.iter().all(|v| !v.is_mapping() && !v.is_sequence());
             if all_plain {
@@ -235,14 +252,26 @@ fn parse_detection(value: &Value, array_matching: bool) -> Result<Detection> {
 ///
 /// Reference: pySigma rule/detection.py SigmaDetectionItem.from_mapping
 fn parse_detection_item(key: &str, value: &Value) -> Result<DetectionItem> {
-    let field = parse_field_spec(key)?;
+    build_item(parse_field_spec(key)?, value)
+}
 
-    let values = match value {
-        Value::Sequence(seq) => seq.iter().map(|v| to_sigma_value(v, &field)).collect(),
-        _ => vec![to_sigma_value(value, &field)],
+/// Build and check a detection item from its field spec and a scalar or list
+/// value.
+fn build_item(field: FieldSpec, value: &Value) -> Result<DetectionItem> {
+    let scalars = match value {
+        Value::Sequence(seq) => seq.as_slice(),
+        _ => std::slice::from_ref(value),
     };
-
-    Ok(DetectionItem { field, values })
+    if scalars.iter().any(|v| v.is_sequence() || v.is_mapping()) {
+        let subject = field.name.as_deref().unwrap_or("keyword");
+        return Err(SigmaParserError::InvalidValue(format!(
+            "'{subject}' takes a value or a list of values, not a nested list or mapping"
+        )));
+    }
+    let values = scalars.iter().map(|v| to_sigma_value(v, &field)).collect();
+    let item = DetectionItem { field, values };
+    check_detection_item(&item)?;
+    Ok(item)
 }
 
 // =============================================================================
@@ -411,13 +440,8 @@ fn build_block_body(
             // `field[all]: value` (or a list) → match the array member itself.
             // Represented as a body item with no field name.
             _ => {
-                let modifiers = parse_modifiers(modifier_part)?;
-                let field = FieldSpec::new(None, modifiers);
-                let values = match value {
-                    Value::Sequence(seq) => seq.iter().map(|v| to_sigma_value(v, &field)).collect(),
-                    _ => vec![to_sigma_value(value, &field)],
-                };
-                Ok(Detection::AllOf(vec![DetectionItem { field, values }]))
+                let field = FieldSpec::new(None, parse_modifiers(modifier_part)?);
+                Ok(Detection::AllOf(vec![build_item(field, value)?]))
             }
         }
     } else if value.is_mapping() {
@@ -472,6 +496,11 @@ fn parse_block_condition(value: &Value) -> Result<ConditionExpr> {
     match value {
         Value::String(s) => parse_condition(s),
         Value::Sequence(seq) => {
+            if seq.is_empty() {
+                return Err(SigmaParserError::InvalidDetection(
+                    "array block 'condition' list must not be empty".into(),
+                ));
+            }
             let exprs = seq
                 .iter()
                 .map(|x| {

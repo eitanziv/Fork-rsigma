@@ -1070,7 +1070,7 @@ impl Backend for MandatoryPipelineTestBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rsigma_parser::parse_sigma_yaml;
+    use rsigma_parser::{Detection, SigmaString, SigmaValue, parse_sigma_yaml};
 
     fn convert_rule_yaml(yaml: &str) -> Vec<String> {
         let collection = parse_sigma_yaml(yaml).unwrap();
@@ -1668,6 +1668,25 @@ detection:
             .expect_err("rule should fail to convert")
     }
 
+    /// Convert a rule whose only detection item is replaced after parsing, as a
+    /// pipeline can, so the backend's own checks run on an item the parser never
+    /// validated.
+    fn convert_item_err(modifiers: &[&str], value: &str) -> ConvertError {
+        let mut collection = parse_sigma_yaml(
+            "title: Test\nlogsource:\n    category: test\ndetection:\n    selection:\n        Field: x\n    condition: selection\n",
+        )
+        .unwrap();
+        let rule = &mut collection.rules[0];
+        let Some(Detection::AllOf(items)) = rule.detection.named.get_mut("selection") else {
+            unreachable!("the selection is a single mapping");
+        };
+        items[0].field.modifiers = modifiers.iter().map(|m| m.parse().unwrap()).collect();
+        items[0].values = vec![SigmaValue::String(SigmaString::new(value))];
+        TextQueryTestBackend::new()
+            .convert_rule(rule, "default", &PipelineState::default())
+            .expect_err("rule should fail to convert")
+    }
+
     #[test]
     fn test_neq_modifier() {
         let queries = convert_rule_yaml(
@@ -1769,17 +1788,7 @@ detection:
 
     #[test]
     fn test_encoding_wildcard_with_base64_is_rejected() {
-        let err = convert_rule_yaml_err(
-            r#"
-title: Test
-logsource:
-    category: test
-detection:
-    selection:
-        Field|base64offset|contains: 'pay*load'
-    condition: selection
-"#,
-        );
+        let err = convert_item_err(&["base64offset", "contains"], "pay*load");
         assert!(
             matches!(&err, ConvertError::UnsupportedValue(_)),
             "got: {err}"
@@ -1788,24 +1797,13 @@ detection:
 
     #[test]
     fn test_values_pysigma_rejects_fail_conversion() {
-        for (detection, expected) in [
-            ("Ip|cidr: '10.1.2.3/8'", "host bits set"),
-            ("Count|gt: 'abc'", "abc"),
-            ("A|fieldref|cased: B", "fieldref|cased"),
+        for (modifiers, value, expected) in [
+            (&["cidr"][..], "10.1.2.3/8", "host bits set"),
+            (&["gt"][..], "abc", "abc"),
+            (&["fieldref", "cased"][..], "B", "fieldref|cased"),
         ] {
-            let yaml = format!(
-                r#"
-title: Test
-logsource:
-    category: test
-detection:
-    selection:
-        {detection}
-    condition: selection
-"#
-            );
-            let err = convert_rule_yaml_err(&yaml);
-            assert!(err.to_string().contains(expected), "{detection}: {err}");
+            let err = convert_item_err(modifiers, value);
+            assert!(err.to_string().contains(expected), "{modifiers:?}: {err}");
         }
     }
 
@@ -1864,11 +1862,9 @@ detection:
     }
 
     #[test]
-    fn test_cased_regex_is_rejected() {
-        let err = convert_rule_yaml_err(
-            "title: Test\nlogsource:\n    category: test\ndetection:\n    selection:\n        F|re|cased: 'ab.c'\n    condition: selection\n",
-        );
-        assert!(err.to_string().contains("re|cased"), "{err}");
+    fn test_cased_regex_is_rejected_on_a_rewritten_item() {
+        let err = convert_item_err(&["re", "cased"], "ab.c");
+        assert!(err.to_string().contains("got |re, |cased"), "{err}");
     }
 
     #[test]
@@ -1876,18 +1872,7 @@ detection:
         // `m` (multiline) and `s` (dotall) only have meaning alongside `re`;
         // outside that branch they would be silently dropped.
         for modifier in ["m", "s"] {
-            let yaml = format!(
-                r#"
-title: Test
-logsource:
-    category: test
-detection:
-    selection:
-        Field|{modifier}: anything
-    condition: selection
-"#
-            );
-            let err = convert_rule_yaml_err(&yaml);
+            let err = convert_item_err(&[modifier], "anything");
             assert!(
                 matches!(&err, ConvertError::UnsupportedModifier(_)),
                 "expected UnsupportedModifier for `{modifier}`, got: {err}",

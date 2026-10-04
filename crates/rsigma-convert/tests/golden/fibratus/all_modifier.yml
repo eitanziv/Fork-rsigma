@@ -1,4 +1,6 @@
 title: All Modifier
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|contains|all:

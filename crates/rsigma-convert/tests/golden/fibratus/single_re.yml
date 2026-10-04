@@ -1,4 +1,6 @@
 title: Single Re
+logsource:
+  category: test
 detection:
   s:
     ps.cmdline|re: 'foo.*bar'

@@ -1,4 +1,6 @@
 title: Encoding Modifiers
+logsource:
+  category: test
 detection:
   selection:
     ps.exe|endswith: '\certutil.exe'

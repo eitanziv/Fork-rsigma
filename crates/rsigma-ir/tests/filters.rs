@@ -23,6 +23,7 @@ detection:
     condition: selection
 ---
 title: Filter SYSTEM
+logsource: { category: test }
 filter:
     rules:
         - rule-001
@@ -53,6 +54,7 @@ detection:
 level: high
 ---
 title: Filter SYSTEM
+logsource: { category: test }
 filter:
     rules:
         - rule-001
@@ -89,6 +91,7 @@ detection:
     condition: sel
 ---
 title: Filter Out Test Env
+logsource: { category: test }
 filter:
     rules: any
     selection:

@@ -4,7 +4,7 @@ use std::process;
 
 use clap::Args;
 use rsigma_eval::Engine;
-use rsigma_parser::parse_sigma_directory;
+use rsigma_parser::{SigmaCollection, SigmaParserError, parse_sigma_directory, parse_sigma_file};
 use serde::Serialize;
 
 use crate::output::{OutputCtx, OutputFormat, Tabular, render_report};
@@ -12,7 +12,7 @@ use crate::output::{OutputCtx, OutputFormat, Tabular, render_report};
 /// Arguments for `rsigma rule validate` (and the deprecated `rsigma validate`).
 #[derive(Args, Debug)]
 pub(crate) struct ValidateArgs {
-    /// Path to a directory containing Sigma YAML files
+    /// Sigma YAML file, or directory searched recursively for .yml and .yaml files
     pub path: PathBuf,
 
     /// Show details for each file (not just summary)
@@ -92,7 +92,21 @@ pub(crate) fn cmd_validate(args: ValidateArgs, ctx: OutputCtx) {
         loaded
     };
 
-    match parse_sigma_directory(&path) {
+    let parsed = if path.is_dir() {
+        parse_sigma_directory(&path)
+    } else {
+        match parse_sigma_file(&path) {
+            Err(SigmaParserError::Io(e)) => Err(SigmaParserError::Io(e)),
+            Err(e) => {
+                let mut collection = SigmaCollection::new();
+                collection.errors.push(format!("{}: {e}", path.display()));
+                Ok(collection)
+            }
+            ok => ok,
+        }
+    };
+
+    match parsed {
         Ok(collection) => {
             let total = collection.len();
             let rules = collection.rules.len();

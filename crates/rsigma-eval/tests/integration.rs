@@ -405,6 +405,8 @@ detection:
     condition: sel
 ---
 title: Global Filter
+logsource:
+    product: windows
 filter:
     rules: []
     env_match:
@@ -412,6 +414,8 @@ filter:
     condition: not env_match
 ---
 title: Targeted Filter
+logsource:
+    product: windows
 filter:
     rules:
         - rule-a
@@ -456,6 +460,8 @@ detection:
     condition: sel
 ---
 title: Filter Env
+logsource:
+    product: test
 filter:
     rules:
         - rule-a
@@ -464,6 +470,8 @@ filter:
     condition: not selection
 ---
 title: Filter User
+logsource:
+    product: test
 filter:
     rules:
         - rule-a

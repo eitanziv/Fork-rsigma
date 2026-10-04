@@ -1,0 +1,35 @@
+title: Regex Lookaround
+logsource:
+    category: test
+detection:
+    sel:
+        CommandLine|re: '(?<!\\)cmd(?=\.exe)'
+        Image|re|i: '((((((((((a))))))))))+'
+    condition: sel
+---
+title: Values By Modifier
+logsource:
+    category: test
+detection:
+    sel:
+        Ip|cidr: 'fe80::/10'
+        Port|gte: '1024'
+        Present|exists: true
+        Name|fieldref|endswith: Other
+        Data|base64offset|contains: 'a\*b'
+    kw:
+        - foo
+        - 5
+    condition: sel or kw
+---
+title: Rejected
+logsource:
+    category: test
+detection:
+    sel:
+        A|contains|re: '(?<=a+)b'
+        B|cidr: 10.1.2.3/8
+        C|gt: abc
+        D|exists: maybe
+    empty: {}
+    condition: sel and 1 of missing_*

@@ -8,7 +8,7 @@ Author Sigma YAML with the sigma-rules skill. Use the steps below to check and r
 
 Prefer the MCP tool when `rsigma mcp serve` is connected. Otherwise use the CLI.
 
-1. **Draft.** Hand-authored YAML (sigma-rules), `rule draft` from exemplar events, or `reverse_convert` / `rule reverse` from a Lucene query. Call `parse_rule` (or `rule parse`) and stop if the structure is invalid.
+1. **Draft.** Hand-authored YAML (sigma-rules), `rule draft` from exemplar events, or `reverse_convert` / `rule reverse` from a Lucene query, which needs at least one logsource product, category, or service. Call `parse_rule` (or `rule parse`) and stop if the rule is invalid. Parse errors cover a missing logsource, conflicting modifiers, values of the wrong type, invalid regexes, and undefined detections, and each names the field.
 2. **Lint.** `lint_rules` or `rule lint`. Each finding has a rule id and a `fixable` flag. Apply a known-safe fix with `fix_rules` or `rule lint --fix`. Rewrite the rest by hand. Do not treat a count of checks as stable. The catalogue is the [linting guide](https://rsigma.io/guide/linting-rules/).
 3. **Evaluate.** `evaluate_events` or `engine eval` against a few positive and negative events. `match_detail` of `summary` or `full` explains why an event matched. When the events live on the rule as `rsigma.exemplars`, `test_exemplars` or `rule test` is the closed runner.
    Correlation inputs do not produce standalone output by default, including a correlation that feeds another correlation. Set top-level `generate: true` on the referencing correlation or pass `--emit-detections` when those matches are needed.

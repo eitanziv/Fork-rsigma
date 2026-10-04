@@ -14,10 +14,12 @@ default = ["fix"]
 fix = ["dep:yamlpatch", "dep:yamlpath"]
 
 [dependencies]
+fancy-regex = "0.19"
 globset = "0.4"
 log = "0.4"
 pest = "2"
 pest_derive = "2"
+regex-syntax = "0.8"
 serde = { version = "1", features = ["derive"] }
 yaml_serde = "0.10"
 yamlpath = { version = "1.27", optional = true }

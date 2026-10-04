@@ -341,6 +341,8 @@ mod tests {
             r#"
 title: Test Rule
 id: 12345678-1234-1234-1234-1234567890ab
+logsource:
+  category: test
 detection:
   selection:
     ps.name: cmd.exe
@@ -371,6 +373,8 @@ description: |
 tags:
   - attack.defense_evasion
   - attack.t1055
+logsource:
+  category: test
 detection:
   selection:
     ps.name: rundll32.exe
@@ -390,6 +394,8 @@ detection:
         let r = rule(
             r#"
 title: Drop me
+logsource:
+  category: test
 detection:
   selection:
     ps.name: malware.exe
@@ -407,6 +413,8 @@ detection:
         let r = rule(
             r#"
 title: Long
+logsource:
+  category: test
 detection:
   s:
     ps.name: a
@@ -458,6 +466,8 @@ title: Test
 description: ignore me
 tags:
   - attack.execution
+logsource:
+  category: test
 detection:
   selection:
     ps.name: x
@@ -480,6 +490,8 @@ detection:
             r#"
 title: Versioned
 id: 11111111-2222-3333-4444-555555555555
+logsource:
+  category: test
 detection:
   selection:
     ps.name: x
