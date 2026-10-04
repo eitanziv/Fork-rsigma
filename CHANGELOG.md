@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### The parser rejects rules pySigma rejects
+### The parser rejects rules pySigma rejects (#543)
 
 The parser now validates each rule's meaning as well as its structure, as pySigma does, so `rule parse`, `rule validate`, `engine eval`, the daemon, conversion, the LSP, and the MCP tools report a broken rule as a parse error that names the field instead of a compile error, or instead of accepting it. The new `rsigma_parser::validate` module holds the checks. A rule now fails to parse when:
 
