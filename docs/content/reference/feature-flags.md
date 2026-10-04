@@ -114,7 +114,7 @@ cargo test -p rsigma-cli --features daemon-nats
 
 ### CI coverage
 
-The repo's `ci.yml` runs `cargo check`, MSRV, `cargo clippy`, `cargo test`, `cargo doc`, and the coverage job against `--all-features`, plus the cross-platform `cargo test --all-features` matrix on Ubuntu, macOS, and Windows. A separate job builds `rsigma-parser` and `rsigma-eval` for `wasm32-unknown-unknown` with `--no-default-features` and then instantiates a linked module in a JavaScript-free runtime (Wasmtime). There is no general per-feature opt-in matrix: every other gated dependency listed above is built on every push, but no job exercises, for example, `daemon-nats` in isolation.
+The repo's `ci.yml` runs `cargo check` against the pinned MSRV, plus `cargo clippy`, `cargo test`, `cargo doc`, and the coverage job against `--all-features`, with a cross-platform `cargo test --all-features` matrix on Ubuntu, macOS, and Windows. A separate job builds `rsigma-parser` and `rsigma-eval` for `wasm32-unknown-unknown` with `--no-default-features` and then instantiates a linked module in a JavaScript-free runtime (Wasmtime). There is no general per-feature opt-in matrix: every other gated dependency listed above is built on every push, but no job exercises, for example, `daemon-nats` in isolation.
 
 If a feature combination matters to you (and especially if a build with `--no-default-features` or a single optional feature is part of your downstream pipeline) and CI does not currently exercise it, file an issue so a job can be added.
 
