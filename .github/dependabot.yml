@@ -33,15 +33,20 @@ updates:
     cooldown:
       default-days: 7
 
-  # Track base-image updates for the multi-stage Dockerfile. Pinned by
-  # digest in the manifest, so Dependabot will surface a PR whenever
-  # the upstream `rust:1-alpine` tag points at a new digest.
+  # Track digest updates for the MSRV-pinned builder image. Rust version
+  # changes are deliberate compatibility changes, not dependency updates.
   - package-ecosystem: docker
     directory: "/"
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: "rust"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
 
   # Base images, the pinned pySigma release, and the Fibratus module used by
   # the backend engine tests.

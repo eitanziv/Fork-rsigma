@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# Pin by digest for immutability. Update via Dependabot/Renovate.
-FROM rust:1-alpine@sha256:66f48b19d6e88519e2e58bebe0d945779a6a4ca41c2db17db78c9569655b50ac AS builder
+# Pin the workspace MSRV image by digest for immutability. Dependabot updates
+# the digest without changing the Rust version.
+FROM rust:1.96.0-alpine@sha256:f87aa870663e2b57ec8c69de82c7eedf7383bee987eef7612c0359635eaadb41 AS builder
 
 # build-base: jemalloc-sys compiles C for the musl global allocator.
 RUN apk add --no-cache musl-dev build-base
