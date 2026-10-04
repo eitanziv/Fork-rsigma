@@ -4,9 +4,9 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### The parser rejects rules pySigma rejects (#543)
+### The parser validates rule semantics before compilation (#543)
 
-The parser now validates each rule's meaning as well as its structure, as pySigma does, so `rule parse`, `rule validate`, `engine eval`, the daemon, conversion, the LSP, and the MCP tools report a broken rule as a parse error that names the field instead of a compile error, or instead of accepting it. The new `rsigma_parser::validate` module holds the checks. A rule now fails to parse when:
+The parser now validates each rule's meaning as well as its structure, moving pySigma-aligned checks earlier and requiring a usable logsource, so `rule parse`, `rule validate`, `engine eval`, the daemon, conversion, the LSP, and the MCP tools report a broken rule as a parse error that names the field instead of a compile error, or instead of accepting it. The new `rsigma_parser::validate` module holds the checks. A rule now fails to parse when:
 
 - its `logsource` is missing, or sets none of `category`, `product`, and `service`, or one of those keys or `definition` is not a string. Filter rules need a `logsource` as well, as the Sigma filter specification requires.
 - a field combines conflicting modifiers, such as two operators (`|gt|lt`), two UTF-16 encodings, `base64` with `base64offset`, or a string modifier before `fieldref`.
@@ -34,7 +34,7 @@ Every native backend now converts the encoding modifiers (`windash`, `wide`, `ut
 
 A `cidr` value with host bits set (`10.1.2.3/8`), or one that is not `address/prefix`, is now rejected when the rule is lowered, so evaluation and every backend refuse it as pySigma does instead of converting it. Library users of `rsigma-eval` see `EvalError::IncompatibleValue` for such values instead of `EvalError::InvalidCidr`. The `test` backend rejects `|fieldref|cased` with `UnsupportedModifier` instead of dropping `cased`.
 
-Regex flags now reach every backend. A plain `re` converts to PostgreSQL's case-sensitive `~` instead of `~*`, as the Sigma specification requires, and `|i` selects `~*`. `|m` adds PostgreSQL's `(?w)` embedded option, joining a leading `(?i)` group because PostgreSQL reads only one, so `^` and `$` match at line breaks. The `test`, LynxDB, and Fibratus backends prepend the `i`, `m`, and `s` flags as an inline group such as `(?i)`, which they previously dropped, and the `test` backend rejects `re|cased` as pySigma does. The new `RegexFlags::inline_prefix` renders the group for custom backends.
+Regex flags now reach every backend. A plain `re` converts to PostgreSQL's case-sensitive `~` instead of `~*`, as the Sigma specification requires, and `|i` selects `~*`. `|m` adds PostgreSQL's `(?w)` embedded option, joining a leading `(?i)` group because PostgreSQL reads only one, so `^` and `$` match at line breaks. The `test`, LynxDB, and Fibratus backends prepend the `i`, `m`, and `s` flags as an inline group such as `(?i)`, which they previously dropped, and the parser rejects `re|cased` as pySigma does. The new `RegexFlags::inline_prefix` renders the group for custom backends.
 
 PostgreSQL plain equality is now case-insensitive, as Sigma requires: `User: admin` renders as `"User" ILIKE 'admin'` with `%`, `_`, and `\` escaped, and only `|cased` keeps `=`. Previously `=` missed `ADMIN`. A value without letters, such as `EventID: '4624'`, still renders as `=`, which matches the same rows and works on a non-text column; a value with letters needs a text column.
 

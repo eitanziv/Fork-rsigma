@@ -131,7 +131,7 @@ Bounds: `MAX_CONDITION_LEN = 64 KiB`, `MAX_CONDITION_DEPTH = 64`. See [Security 
 
 {{ added "unreleased" }}
 
-The parser rejects rules that pySigma rejects, not only rules whose structure is wrong. A detection or filter rule fails to parse when its `logsource` is missing or sets none of `category`, `product`, and `service`, when a field combines conflicting modifiers (`|gt|lt`), when a value has the wrong type for its modifiers (a number under `contains`, a word under `gt`), when a `re` or `cidr` value is invalid, when a named detection is empty, or when the condition references a detection that does not exist. Each error is collected per document in `SigmaCollection::errors` and names the field.
+The parser validates rule semantics, not only structure. A detection or filter rule fails to parse when its `logsource` is missing or sets none of `category`, `product`, and `service`, when a field combines conflicting modifiers (`|gt|lt`), when a value has the wrong type for its modifiers (a number under `contains`, a word under `gt`), when a `re` or `cidr` value is invalid, when a named detection is empty, or when the condition references a detection that does not exist. Each error is collected per document in `SigmaCollection::errors` and names the field. The modifier, value, detection, and condition checks follow pySigma; the usable-logsource requirement is stricter than pySigma's parser, which accepts an empty `logsource` mapping.
 
 The checks live in the `validate` module. `rsigma-ir` reruns `check_modifiers` and `check_cidr` when it lowers a rule, so detection items a processing pipeline rewrites after parsing are checked too.
 

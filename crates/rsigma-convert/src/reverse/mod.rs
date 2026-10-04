@@ -227,7 +227,10 @@ pub fn reverse_collection(
 }
 
 fn convert_one(frontend: &dyn Frontend, query: &str, ctx: &ReverseCtx) -> Result<ReverseResult> {
-    if ctx.category.is_none() && ctx.product.is_none() && ctx.service.is_none() {
+    if [&ctx.category, &ctx.product, &ctx.service]
+        .into_iter()
+        .all(|value| value.as_deref().is_none_or(str::is_empty))
+    {
         return Err(ConvertError::RuleConversion(
             "a Sigma rule needs a logsource; set a product, category, or service".into(),
         ));
@@ -830,12 +833,20 @@ mod tests {
 
     #[test]
     fn requires_a_logsource() {
-        let ctx = ReverseCtx {
-            title: Some("T".into()),
-            ..Default::default()
-        };
-        let err = convert_one(&LuceneFrontend, "EventID:1", &ctx).unwrap_err();
-        assert!(err.to_string().contains("needs a logsource"), "{err}");
+        for ctx in [
+            ReverseCtx {
+                title: Some("T".into()),
+                ..Default::default()
+            },
+            ReverseCtx {
+                title: Some("T".into()),
+                product: Some(String::new()),
+                ..Default::default()
+            },
+        ] {
+            let err = convert_one(&LuceneFrontend, "EventID:1", &ctx).unwrap_err();
+            assert!(err.to_string().contains("needs a logsource"), "{err}");
+        }
     }
 
     #[test]

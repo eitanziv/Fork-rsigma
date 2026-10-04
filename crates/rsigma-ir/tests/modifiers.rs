@@ -181,6 +181,16 @@ fn lowering_rejects_contradictions_on_rewritten_items() {
     }
 }
 
+#[test]
+fn lowering_rejects_non_boolean_exists_on_a_rewritten_item() {
+    let rule = rule_with_item(&["exists"], "yes");
+    let err = rsigma_ir::lower_rule(&rule, &rsigma_ir::LowerOptions::default());
+    assert!(
+        matches!(err, Err(rsigma_ir::IrError::IncompatibleValue(_))),
+        "{err:?}"
+    );
+}
+
 // =============================================================================
 // Accepted modifier combinations with match oracles
 // =============================================================================

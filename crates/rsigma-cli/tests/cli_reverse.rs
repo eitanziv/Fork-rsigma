@@ -6,16 +6,20 @@ use common::rsigma;
 
 #[test]
 fn reverse_requires_a_logsource() {
-    let out = rsigma()
-        .args(["rule", "reverse", "--from", "lucene", "EventID:1"])
-        .output()
-        .unwrap();
-    assert_eq!(out.status.code(), Some(3));
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("needs a logsource; pass --logsource-product"),
-        "{stderr}"
-    );
+    for extra in [None, Some("--logsource-product")] {
+        let mut cmd = rsigma();
+        cmd.args(["rule", "reverse", "--from", "lucene", "EventID:1"]);
+        if let Some(flag) = extra {
+            cmd.args([flag, ""]);
+        }
+        let out = cmd.output().unwrap();
+        assert_eq!(out.status.code(), Some(3));
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("needs a logsource; pass --logsource-product"),
+            "{stderr}"
+        );
+    }
 }
 
 #[test]

@@ -1,5 +1,5 @@
-//! Rules the parser rejects because pySigma rejects them, and the nearby valid
-//! forms it must keep accepting.
+//! Invalid rule semantics the parser rejects, and the nearby valid forms it
+//! must keep accepting.
 
 use rsigma_parser::parse_sigma_yaml;
 
@@ -99,6 +99,11 @@ fn rejects_conflicting_modifiers() {
         ),
         ("F|contains|re: x", "got |contains, |re"),
         ("F|contains|cidr: 10.0.0.0/8", "got |contains, |cidr"),
+        ("F|re|cased: x", "got |re, |cased"),
+        ("F|cidr|cased: 10.0.0.0/8", "got |cidr, |cased"),
+        ("F|exists|cased: true", "got |exists, |cased"),
+        ("F|gt|cased: 5", "got |gt, |cased"),
+        ("F|minute|cased: 5", "got |minute, |cased"),
         ("F|i: x", "have no effect without |re"),
         ("F|contains|m: x", "|m have no effect without |re"),
         ("F|contains|fieldref: G", "|contains must follow |fieldref"),
@@ -171,6 +176,7 @@ fn accepts_valid_neighbors() {
         "F|exists: false",
         "F|contains|all: [a, b]",
         "F|fieldref|contains: G",
+        "F|fieldref|cased: G",
         "F|cased: abc",
         "F|base64: 'a\\*b'",
         "F|wide|base64: 'é'",
@@ -222,6 +228,10 @@ fn requires_a_logsource() {
         ),
         (
             "logsource:\n    definition: d\n",
+            "at least one of category, product, or service",
+        ),
+        (
+            "logsource:\n    category: ''\n",
             "at least one of category, product, or service",
         ),
         (

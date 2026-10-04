@@ -280,7 +280,7 @@ pub(super) fn parse_logsource(value: &Value) -> Result<LogSource> {
     }
     if ["category", "product", "service"]
         .iter()
-        .all(|key| get_str(m, key).is_none())
+        .all(|key| get_str(m, key).is_none_or(str::is_empty))
     {
         return Err(SigmaParserError::InvalidRule(
             "logsource must set at least one of category, product, or service".into(),

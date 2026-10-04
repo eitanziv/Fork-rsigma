@@ -158,12 +158,14 @@ mod tests {
     }
 
     #[test]
-    fn missing_logsource_reports_error_envelope() {
-        let mut i = input("EventID:1");
-        i.logsource_product = None;
-        let v = handler().run_reverse_convert(i).unwrap();
-        assert_eq!(v["ok"], false, "envelope: {v}");
-        assert!(v["error"].as_str().unwrap().contains("logsource"), "{v}");
+    fn missing_or_empty_logsource_reports_error_envelope() {
+        for product in [None, Some(String::new())] {
+            let mut i = input("EventID:1");
+            i.logsource_product = product;
+            let v = handler().run_reverse_convert(i).unwrap();
+            assert_eq!(v["ok"], false, "envelope: {v}");
+            assert!(v["error"].as_str().unwrap().contains("logsource"), "{v}");
+        }
     }
 
     #[test]

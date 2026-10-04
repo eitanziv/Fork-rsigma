@@ -242,8 +242,10 @@ note "rule draft / reverse / migrate"
 check "draft yaml warn" 'not supported by `rule draft`' rule draft -e @"$EVENTS" --output-format csv
 check "draft report csv" '^SELECTED,FIELD,SCORE,STABILITY,MODIFIER,VALUES,BASELINE' \
   rule draft -e @"$EVENTS" --emit report --output-format csv
-check "reverse yaml warn" 'not supported by `rule reverse`' rule reverse --from lucene 'EventID:1' --output-format csv
-check "reverse yaml keep" 'title:|detection:' rule reverse --from lucene 'EventID:1' --output-format csv --quiet
+check "reverse yaml warn" 'not supported by `rule reverse`' \
+  rule reverse --from lucene 'EventID:1' --logsource-product windows --output-format csv
+check "reverse yaml keep" 'title:|detection:' \
+  rule reverse --from lucene 'EventID:1' --logsource-product windows --output-format csv --quiet
 check "migrate warn" 'not supported by `rule migrate-sources`' \
   rule migrate-sources -p "$MIGPIPE" -o "$TMP/out-sources.yml" --dry-run --output-format csv
 

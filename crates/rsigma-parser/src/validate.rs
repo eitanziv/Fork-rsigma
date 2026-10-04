@@ -83,6 +83,9 @@ pub fn check_modifiers(modifiers: &[Modifier]) -> std::result::Result<(), String
             .filter(|m| TIMESTAMP_PARTS.contains(m))
             .map(|m| modifier_str(*m)),
     );
+    if has(Cased) && (has(Re) || has(Cidr) || has(Exists) || numeric || timestamp) {
+        operators.push("cased");
+    }
     if has(FieldRef)
         && !fieldref_conflicts
         && let Some(name) = string_operator_before_fieldref(modifiers)
@@ -203,19 +206,13 @@ pub fn check_regex(pattern: &str) -> std::result::Result<(), String> {
 }
 
 /// The boolean an `|exists` value stands for.
-///
-/// The parser accepts only YAML booleans. This also reads the strings `true`,
-/// `yes`, `false`, and `no`, which a processing pipeline may write into an
-/// `|exists` item after parsing.
 pub fn exists_flag(value: &SigmaValue) -> Option<bool> {
     match value {
         SigmaValue::Bool(b) => Some(*b),
-        SigmaValue::String(s) => match s.original.as_str() {
-            "true" | "yes" => Some(true),
-            "false" | "no" => Some(false),
-            _ => None,
-        },
-        _ => None,
+        SigmaValue::String(_)
+        | SigmaValue::Integer(_)
+        | SigmaValue::Float(_)
+        | SigmaValue::Null => None,
     }
 }
 
@@ -288,7 +285,7 @@ pub fn check_detection_item(item: &DetectionItem) -> Result<()> {
                 .map_err(|e| invalid(format!("invalid regular expression: {e}")))?;
         }
         if has(Cidr) {
-            check_cidr(&s.as_plain().unwrap_or_else(|| s.original.clone())).map_err(&invalid)?;
+            check_cidr(&s.as_plain().unwrap_or_else(|| s.original.clone())).map_err(invalid)?;
         }
         if has(FieldRef) && s.contains_wildcards() {
             return Err(invalid(

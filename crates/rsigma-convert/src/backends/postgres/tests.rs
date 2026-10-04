@@ -285,7 +285,6 @@ fn test_regex_flags() {
         ("re|s", r#""F" ~ 'ab.c'"#),
         ("re|m", r#""F" ~ '(?w)ab.c'"#),
         ("re|i|m|s", r#""F" ~* '(?w)ab.c'"#),
-        ("re|cased", r#""F" ~ 'ab.c'"#),
     ] {
         let queries = convert(&format!(
             "title: Test\nlogsource:\n    category: test\ndetection:\n    selection:\n        F|{modifiers}: 'ab.c'\n    condition: selection\n"
@@ -299,7 +298,7 @@ fn test_regex_flags() {
 }
 
 #[test]
-fn test_regex_case_sensitive() {
+fn test_regex_is_case_sensitive_by_default() {
     let queries = convert(
         r#"
 title: Test
@@ -307,7 +306,7 @@ logsource:
     category: test
 detection:
     selection:
-        CommandLine|re|cased: '^Whoami$'
+        CommandLine|re: '^Whoami$'
     condition: selection
 "#,
     );

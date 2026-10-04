@@ -1862,11 +1862,9 @@ detection:
     }
 
     #[test]
-    fn test_cased_regex_is_rejected() {
-        let err = convert_rule_yaml_err(
-            "title: Test\nlogsource:\n    category: test\ndetection:\n    selection:\n        F|re|cased: 'ab.c'\n    condition: selection\n",
-        );
-        assert!(err.to_string().contains("re|cased"), "{err}");
+    fn test_cased_regex_is_rejected_on_a_rewritten_item() {
+        let err = convert_item_err(&["re", "cased"], "ab.c");
+        assert!(err.to_string().contains("got |re, |cased"), "{err}");
     }
 
     #[test]

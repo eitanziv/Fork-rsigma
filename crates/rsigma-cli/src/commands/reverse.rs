@@ -127,9 +127,13 @@ pub(crate) fn cmd_reverse(args: ReverseArgs, ctx: OutputCtx) {
         process::exit(crate::exit_code::CONFIG_ERROR);
     }
 
-    if args.logsource_product.is_none()
-        && args.logsource_category.is_none()
-        && args.logsource_service.is_none()
+    if [
+        &args.logsource_product,
+        &args.logsource_category,
+        &args.logsource_service,
+    ]
+    .into_iter()
+    .all(|value| value.as_deref().is_none_or(str::is_empty))
     {
         eprintln!(
             "A Sigma rule needs a logsource; pass --logsource-product, --logsource-category, or --logsource-service"

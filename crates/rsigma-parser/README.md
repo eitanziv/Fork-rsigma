@@ -28,7 +28,7 @@ The parser runs these checks on every detection item, and `rsigma-ir` reruns the
 | `validate::check_modifiers(modifiers: &[Modifier])` | Reject conflicting modifiers, such as two operators or two UTF-16 encodings |
 | `validate::check_regex(pattern: &str)` | Reject an invalid regular expression; lookaround and backreferences are accepted, as in pySigma |
 | `validate::check_cidr(cidr: &str)` | Reject a CIDR network that is not `address/prefix` or has host bits set |
-| `validate::exists_flag(value: &SigmaValue)` | The boolean an `exists` value stands for when a rule is lowered, which also reads the strings `true`, `false`, `yes`, and `no` a pipeline may write, or `None` |
+| `validate::exists_flag(value: &SigmaValue)` | Return an `exists` value when it is a boolean, or `None` for every other type |
 
 ### Emitting
 
