@@ -1,13 +1,13 @@
-# Pin every local and release build to the workspace MSRV.
+# Pin local builds to the workspace MSRV. CI reads this channel through the
+# repository's setup-rust action and installs only each job's required
+# components and targets. Fuzzing uses its separately pinned nightly.
 #
 # This file is honored by `rustup` when no explicit `+toolchain`
 # selector is on the command line. Contributors who run `cargo build`
 # or `cargo test` from a checkout get the same toolchain that the
-# MSRV CI job uses, so MSRV drift can be caught locally before a PR
-# hits CI. CI workflows explicitly select the channel they need
-# (`stable`, `nightly`, …) via `dtolnay/rust-toolchain`, so this file
-# only affects ambient invocations.
+# CI and release workflows use, so toolchain drift is reproducible
+# locally before a PR reaches CI.
 [toolchain]
-channel = "1.95.0"
+channel = "1.96.0"
 components = ["rustfmt", "clippy", "rust-analyzer"]
 profile = "minimal"
