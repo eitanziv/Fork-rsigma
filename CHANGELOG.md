@@ -4,7 +4,7 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
-### Rust toolchain pinned to 1.96.0
+### Rust toolchain pinned to 1.96.0 (#545)
 
 The workspace MSRV rises from Rust 1.95.0 to 1.96.0. Local development, CI, release binaries, crates.io publishing, performance runs, backend engine tests, and the Docker builder now use the exact compiler pinned in `rust-toolchain.toml` instead of floating `stable`; fuzzing remains on its separately pinned nightly. A shared workflow action installs only each job's required components and targets, and CI rejects version drift across Cargo metadata, the toolchain file, Docker, the README badge, and the contributing guide.
 
