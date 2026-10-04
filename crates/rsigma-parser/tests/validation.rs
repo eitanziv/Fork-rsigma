@@ -54,8 +54,10 @@ fn rejects_modifiers_on_values_of_the_wrong_type() {
             "|endswith requires a string value, got null",
         ),
         ("F|gt: abc", "|gt requires a numeric value, got 'abc'"),
+        ("F|gt: '5'", "|gt requires a numeric value, got '5'"),
         ("F|lte: null", "|lte requires a numeric value"),
         ("F|minute: x", "|minute requires a numeric value, got 'x'"),
+        ("F|hour: '3'", "|hour requires a numeric value, got '3'"),
     ] {
         let err = parse_error(&rule_with_selection(selection));
         assert!(err.contains(expected), "{selection}: {err}");
@@ -77,6 +79,7 @@ fn rejects_invalid_values() {
         ("F|exists: 'yes'", "|exists takes a single boolean value"),
         ("F|exists: 'true'", "|exists takes a single boolean value"),
         ("F|exists: no", "|exists takes a single boolean value"),
+        ("F|all: []", "|all requires at least one value"),
         (
             "F|exists: [true, false]",
             "|exists takes a single boolean value",
@@ -105,6 +108,7 @@ fn rejects_conflicting_modifiers() {
         ("F|gt|cased: 5", "got |gt, |cased"),
         ("F|minute|cased: 5", "got |minute, |cased"),
         ("F|i: x", "have no effect without |re"),
+        ("F|i|re: x", "must follow |re"),
         ("F|contains|m: x", "|m have no effect without |re"),
         ("F|contains|fieldref: G", "|contains must follow |fieldref"),
         (
@@ -113,7 +117,6 @@ fn rejects_conflicting_modifiers() {
         ),
         ("F|wide|utf16: x", "mutually exclusive UTF-16 encodings"),
         ("F|windash|gt: 5", "value transformations |windash"),
-        ("F|contains|all: x", "|all requires more than one value"),
     ] {
         let err = parse_error(&rule_with_selection(selection));
         assert!(
@@ -128,6 +131,10 @@ fn rejects_invalid_detections() {
     for (detection, expected) in [
         ("    sel: {}\n    condition: sel", "'sel' is empty"),
         ("    sel: []\n    condition: sel", "'sel' is empty"),
+        (
+            "    sel:\n        F: x\n    condition: []",
+            "condition list must not be empty",
+        ),
         (
             "    kw:\n        - null\n    condition: kw",
             "'kw' uses null as a keyword",
@@ -160,6 +167,13 @@ fn checks_conditions_inside_extended_array_blocks() {
     let yaml = "title: T\nsigma-version: 3\nlogsource:\n    category: test\ndetection:\n    sel:\n        conns[any]:\n            a:\n                port: 80\n            condition: a and b\n    condition: sel\n";
     let err = parse_error(yaml);
     assert!(err.contains("unknown detection identifier 'b'"), "{err}");
+
+    let yaml = "title: T\nsigma-version: 3\nlogsource:\n    category: test\ndetection:\n    sel:\n        conns[any]:\n            a:\n                port: 80\n            condition: []\n    condition: sel\n";
+    let err = parse_error(yaml);
+    assert!(
+        err.contains("array block 'condition' list must not be empty"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -168,13 +182,14 @@ fn accepts_valid_neighbors() {
         "F|re: '(?<!\\\\)cmd'",
         "F|re: '(a)\\1'",
         "F|re|i: '^cmd$'",
-        "F|gt: '5'",
+        "F|gt: 5",
         "F|gte: 1.5",
-        "F|hour: '3'",
+        "F|hour: 3",
         "F|cidr: 2001:db8::/32",
         "F|exists: true",
         "F|exists: false",
         "F|contains|all: [a, b]",
+        "F|contains|all: a",
         "F|fieldref|contains: G",
         "F|fieldref|cased: G",
         "F|cased: abc",

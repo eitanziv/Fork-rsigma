@@ -129,6 +129,11 @@ pub(super) fn parse_detections(value: &Value, array_matching: bool) -> Result<De
     let condition_strings = match condition_val {
         Value::String(s) => vec![s.clone()],
         Value::Sequence(seq) => {
+            if seq.is_empty() {
+                return Err(SigmaParserError::InvalidDetection(
+                    "condition list must not be empty".into(),
+                ));
+            }
             let mut strings = Vec::with_capacity(seq.len());
             for v in seq {
                 match v.as_str() {
@@ -491,6 +496,11 @@ fn parse_block_condition(value: &Value) -> Result<ConditionExpr> {
     match value {
         Value::String(s) => parse_condition(s),
         Value::Sequence(seq) => {
+            if seq.is_empty() {
+                return Err(SigmaParserError::InvalidDetection(
+                    "array block 'condition' list must not be empty".into(),
+                ));
+            }
             let exprs = seq
                 .iter()
                 .map(|x| {

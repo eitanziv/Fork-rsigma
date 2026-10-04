@@ -20,7 +20,7 @@ This library is part of [rsigma].
 
 ### Validation
 
-The parser runs these checks on every detection item, and `rsigma-ir` reruns the modifier and CIDR checks when it lowers a rule.
+The parser runs these checks on every detection item, and `rsigma-ir` reruns them when it lowers a rule that code or a processing pipeline may have rewritten.
 
 | Function | Description |
 |----------|-------------|

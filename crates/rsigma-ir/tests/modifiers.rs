@@ -6,6 +6,7 @@
 mod common;
 
 use common::{engine_from, matches, rule_with_item, titles_for, try_compile};
+use rsigma_parser::{Detection, SigmaValue};
 use serde_json::json;
 
 // =============================================================================
@@ -148,8 +149,8 @@ detection:
 }
 
 #[test]
-fn all_on_single_value_rejected() {
-    let err = try_compile(
+fn all_on_single_value_is_accepted_as_redundant() {
+    let result = try_compile(
         r#"
 title: All Single
 logsource: { category: test }
@@ -159,7 +160,10 @@ detection:
     condition: selection
 "#,
     );
-    assert!(err.is_err(), "|all on a single value should fail: {err:?}");
+    assert!(
+        result.is_ok(),
+        "|all on a single value should compile: {result:?}"
+    );
 }
 
 #[test]
@@ -170,6 +174,7 @@ fn lowering_rejects_contradictions_on_rewritten_items() {
         &["base64", "base64offset"],
         &["wide", "utf16"],
         &["multiline"],
+        &["i", "re"],
         &["contains", "fieldref"],
     ] {
         let rule = rule_with_item(modifiers, "x");
@@ -184,6 +189,27 @@ fn lowering_rejects_contradictions_on_rewritten_items() {
 #[test]
 fn lowering_rejects_non_boolean_exists_on_a_rewritten_item() {
     let rule = rule_with_item(&["exists"], "yes");
+    let err = rsigma_ir::lower_rule(&rule, &rsigma_ir::LowerOptions::default());
+    assert!(
+        matches!(err, Err(rsigma_ir::IrError::IncompatibleValue(_))),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn lowering_rejects_invalid_values_on_rewritten_items() {
+    let rule = rule_with_item(&["fieldref"], "Other*");
+    let err = rsigma_ir::lower_rule(&rule, &rsigma_ir::LowerOptions::default());
+    assert!(
+        matches!(err, Err(rsigma_ir::IrError::IncompatibleValue(_))),
+        "{err:?}"
+    );
+
+    let mut rule = rule_with_item(&["contains"], "5");
+    let Some(Detection::AllOf(items)) = rule.detection.named.get_mut("selection") else {
+        unreachable!("the selection is a single mapping");
+    };
+    items[0].values = vec![SigmaValue::Integer(5)];
     let err = rsigma_ir::lower_rule(&rule, &rsigma_ir::LowerOptions::default());
     assert!(
         matches!(err, Err(rsigma_ir::IrError::IncompatibleValue(_))),

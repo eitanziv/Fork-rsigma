@@ -9,7 +9,10 @@ fuzz_target!(|data: &[u8]| {
     let Ok(query) = std::str::from_utf8(data) else {
         return;
     };
-    let ctx = rsigma_convert::ReverseCtx::default();
+    let ctx = rsigma_convert::ReverseCtx {
+        product: Some("test".into()),
+        ..Default::default()
+    };
     let queries = [query.to_string()];
     let _ = rsigma_convert::reverse_collection(&rsigma_convert::LuceneFrontend, &queries, &ctx);
 });

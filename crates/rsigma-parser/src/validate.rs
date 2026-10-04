@@ -2,8 +2,8 @@
 //!
 //! The parser runs these checks on every detection it builds, so `rule parse`,
 //! lint, the LSP, evaluation, and conversion reject the same invalid rules, as
-//! pySigma does when it loads a rule. IR lowering repeats the modifier checks
-//! for detections that are built or rewritten after parsing.
+//! pySigma does when it loads a rule. IR lowering repeats the item checks for
+//! detections that are built or rewritten after parsing.
 
 use std::net::IpAddr;
 
@@ -133,6 +133,11 @@ pub fn check_modifiers(modifiers: &[Modifier]) -> std::result::Result<(), String
             flags.join(", |")
         ));
     }
+    if let Some(re_at) = modifiers.iter().position(|m| *m == Re)
+        && modifiers[..re_at].iter().any(|m| REGEX_FLAGS.contains(m))
+    {
+        return Err("regex flag modifiers |i, |m, and |s must follow |re".into());
+    }
 
     Ok(())
 }
@@ -241,9 +246,9 @@ pub fn check_detection_item(item: &DetectionItem) -> Result<()> {
             )),
         };
     }
-    if has(All) && item.values.len() < 2 {
+    if has(All) && item.values.is_empty() {
         return Err(SigmaParserError::InvalidModifiers(format!(
-            "{subject}: |all requires more than one value"
+            "{subject}: |all requires at least one value"
         )));
     }
     if item.values.is_empty() && item.field.name.is_none() {
@@ -307,15 +312,7 @@ pub fn check_detection_item(item: &DetectionItem) -> Result<()> {
 }
 
 fn is_numeric(value: &SigmaValue) -> bool {
-    match value {
-        SigmaValue::Integer(_) | SigmaValue::Float(_) => true,
-        SigmaValue::String(s) => s
-            .as_plain()
-            .unwrap_or_else(|| s.original.clone())
-            .parse::<f64>()
-            .is_ok(),
-        SigmaValue::Bool(_) | SigmaValue::Null => false,
-    }
+    matches!(value, SigmaValue::Integer(_) | SigmaValue::Float(_))
 }
 
 fn describe(value: &SigmaValue) -> String {

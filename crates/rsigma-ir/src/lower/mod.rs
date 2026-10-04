@@ -11,10 +11,10 @@ mod value;
 
 use std::collections::HashMap;
 
-use rsigma_parser::validate::{check_modifiers, exists_flag};
+use rsigma_parser::validate::{check_detection_item, check_regex, exists_flag};
 use rsigma_parser::{
-    ConditionExpr, CorrelationRule, Detection, DetectionItem, Detections, FilterRule, SigmaRule,
-    SigmaValue,
+    ConditionExpr, CorrelationRule, Detection, DetectionItem, Detections, FilterRule, Modifier,
+    SigmaParserError, SigmaRule, SigmaValue,
 };
 
 use crate::error::IrError;
@@ -162,7 +162,30 @@ pub fn lower_detection_item(item: &DetectionItem, opts: &LowerOptions) -> Result
     }
 
     let ctx = ModCtx::from_modifiers(&item.field.modifiers);
-    check_modifiers(&item.field.modifiers).map_err(IrError::InvalidModifiers)?;
+    match check_detection_item(item) {
+        Ok(()) => {}
+        Err(SigmaParserError::InvalidModifiers(message)) => {
+            return Err(IrError::InvalidModifiers(message));
+        }
+        // The evaluator compiles regexes after lowering and preserves its
+        // established InvalidRegex error for ASTs rewritten after parsing.
+        Err(SigmaParserError::InvalidValue(_))
+            if item.field.modifiers.contains(&Modifier::Re)
+                && item.values.iter().any(
+                    |value| matches!(value, SigmaValue::String(s) if check_regex(&s.original).is_err()),
+                ) => {}
+        Err(SigmaParserError::InvalidValue(message))
+            if item.field.modifiers.iter().any(|modifier| {
+                matches!(
+                    modifier,
+                    Modifier::Gt | Modifier::Gte | Modifier::Lt | Modifier::Lte
+                )
+            }) =>
+        {
+            return Err(IrError::ExpectedNumeric(message));
+        }
+        Err(other) => return Err(IrError::IncompatibleValue(other.to_string())),
+    }
 
     if ctx.exists {
         if item.field.name.is_none() {
@@ -180,12 +203,6 @@ pub fn lower_detection_item(item: &DetectionItem, opts: &LowerOptions) -> Result
             matcher: IrMatcher::Exists(expect),
             exists: Some(expect),
         });
-    }
-
-    if ctx.all && item.values.len() <= 1 {
-        return Err(IrError::InvalidModifiers(
-            "|all modifier requires more than one value".to_string(),
-        ));
     }
 
     // An empty value list is a null check, as in pySigma.

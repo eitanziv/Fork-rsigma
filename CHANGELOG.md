@@ -10,13 +10,13 @@ The parser now validates each rule's meaning as well as its structure, moving py
 
 - its `logsource` is missing, or sets none of `category`, `product`, and `service`, or one of those keys or `definition` is not a string. Filter rules need a `logsource` as well, as the Sigma filter specification requires.
 - a field combines conflicting modifiers, such as two operators (`|gt|lt`), two UTF-16 encodings, `base64` with `base64offset`, or a string modifier before `fieldref`.
-- a value has the wrong type for its modifiers: a number or boolean under `contains`, `startswith`, `endswith`, `re`, `cidr`, an encoding, `fieldref`, `expand`, or `cased`, or a non-numeric value under `gt`, `gte`, `lt`, `lte`, or a timestamp part such as `minute`. Numeric strings such as `'5'` still compare numerically.
+- a value has the wrong type for its modifiers: a number or boolean under `contains`, `startswith`, `endswith`, `re`, `cidr`, an encoding, `fieldref`, `expand`, or `cased`, or anything but a YAML number under `gt`, `gte`, `lt`, `lte`, or a timestamp part such as `minute`.
 - a `re` value is not a valid regular expression, a `cidr` value is not `address/prefix` or has host bits set, a `fieldref`, `base64`, or `base64offset` value contains a wildcard, or a UTF-16 encoding without `base64` or `base64offset` has a non-ASCII value.
 - `exists` is applied to a keyword or takes anything but a single YAML boolean, `true` or `false`. Previously any other value, such as `'yes'` or `maybe`, was treated as `true`.
-- `|all` has fewer than two values, an empty value list is not bound to a field, a field value is a nested list or mapping, or a detection list contains a list.
-- a named detection is empty, a keyword list contains `null`, or the condition references a detection identifier that does not exist or a `1 of x*` selector that matches none.
+- `|all` has no values, an empty value list is not bound to a field, a field value is a nested list or mapping, or a detection list contains a list.
+- a named detection or condition list is empty, a keyword list contains `null`, or the condition references a detection identifier that does not exist or a `1 of x*` selector that matches none.
 
-A regular expression with lookaround or backreferences, which pySigma accepts, still parses, and the evaluator rejects it when the rule compiles, because its regex engine does not support those constructs. Lowering keeps the modifier checks as a backstop for detection items a pipeline rewrites after parsing. `rule reverse` exits with code `3` unless `--logsource-product`, `--logsource-category`, or `--logsource-service` is set, since the rule it would write no longer parses.
+A regular expression with lookaround or backreferences, which pySigma accepts, still parses, and the evaluator rejects it when the rule compiles, because its regex engine does not support those constructs. Lowering repeats the detection-item checks as a backstop for items code or a pipeline rewrites after parsing, while invalid regex syntax still reaches the evaluator's regex compiler and its specific `EvalError::InvalidRegex` error. `rule reverse` exits with code `3` unless `--logsource-product`, `--logsource-category`, or `--logsource-service` is set, since the rule it would write no longer parses.
 
 The new `deprecated_detection_timeframe` lint warns about a Sigma v1.x `timeframe:` key inside `detection:`, which has no effect. `rule validate` now accepts a single rule file as well as a directory.
 

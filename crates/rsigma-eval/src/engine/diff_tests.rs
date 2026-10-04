@@ -654,7 +654,7 @@ fn render_selection(name: &str, items: &[GenItem]) -> String {
                 out.push_str(&format!("        {field}|gte: {n}\n"));
             }
             "|contains|all" => {
-                // `|all` requires more than one value.
+                // Exercise the multi-value `|all` path.
                 out.push_str(&format!("        {field}|contains|all:\n"));
                 out.push_str(&format!("            - '{}'\n", escape(value)));
                 out.push_str("            - 'e'\n");

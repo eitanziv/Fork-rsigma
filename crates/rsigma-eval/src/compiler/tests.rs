@@ -104,16 +104,23 @@ fn test_compile_contains_all() {
 }
 
 #[test]
-fn test_all_modifier_single_value_rejected() {
+fn test_all_modifier_single_value_is_redundant() {
     let item = make_item(
         "CommandLine",
         &[Modifier::Contains, Modifier::All],
         vec![SigmaValue::String(SigmaString::new("net"))],
     );
-    let result = compile_detection_item(&item);
-    assert!(result.is_err());
-    let err = result.unwrap_err().to_string();
-    assert!(err.contains("|all modifier requires more than one value"));
+    let compiled = compile_detection_item(&item).unwrap();
+    let matching = json!({"CommandLine": "net user"});
+    assert!(eval_detection_item(
+        &compiled,
+        &JsonEvent::borrow(&matching)
+    ));
+    let non_matching = json!({"CommandLine": "whoami"});
+    assert!(!eval_detection_item(
+        &compiled,
+        &JsonEvent::borrow(&non_matching)
+    ));
 }
 
 #[test]
