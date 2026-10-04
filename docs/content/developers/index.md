@@ -44,7 +44,7 @@ For the runtime data flow and how the crates talk to each other, see [Architectu
 ## Conventions
 
 - **Single workspace version.** Every crate bumps together. Do not bump individually; the release pipeline expects a single `vX.Y.Z` tag.
-- **Edition 2024.** MSRV is `{{ rsigma.msrv }}` (the workspace's `rust-version` in `Cargo.toml`), enforced by the `msrv` CI job. Edition 2024 itself compiles on Rust 1.85+, but features and tests are written against the MSRV.
+- **Edition 2024.** MSRV is `{{ rsigma.msrv }}` (the workspace's `rust-version` in `Cargo.toml`), enforced by the `check` CI job. Edition 2024 itself compiles on Rust 1.85+, but features and tests are written against the MSRV.
 - **No warnings.** `RUSTFLAGS=-Dwarnings` is set globally in CI.
 - **`cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets --all-features -- -D warnings`** must pass.
 - **All features for testing.** CI runs `cargo test --workspace --all-features --locked`; if your change is feature-gated, make sure the gate works in isolation too.
@@ -57,7 +57,7 @@ Full process is in [Contributing](../contributing.md), and the workspace-level C
 
 You should have:
 
-- `rustup` with the stable toolchain, plus `clippy` and `rustfmt`.
+- `rustup`; the repository's `rust-toolchain.toml` installs the pinned compiler, `clippy`, and `rustfmt`.
 - `cargo-deny` (or be ready to install it) for dependency policy checks.
 - `cargo-fuzz` if you plan to run or extend the [fuzz harnesses](fuzzing.md).
 - Docker, if you plan to touch the [Docker image](../deployment/docker.md) or the cross-platform release pipeline.

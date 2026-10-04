@@ -38,19 +38,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Runners already ship `rustup`; install + override the
-      # workspace's MSRV pin with stable for this job inline rather
-      # than via a third-party action.
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
+      - name: Check Rust toolchain version consistency
+        run: scripts/check-toolchain-version.sh
+      - uses: $/.github/actions/setup-rust
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           # Write the cache only from main; PRs restore it but never save. This
           # drops the slow per-PR cache upload (notably ~3 min on the Windows
           # runner) and keeps the shared cache from thrashing across branches.
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Compile tests, examples, and benches against the pinned MSRV too.
       - run: cargo check --workspace --all-targets --all-features --locked
 
   wasm:
@@ -62,11 +59,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable with WASM target
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
-          rustup target add wasm32-unknown-unknown
+      - uses: $/.github/actions/setup-rust
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -90,29 +85,6 @@ jobs:
           wasmtime run --invoke run_selftest \
             "${RUNNER_TEMP}/wasm-smoke-target/wasm32-unknown-unknown/release/rsigma_wasm_smoke.wasm"
 
-  msrv:
-    name: MSRV (1.95.0)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read # read repo
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      # Install MSRV inline. No `rustup override set` here because the
-      # workspace's `rust-toolchain.toml` already pins to 1.95.0, so
-      # `cargo` will pick that toolchain automatically once it is
-      # installed.
-      - name: Install Rust 1.95.0
-        run: rustup toolchain install 1.95.0 --profile minimal --no-self-update
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-      # `--all-targets` so tests, examples, and benches compile against
-      # the MSRV too. Without it a contributor can add a test-only
-      # dependency that requires a newer Rust without anyone noticing.
-      - run: cargo check --workspace --all-targets --all-features --locked
-
   fmt:
     name: Format
     runs-on: ubuntu-latest
@@ -122,10 +94,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable with rustfmt
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
+        with:
+          components: rustfmt
       - run: cargo fmt --all -- --check
 
   clippy:
@@ -137,10 +108,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable with clippy
-        run: |
-          rustup toolchain install stable --profile minimal --component clippy --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -155,10 +125,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable with clippy
-        run: |
-          rustup toolchain install stable --profile minimal --component clippy --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -180,10 +149,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -213,10 +179,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -261,11 +224,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable
-        shell: bash
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -280,10 +239,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable with llvm-tools-preview
-        run: |
-          rustup toolchain install stable --profile minimal --component llvm-tools-preview --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
+        with:
+          components: llvm-tools-preview
       - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
         with:
           tool: cargo-llvm-cov
@@ -333,10 +291,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -364,10 +319,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -428,10 +380,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -454,10 +403,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
+      - uses: $/.github/actions/setup-rust
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}

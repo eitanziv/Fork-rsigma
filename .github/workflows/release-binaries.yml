@@ -38,19 +38,9 @@ jobs:
         with:
           persist-credentials: false
 
-      # Install stable inline; the cross-compile target installs in the
-      # same step so the build step does not need a separate `rustup
-      # target add`. `rustup override set` makes stable take precedence
-      # over the workspace's `rust-toolchain.toml` (MSRV) pin for this
-      # release build.
-      - name: Install Rust stable and target
-        shell: bash
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup override set stable
-          rustup target add "${TARGET}"
-        env:
-          TARGET: ${{ matrix.target }}
+      - uses: $/.github/actions/setup-rust
+        with:
+          targets: ${{ matrix.target }}
 
       # No build cache here: rust-cache on a release workflow opens a
       # cache-poisoning vector against the signed artifacts. Release

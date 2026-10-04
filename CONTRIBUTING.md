@@ -6,7 +6,7 @@ Thank you for considering a contribution to rsigma! This document covers the bas
 
 ### Prerequisites
 
-- Rust toolchain (MSRV: 1.95.0). Install via [rustup](https://rustup.rs/).
+- Rust toolchain (MSRV: 1.96.0). Install via [rustup](https://rustup.rs/); opening the repository installs the pinned toolchain from `rust-toolchain.toml`.
 - Docker (optional, required for integration tests that use testcontainers).
 - Node.js 20+ (optional, only for building the documentation site under `docs/`; not needed for the Rust workspace).
 
@@ -33,6 +33,10 @@ cargo deny check
 ```
 
 ## Development Workflow
+
+### Rust toolchain updates
+
+The compiler used for development, CI, release artifacts, and the minimum supported Rust version move together. Keep `Cargo.toml`, `rust-toolchain.toml`, the Dockerfile builder tag, the README badge, and this prerequisite on the same exact `X.Y.Z` version. Update the Docker digest for that exact image tag, run `scripts/check-toolchain-version.sh` and every pre-push gate, and ship the compatibility change in its own pull request.
 
 ### Branching
 
