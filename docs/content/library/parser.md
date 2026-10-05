@@ -39,7 +39,7 @@ The crate has no RSigma dependencies and pulls in `yaml_serde` 0.10 (the maintai
 | `parse_condition(&str) -> Result<ConditionExpr, SigmaParserError>` | Standalone condition-expression parser. |
 | `Detection`, `DetectionItem`, `FieldSpec`, `SigmaValue`, `Modifier` | Detection-block building blocks. |
 | `LogSource` | The `logsource:` block (`product`, `category`, `service`). |
-| `validate::{check_detection_item, check_modifiers, check_regex, check_cidr, exists_flag}` | The semantic checks the parser runs on every detection item, exposed for tools that build or rewrite detection items in code. {{ added "unreleased" }} |
+| `validate::{check_detection_item, check_modifiers, check_regex, check_cidr, exists_flag}` | The semantic checks the parser runs on every detection item, exposed for tools that build or rewrite detection items in code. {{ added "0.24.0" }} |
 | Linter (`lint::*`) | {{ rsigma.lint.rules }} spec-conformance checks (including cross-document reference checks over a directory). See [Lint Rules reference](../reference/lint-rules.md). |
 | `lint::catalogue::catalogue() -> Vec<LintRuleInfo>` | Programmatic metadata for every lint rule: stable id, default severity, fix disposition, one-line description. |
 | `ads::ads_catalogue() -> Vec<AdsSectionInfo>` | The nine [ADS](../guide/detection-strategy.md) sections: id, carrier field, default-required, description. `AdsSection`/`AdsDocument` read present and missing sections off a `SigmaRule`. |
@@ -129,7 +129,7 @@ Bounds: `MAX_CONDITION_LEN = 64 KiB`, `MAX_CONDITION_DEPTH = 64`. See [Security 
 
 ## Semantic validation
 
-{{ added "unreleased" }}
+{{ added "0.24.0" }}
 
 The parser validates rule semantics, not only structure. A detection or filter rule fails to parse when its `logsource` is missing or sets none of `category`, `product`, and `service`, when a field combines conflicting modifiers (`|gt|lt`), when a value has the wrong type for its modifiers (a number under `contains`, a string under `gt`), when a `re` or `cidr` value is invalid, when a named detection is empty, or when the condition references a detection that does not exist. Each error is collected per document in `SigmaCollection::errors` and names the field. The usable-logsource requirement is stricter than pySigma's parser, which accepts an empty `logsource` mapping.
 

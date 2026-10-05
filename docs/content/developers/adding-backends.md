@@ -45,7 +45,7 @@ Run `rustdoc` (`cargo doc --open -p rsigma-convert`) for the full list of ~90 fi
 
 Step 3: implement the trait. Hold the config as `&'static TextQueryConfig`, delegate `convert_rule` to `convert_rule_via_ir`, and implement leaf converters plus `finish_query` / `finalize_query`. `ConversionState` is from `rsigma_convert::state`; `PipelineState` is from `rsigma_eval::pipeline::state`.
 
-The condition walker passes every compound operand through `convert_condition_group` before combining it. Delegating to `text_convert_condition_group` parenthesizes by the config's `precedence`, so a target where `OR` binds tighter than `AND` only needs a different `precedence` tuple. {{ added "unreleased" }}
+The condition walker passes every compound operand through `convert_condition_group` before combining it. Delegating to `text_convert_condition_group` parenthesizes by the config's `precedence`, so a target where `OR` binds tighter than `AND` only needs a different `precedence` tuple. {{ added "0.24.0" }}
 
 ```rust
 use rsigma_convert::{

@@ -87,16 +87,16 @@ Pipelines compose 26 transformation types. The most common ones in practice are:
 | `field_name_prefix_mapping` | Rename fields by prefix. |
 | `field_name_prefix`/`field_name_suffix` | Add a static prefix or suffix to every field name. |
 | `field_name_transform` | Case conversion (`lower`, `upper`, `snake_case`, `title`). |
-| `add_condition` | Inject extra detection conditions (e.g. `EventID: 1` or `EventID: [12, 13, 14]` for OR-linked values); `field_refs` injects field-to-field comparisons (`evt.pid: thread.pid`) instead of literals. `name` names the added detection (it must not collide with an existing one) and `template: true` substitutes `$category`, `$product`, and `$service` in string values. {{ added "unreleased" }} |
+| `add_condition` | Inject extra detection conditions (e.g. `EventID: 1` or `EventID: [12, 13, 14]` for OR-linked values); `field_refs` injects field-to-field comparisons (`evt.pid: thread.pid`) instead of literals. `name` names the added detection (it must not collide with an existing one) and `template: true` substitutes `$category`, `$product`, and `$service` in string values. {{ added "0.24.0" }} |
 | `drop_detection_item` | Remove matching detection items. |
 | `change_logsource` | Modify `category`, `product`, `service`. |
-| `replace_string` | Regex string replacement in values. `skip_special: true` leaves wildcards untouched and `interpret_special: true` parses wildcards in the replaced text. {{ added "unreleased" }} |
+| `replace_string` | Regex string replacement in values. `skip_special: true` leaves wildcards untouched and `interpret_special: true` parses wildcards in the replaced text. {{ added "0.24.0" }} |
 | `map_string` | Map specific values to replacements. |
-| `set_value` | Replace detection item values. `force_type: str` or `force_type: num` converts the value first. {{ added "unreleased" }} |
-| `set_state` | Store backend-relevant key/value pairs (`table`, `schema`, `index`) using `key` and `val` (`value` remains an alias). {{ added "unreleased" }} |
+| `set_value` | Replace detection item values. `force_type: str` or `force_type: num` converts the value first. {{ added "0.24.0" }} |
+| `set_state` | Store backend-relevant key/value pairs (`table`, `schema`, `index`) using `key` and `val` (`value` remains an alias). {{ added "0.24.0" }} |
 | `set_custom_attribute` | Set per-rule attributes that engines and backends read (`rsigma.*`, `postgres.*`). |
 | `value_placeholders` | Expand Sigma `%name%` placeholders in `|expand` detection values (used with pipeline `vars:` and dynamic sources). |
-| `query_expression_placeholders` | Backend query template envelope (used by `rsigma-convert`). Its `mapping`, `include`, and `exclude` parameters are rejected because no backend renders placeholders as query expressions. {{ added "unreleased" }} |
+| `query_expression_placeholders` | Backend query template envelope (used by `rsigma-convert`). Its `mapping`, `include`, and `exclude` parameters are rejected because no backend renders placeholders as query expressions. {{ added "0.24.0" }} |
 | `nest` | Apply a group of transformations conditionally. |
 
 The full list with every field is in the [`rsigma-eval` README](https://github.com/timescale/rsigma/blob/main/crates/rsigma-eval/README.md#transformations-26-types). All transformations support the same three-tier condition system below.
@@ -114,7 +114,7 @@ Apply at the rule level. Common types (the eval README lists every variant):
 | `logsource` | `category`, `product`, `service` |
 | `contains_detection_item` | `field`, optional `value` |
 | `processing_item_applied` | `processing_item_id` (chain to prior steps) |
-| `processing_state` | `key`, `val`, optional `op` (`eq`, `ne`, `gte`, `gt`, `lte`, `lt`) {{ added "unreleased" }} |
+| `processing_state` | `key`, `val`, optional `op` (`eq`, `ne`, `gte`, `gt`, `lte`, `lt`) {{ added "0.24.0" }} |
 | `is_sigma_rule`/`is_sigma_correlation_rule` | (no args) |
 | `rule_attribute` | `attribute`, `value` |
 | `tag` | `tag` |
@@ -135,8 +135,8 @@ Apply per detection item. Common types:
 
 | Type | Fields |
 |------|--------|
-| `match_string` | `pattern`, `negate`, `cond` (`any` or `all`) {{ added "unreleased" }} |
-| `is_null` | `negate`, `cond` (`any` or `all`) {{ added "unreleased" }} |
+| `match_string` | `pattern`, `negate`, `cond` (`any` or `all`) {{ added "0.24.0" }} |
+| `is_null` | `negate`, `cond` (`any` or `all`) {{ added "0.24.0" }} |
 | `processing_item_applied` | `processing_item_id` |
 
 ### Field name conditions
@@ -145,7 +145,7 @@ Filter by field name. Common types:
 
 | Type | Fields |
 |------|--------|
-| `include_fields` | `fields`, `mode` (`plain` or `re`; `match_type` is an alias) {{ added "unreleased" }} |
+| `include_fields` | `fields`, `mode` (`plain` or `re`; `match_type` is an alias) {{ added "0.24.0" }} |
 | `exclude_fields` | `fields`, `mode` |
 
 ```yaml
@@ -158,7 +158,7 @@ transformations:
         fields: ["TargetUserName", "SourceIp"]
 ```
 
-Each condition collection accepts either a list or a mapping keyed by condition identifier. List conditions receive the identifiers `"1"`, `"2"`, and so on. Use `<scope>_cond_op: and|or` to link a list, `<scope>_cond_not: true` to negate its result, or `<scope>_cond_expr` for an expression over mapped identifiers. The scopes are `rule`, `detection_item`, and `field_name`. `rule_cond_expression` remains an alias for `rule_cond_expr`. Expressions and `_cond_op` are mutually exclusive. Unknown transformation-item keys, invalid operators, and missing expression references are rejected instead of being ignored. {{ added "unreleased" }}
+Each condition collection accepts either a list or a mapping keyed by condition identifier. List conditions receive the identifiers `"1"`, `"2"`, and so on. Use `<scope>_cond_op: and|or` to link a list, `<scope>_cond_not: true` to negate its result, or `<scope>_cond_expr` for an expression over mapped identifiers. The scopes are `rule`, `detection_item`, and `field_name`. `rule_cond_expression` remains an alias for `rule_cond_expr`. Expressions and `_cond_op` are mutually exclusive. Unknown transformation-item keys, invalid operators, and missing expression references are rejected instead of being ignored. {{ added "0.24.0" }}
 
 ```yaml
 transformations:
@@ -180,18 +180,18 @@ transformations:
     field_name_cond_expr: user
 ```
 
-Conditions follow pySigma's semantics: {{ added "unreleased" }}
+Conditions follow pySigma's semantics: {{ added "0.24.0" }}
 
 - `match_string` and field-name regexes match from the start of the text, like Python's `re.match`. `match_string` sees a value as pySigma renders it after modifiers: `contains`, `startswith`, and `endswith` add their `*` wildcards, and literal `*` and `?` are escaped. Field references, regular expressions, CIDR values, numbers, comparisons, and encoded values never match. `negate` inverts each value's result before `cond` combines them.
 - Field-name conditions select a detection item when its field name or the target of one of its field references matches, and `field_name_cond_not` negates that combined result.
 - `processing_item_applied` as a field-name condition is true for a `fields` entry or field reference target that the transformation with that `id` renamed, and the mark follows later renames. As a detection-item condition it is true for an item that the transformation changed, and an item keeps the marks of the item it replaced.
 - `processing_state` with `eq` or `ne` compares numbers by value, so `1` equals `1.0`.
 
-Field-name transformations also rewrite `|fieldref` targets and the rule's `fields` list. Placeholder transformations only process values carrying the `|expand` modifier. `value_placeholders` expands the Cartesian product when a value contains several multi-value variables and fails if any variable is unresolved; set `allow_unresolved: true` on that transformation only when rsigma's runtime event-field substitution should handle the remainder. `wildcard_placeholders` replaces every handled placeholder with `*`, regardless of whether the variable is defined. Both placeholder transformations accept mutually exclusive `include` and `exclude` lists that select placeholder names to process. A placeholder that a filter leaves out stays a placeholder for a later transformation or, in `engine eval` and `engine daemon`, for runtime event-field substitution. Values without `|expand` are never expanded. As in the `expand` modifier, a backslash escapes `%`, so `\%name%` is literal text and `\\%name%` is a backslash followed by a placeholder. {{ added "unreleased" }}
+Field-name transformations also rewrite `|fieldref` targets and the rule's `fields` list. Placeholder transformations only process values carrying the `|expand` modifier. `value_placeholders` expands the Cartesian product when a value contains several multi-value variables and fails if any variable is unresolved; set `allow_unresolved: true` on that transformation only when rsigma's runtime event-field substitution should handle the remainder. `wildcard_placeholders` replaces every handled placeholder with `*`, regardless of whether the variable is defined. Both placeholder transformations accept mutually exclusive `include` and `exclude` lists that select placeholder names to process. A placeholder that a filter leaves out stays a placeholder for a later transformation or, in `engine eval` and `engine daemon`, for runtime event-field substitution. Values without `|expand` are never expanded. As in the `expand` modifier, a backslash escapes `%`, so `\%name%` is literal text and `\\%name%` is a backslash followed by a placeholder. {{ added "0.24.0" }}
 
 ### Differences from pySigma
 
-rsigma accepts a few things pySigma rejects, and rejects a few things it cannot honor: {{ added "unreleased" }}
+rsigma accepts a few things pySigma rejects, and rejects a few things it cannot honor: {{ added "0.24.0" }}
 
 - Condition expressions also work over list conditions, using their identifiers `1`, `2`, and so on. `rule_cond_expression` is accepted as an alias for `rule_cond_expr`.
 - An invalid `*_cond_op` value is an error instead of being treated as `and`.

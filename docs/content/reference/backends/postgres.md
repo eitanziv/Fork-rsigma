@@ -26,12 +26,12 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 
 | Sigma modifier | PostgreSQL operator |
 |----------------|---------------------|
-| equality (no modifier) | `"field" ILIKE 'value'` (case-insensitive, with `%`, `_`, and `\` escaped so they match literally). A value without letters, such as `'4624'` or `'10.0.0.1'`, renders as `"field" = 'value'`, which matches the same rows and also works on an integer, `inet`, or timestamp column. A value with letters needs a text column. {{ added "unreleased" }} |
+| equality (no modifier) | `"field" ILIKE 'value'` (case-insensitive, with `%`, `_`, and `\` escaped so they match literally). A value without letters, such as `'4624'` or `'10.0.0.1'`, renders as `"field" = 'value'`, which matches the same rows and also works on an integer, `inet`, or timestamp column. A value with letters needs a text column. {{ added "0.24.0" }} |
 | `contains` | `"field" ILIKE '%value%'` (case-insensitive) |
 | `startswith` | `"field" ILIKE 'value%'` |
 | `endswith` | `"field" ILIKE '%value'` |
 | `cased` (any of the above) | switches `ILIKE` to `LIKE` (case-sensitive); a plain `cased` equality renders as `"field" = 'value'` |
-| `re` | `"field" ~ 'pattern'` (case-sensitive, as the Sigma specification requires); `~*` with `\|i`. `\|m` adds the `(?w)` embedded option so `^` and `$` match at line breaks, merged into a leading options group such as `(?i)` because PostgreSQL reads only one. PostgreSQL's `.` matches a line break even without `\|s`, so a regex can over-match a multi-line value but never misses one. {{ added "unreleased" }} |
+| `re` | `"field" ~ 'pattern'` (case-sensitive, as the Sigma specification requires); `~*` with `\|i`. `\|m` adds the `(?w)` embedded option so `^` and `$` match at line breaks, merged into a leading options group such as `(?i)` because PostgreSQL reads only one. PostgreSQL's `.` matches a line break even without `\|s`, so a regex can over-match a multi-line value but never misses one. {{ added "0.24.0" }} |
 | `cidr` | `("field")::inet <<= 'value'::cidr` |
 | `exists: true` | `"field" IS NOT NULL`; `data->'field' IS NOT NULL` in [JSONB mode](#jsonb-mode) |
 | `exists: false` | `"field" IS NULL`; `data->'field' IS NULL` in [JSONB mode](#jsonb-mode) |
@@ -40,16 +40,16 @@ Every Sigma modifier is translated to a native PostgreSQL construct. The mapping
 | `all` | values combined with `AND` instead of the default `OR` |
 | `fieldref` | `lower(("field")::text) = lower(("other")::text)` (case-insensitive); `"field" = "other"` with `cased` |
 | `fieldref` with `contains` | `strpos(lower(("field")::text), lower(("other")::text)) > 0`. `startswith` uses `strpos(...) = 1`. `endswith` uses `right(("field")::text, char_length(("other")::text)) = ("other")::text`. `|cased` drops the `lower()` calls. `%` and `_` in the referenced value stay literal. {{ added "0.23.0" }} |
-| `neq` | `("field" ILIKE 'value') IS NOT TRUE`, which also matches when the field is missing or null. A list negates the whole item: `("field" ILIKE 'a' OR "field" ILIKE 'b') IS NOT TRUE`. {{ added "unreleased" }} |
+| `neq` | `("field" ILIKE 'value') IS NOT TRUE`, which also matches when the field is missing or null. A list negates the whole item: `("field" ILIKE 'a' OR "field" ILIKE 'b') IS NOT TRUE`. {{ added "0.24.0" }} |
 | `fieldref` with `neq` | `(lower(("field")::text) = lower(("other")::text)) IS NOT TRUE AND "field" IS NOT NULL`. A missing referenced field still matches when the left field is present. {{ added "0.23.0" }} |
 | `null` value | `"field" IS NULL` |
 | keywords | `to_tsvector('simple', security_events::text) @@ plainto_tsquery('simple', 'value')` |
 
 Keyword matching uses the `'simple'` text-search configuration (no language stemming) over the whole event: the JSONB column as text with `-O json_field=...`, or the table row as text otherwise, referenced by the unqualified table name. A `query_expression_placeholders` template that gives the table an alias hides that name, so keyword rules need the JSONB column or an unaliased table. The query matches the token against every column concatenated. This is intentionally broader than per-field FTS: keyword detections in Sigma are unbound, "search this string anywhere in the event". Full-text search matches whole tokens, not substrings, and the parser keeps file paths and host names such as `/dev/tcp/10.0.0.1/4444` and `mimikatz.exe` as single tokens, so a keyword that is only part of such a token does not match.
 
-Nested conditions are parenthesized by SQL precedence (`NOT` > `AND` > `OR`): an `OR` under an `AND`, such as a value list in a selection that also tests another field, becomes `("Image" ILIKE '%\\a.exe' OR "Image" ILIKE '%\\b.exe') AND "CommandLine" ILIKE '%x%'`, and every negation, such as `not 1 of filter_*`, becomes `(... OR ...) IS NOT TRUE`. {{ added "unreleased" }}
+Nested conditions are parenthesized by SQL precedence (`NOT` > `AND` > `OR`): an `OR` under an `AND`, such as a value list in a selection that also tests another field, becomes `("Image" ILIKE '%\\a.exe' OR "Image" ILIKE '%\\b.exe') AND "CommandLine" ILIKE '%x%'`, and every negation, such as `not 1 of filter_*`, becomes `(... OR ...) IS NOT TRUE`. {{ added "0.24.0" }}
 
-A comparison on a missing field is NULL in SQL, and `NOT NULL` is still NULL, so `NOT` would drop an event that Sigma matches: `selection and not filter` must match when the event lacks the field `filter` tests. `IS NOT TRUE` maps NULL to true, which matches Sigma and the rsigma engine. {{ added "unreleased" }}
+A comparison on a missing field is NULL in SQL, and `NOT NULL` is still NULL, so `NOT` would drop an event that Sigma matches: `selection and not filter` must match when the event lacks the field `filter` tests. `IS NOT TRUE` maps NULL to true, which matches Sigma and the rsigma engine. {{ added "0.24.0" }}
 
 Field names are always double-quoted (`"CommandLine"`). String literals are always single-quoted with PostgreSQL-standard escaping (`'don''t'`). Identifiers passed through `-O table=...` are validated against `^[A-Za-z_][A-Za-z0-9_$]*$` before insertion; non-matching identifiers fail conversion with `InvalidIdentifier`. See [Security Hardening: SQL injection prevention](../security.md#sql-injection-prevention).
 
@@ -146,7 +146,7 @@ data->'securityContext'->>'isProxy'
 data->'actor'->'detail'->>'alternateId'
 ```
 
-Typed values need care because `->>` returns text. {{ added "unreleased" }}
+Typed values need care because `->>` returns text. {{ added "0.24.0" }}
 
 - A number or a `lt`/`lte`/`gt`/`gte` comparison casts the text to `numeric` only when it reads as a number of at most 100 digits on each side of the decimal point and a three-digit exponent, so a JSON number and a numeric string such as `"1500"` both compare numerically, as in the rsigma engine, and a value such as `"abc"` or `"9e999999"` compares as NULL instead of failing the whole query. Elements of a scalar array (`ports[any]: 4444`) get the same cast:
 
@@ -221,9 +221,9 @@ The backend handles every aggregation type:
 | `value_percentile` | `GROUP BY ... HAVING PERCENTILE_CONT(p) WITHIN GROUP (ORDER BY <field>) >= N`. |
 | `value_median` | Same as `value_percentile` with `p = 0.5`. |
 | `temporal` | CTE: the referenced rules' hits selected from the source table in `WITH matched AS (SELECT * FROM <table> WHERE rule_name IN (...))`, then a `SELECT <group-by>, COUNT(DISTINCT rule_name) AS distinct_rules FROM matched HAVING ... >= N`. |
-| `temporal_ordered` | The `temporal` query plus one CTE per referenced rule that takes the earliest hit of that rule at or after the previous rule's step, per group (`MIN(CASE WHEN rule_name = '<rule>' AND <ts> >= __step_<n-1> THEN <ts> END) OVER (PARTITION BY <group-by>)`). `HAVING ... AND MAX(__step_<last>) IS NOT NULL` keeps a group only when the rules hit in `rules` order; equal timestamps count as in order. {{ added "unreleased" }} |
+| `temporal_ordered` | The `temporal` query plus one CTE per referenced rule that takes the earliest hit of that rule at or after the previous rule's step, per group (`MIN(CASE WHEN rule_name = '<rule>' AND <ts> >= __step_<n-1> THEN <ts> END) OVER (PARTITION BY <group-by>)`). `HAVING ... AND MAX(__step_<last>) IS NOT NULL` keeps a group only when the rules hit in `rules` order; equal timestamps count as in order. {{ added "0.24.0" }} |
 
-Non-temporal correlations that reference detection rules in the same collection auto-wrap the detection logic in `WITH combined_events AS (q1 UNION ALL q2 ...)`. A non-temporal correlation that references another correlation, or a detection rule that failed to convert, fails to convert, because there is no detection query to embed. {{ added "unreleased" }} Multi-table temporal correlations (where referenced detection rules target different tables via pipeline routing) generate `UNION ALL` CTEs with a `rule_name` discriminator column.
+Non-temporal correlations that reference detection rules in the same collection auto-wrap the detection logic in `WITH combined_events AS (q1 UNION ALL q2 ...)`. A non-temporal correlation that references another correlation, or a detection rule that failed to convert, fails to convert, because there is no detection query to embed. {{ added "0.24.0" }} Multi-table temporal correlations (where referenced detection rules target different tables via pipeline routing) generate `UNION ALL` CTEs with a `rule_name` discriminator column.
 
 ### Window modes
 
@@ -235,7 +235,7 @@ A correlation rule's `window` attribute selects the windowing strategy, independ
 | `tumbling` | Boundary-aligned buckets sized to the rule's `timespan`: `time_bucket('<timespan> seconds', <ts>)` on TimescaleDB, `date_bin('<timespan> seconds', <ts>, TIMESTAMPTZ 'epoch')` on plain PostgreSQL, added to the `GROUP BY`. |
 | `session` | Gaps-and-islands: `LAG` marks the first event of each session (gap larger than `gap`), a running `SUM` assigns a per-group `session_id`, and the aggregate is grouped per session. |
 
-Tumbling and session apply to every correlation type. For the aggregate types (`event_count`, `value_count`, `value_sum`, `value_avg`, `value_percentile`, `value_median`) the per-window aggregate is computed over the events; for `temporal`/`temporal_ordered` the combined detections are bucketed (tumbling) or sessionized (session) and each window counts the distinct referenced rules. `temporal_ordered` enforces the order within each bucket or session. {{ added "unreleased" }}
+Tumbling and session apply to every correlation type. For the aggregate types (`event_count`, `value_count`, `value_sum`, `value_avg`, `value_percentile`, `value_median`) the per-window aggregate is computed over the events; for `temporal`/`temporal_ordered` the combined detections are bucketed (tumbling) or sessionized (session) and each window counts the distinct referenced rules. `temporal_ordered` enforces the order within each bucket or session. {{ added "0.24.0" }}
 
 For session windows the `gap` is honored exactly, but the `timespan` cap is enforced as a `HAVING (MAX(<ts>) - MIN(<ts>)) <= INTERVAL '<timespan> seconds'` filter, which drops sessions longer than the cap rather than splitting them mid-session as the runtime engine does. `rsigma backend convert` emits a stderr warning noting this approximation.
 
@@ -266,7 +266,7 @@ Two pipelines ship with `rsigma-convert` for Open Cybersecurity Schema Framework
 
 Both are starting points; copy and customize for your schema.
 
-Encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) convert to an OR of one `ILIKE` (or `=`) per encoded variant, as pySigma does. PostgreSQL text cannot hold a NUL character, so a UTF-16 encoding without a following `base64` or `base64offset` fails with `UnsupportedValue`. {{ added "unreleased" }} There is no `prepared` output format today.
+Encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) convert to an OR of one `ILIKE` (or `=`) per encoded variant, as pySigma does. PostgreSQL text cannot hold a NUL character, so a UTF-16 encoding without a following `base64` or `base64offset` fails with `UnsupportedValue`. {{ added "0.24.0" }} There is no `prepared` output format today.
 
 ## Executing hunts
 

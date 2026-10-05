@@ -115,9 +115,9 @@ rsigma engine eval -r rules/ --suppress 5m < events.ndjson
 rsigma engine eval -r rules/ --correlation-event-mode full --max-correlation-events 20 < events.ndjson
 ```
 
-By default, a detection referenced by a correlation contributes to correlation state but does not produce a standalone result. Set top-level `generate: true` on a correlation when its referenced detections should also be standalone output, or pass `--emit-detections` to emit every detection match for that invocation. {{ added "unreleased" }}
+By default, a detection referenced by a correlation contributes to correlation state but does not produce a standalone result. Set top-level `generate: true` on a correlation when its referenced detections should also be standalone output, or pass `--emit-detections` to emit every detection match for that invocation. {{ added "0.24.0" }}
 
-The same applies to a correlation referenced by another correlation. In a chain where a detection feeds a child correlation that feeds a parent correlation, only the parent produces a result; the child still updates the parent's state. `generate: true` on the parent also emits the child, and `--emit-detections` emits every detection and correlation match in the chain. {{ added "unreleased" }}
+The same applies to a correlation referenced by another correlation. In a chain where a detection feeds a child correlation that feeds a parent correlation, only the parent produces a result; the child still updates the parent's state. `generate: true` on the parent also emits the child, and `--emit-detections` emits every detection and correlation match in the chain. {{ added "0.24.0" }}
 
 | Flag | Purpose |
 |------|---------|
