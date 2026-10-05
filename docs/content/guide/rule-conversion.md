@@ -57,13 +57,13 @@ Correlation methods for 'postgres' (select with -O correlation_method=NAME, defa
 
 ## Filters
 
-A collection conversion applies [Sigma filters](https://github.com/SigmaHQ/sigma-specification) the way pySigma does: each filter's detections and condition are merged into the detection rules it references (by `id` or `name`, or `rules: any`), and only where the filter's `logsource` is contained in the rule's. Processing pipelines run after the merge, so a field mapping renames the filter's fields too. Pass the filter files alongside the rules, for example `rsigma backend convert rules/ filters/ -t postgres`. {{ added "unreleased" }}
+A collection conversion applies [Sigma filters](https://github.com/SigmaHQ/sigma-specification) the way pySigma does: each filter's detections and condition are merged into the detection rules it references (by `id` or `name`, or `rules: any`), and only where the filter's `logsource` is contained in the rule's. Processing pipelines run after the merge, so a field mapping renames the filter's fields too. Pass the filter files alongside the rules, for example `rsigma backend convert rules/ filters/ -t postgres`. {{ added "0.24.0" }}
 
-A backend without correlation support (`lynxdb` and `test`) reports each correlation rule as an `UnsupportedCorrelation` error instead of dropping it, so pass `--skip-unsupported` to convert the rest of a mixed ruleset. {{ added "unreleased" }}
+A backend without correlation support (`lynxdb` and `test`) reports each correlation rule as an `UnsupportedCorrelation` error instead of dropping it, so pass `--skip-unsupported` to convert the rest of a mixed ruleset. {{ added "0.24.0" }}
 
 ## Encoding modifiers
 
-Every native backend converts the encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) the way pySigma does. Each variant the modifiers produce becomes a plain string match, and the variants are ORed together, so `CommandLine|windash|contains: ' -f '` converts to one `contains` match for each of `-`, `/`, `–`, `—`, and `―`, and `|base64offset|contains` converts to one match for each of the three byte alignments. The OR is grouped under an enclosing AND like any value list. A UTF-16 encoding without a following `base64` or `base64offset` produces NUL characters, which the PostgreSQL and Fibratus backends cannot carry in a query, so those rules fail with `UnsupportedValue`. {{ added "unreleased" }}
+Every native backend converts the encoding modifiers (`windash`, `wide`, `utf16le`, `utf16be`, `utf16`, `base64`, `base64offset`) the way pySigma does. Each variant the modifiers produce becomes a plain string match, and the variants are ORed together, so `CommandLine|windash|contains: ' -f '` converts to one `contains` match for each of `-`, `/`, `–`, `—`, and `―`, and `|base64offset|contains` converts to one match for each of the three byte alignments. The OR is grouped under an enclosing AND like any value list. A UTF-16 encoding without a following `base64` or `base64offset` produces NUL characters, which the PostgreSQL and Fibratus backends cannot carry in a query, so those rules fail with `UnsupportedValue`. {{ added "0.24.0" }}
 
 ## Delegated targets (sigma-cli)
 
@@ -202,9 +202,9 @@ This is the right format when you want per-event explanations of why a brute-for
 
 ### Correlation window modes
 
-A collection conversion emits the correlation query but omits detection rules referenced by that correlation unless the correlation has top-level `generate: true`. If several correlations reference one detection, any `generate: true` reference keeps the standalone detection query. A correlation referenced by another correlation is omitted the same way, so a chain converts to the query of its top correlation unless a referencing correlation has `generate: true`. {{ added "unreleased" }}
+A collection conversion emits the correlation query but omits detection rules referenced by that correlation unless the correlation has top-level `generate: true`. If several correlations reference one detection, any `generate: true` reference keeps the standalone detection query. A correlation referenced by another correlation is omitted the same way, so a chain converts to the query of its top correlation unless a referencing correlation has `generate: true`. {{ added "0.24.0" }}
 
-Fibratus sequences and the PostgreSQL aggregate types (`event_count`, `value_count`, `value_sum`, `value_avg`, `value_percentile`, `value_median`) embed the logic of referenced detection rules in the correlation query. PostgreSQL `temporal` and `temporal_ordered` queries do not: they filter on a `rule_name` column of the source table, so set `generate: true` when the standalone detection queries are still needed. Because a correlation's output has no query to embed, a Fibratus correlation or a PostgreSQL aggregate correlation that references another correlation, or a detection rule that failed to convert, fails to convert instead of matching unrelated events. A PostgreSQL `temporal` or `temporal_ordered` correlation can reference other correlations through the `rule_name` column. {{ added "unreleased" }}
+Fibratus sequences and the PostgreSQL aggregate types (`event_count`, `value_count`, `value_sum`, `value_avg`, `value_percentile`, `value_median`) embed the logic of referenced detection rules in the correlation query. PostgreSQL `temporal` and `temporal_ordered` queries do not: they filter on a `rule_name` column of the source table, so set `generate: true` when the standalone detection queries are still needed. Because a correlation's output has no query to embed, a Fibratus correlation or a PostgreSQL aggregate correlation that references another correlation, or a detection rule that failed to convert, fails to convert instead of matching unrelated events. A PostgreSQL `temporal` or `temporal_ordered` correlation can reference other correlations through the `rule_name` column. {{ added "0.24.0" }}
 
 A correlation rule can declare how its `timespan` is anchored to the event stream with the optional `window` attribute (`sliding`, `tumbling`, or `session`). The PostgreSQL backend renders the windowing strategy from this attribute, independent of the output format:
 
@@ -234,7 +234,7 @@ GROUP BY "User", session_id
 HAVING COUNT(*) >= 3 AND (MAX(time) - MIN(time)) <= INTERVAL '3600 seconds'
 ```
 
-The `gap` is honored exactly. The `timespan` cap is enforced as the trailing `HAVING` filter, which drops sessions longer than the cap rather than splitting them mid-session as the runtime engine does; `rsigma backend convert` prints a warning to stderr noting this. Tumbling and session apply to every correlation type. For `temporal`/`temporal_ordered`, the combined detections (the `matched` CTE) are bucketed or sessionized and each window counts the distinct referenced rules with `COUNT(DISTINCT rule_name)`. `temporal_ordered` also requires the rules to hit in `rules` order within the window. {{ added "unreleased" }}
+The `gap` is honored exactly. The `timespan` cap is enforced as the trailing `HAVING` filter, which drops sessions longer than the cap rather than splitting them mid-session as the runtime engine does; `rsigma backend convert` prints a warning to stderr noting this. Tumbling and session apply to every correlation type. For `temporal`/`temporal_ordered`, the combined detections (the `matched` CTE) are bucketed or sessionized and each window counts the distinct referenced rules with `COUNT(DISTINCT rule_name)`. `temporal_ordered` also requires the rules to hit in `rules` order within the window. {{ added "0.24.0" }}
 
 #### Choosing the strategy at conversion time
 
@@ -316,7 +316,7 @@ custom_attributes:
 
 ## LynxDB
 
-The LynxDB backend produces SPL2-compatible queries. A rule renders as a native `search` expression when LynxDB's search matches every one of its values exactly, and as a `where` expression otherwise. {{ added "unreleased" }}
+The LynxDB backend produces SPL2-compatible queries. A rule renders as a native `search` expression when LynxDB's search matches every one of its values exactly, and as a `where` expression otherwise. {{ added "0.24.0" }}
 
 ::: callout tip "LynxDB's own Sigma guide"
 LynxDB maintains the canonical operator-facing guide for running Sigma rules on a LynxDB cluster, including the REST API path, saved queries, and end-to-end tutorials (whoami, bulk conversion, EVTX, CloudTrail, scheduled detection). See [Sigma rules on LynxDB](https://docs.lynxdb.org/docs/sigma/) and the linked subpages (compatibility, SPL2 mapping, pipelines, cookbook, troubleshooting, limitations, drift runbook). RSigma is the engine that emits the SPL2 in that flow.

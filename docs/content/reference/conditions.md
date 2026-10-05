@@ -1,6 +1,6 @@
 # Keywords and Conditions
 
-{{ added "unreleased" }}
+{{ added "0.24.0" }}
 
 This page describes how the evaluator and the converters interpret keyword detections and condition selectors where the specification leaves room for interpretation. The behavior follows the [Sigma specification](https://github.com/SigmaHQ/sigma-specification) and matches pySigma unless a section says otherwise. For value modifiers, see [Value Modifiers](modifiers.md).
 

@@ -4,6 +4,16 @@ All notable changes to RSigma are documented in this file. Each entry correspond
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-05
+
+**TL;DR**
+RSigma v0.24.0 is the "conformance, reliability, and stability" release: Sigma rules now fail early when their semantics are invalid; modifiers, keywords, selectors, filters, correlations, and processing pipelines align more closely with Sigma and pySigma; and native backend queries are verified against real PostgreSQL, LynxDB, and Fibratus engines.
+* Conformance: parse-time semantic validation rejects unusable logsources, invalid modifier/value combinations, malformed regexes and CIDRs, empty detections, and unresolved condition selectors before compilation (#543).
+* Sigma semantics: value modifiers, keywords, selectors, filters, temporal and chained correlations, and processing pipelines now follow the Sigma specification and pySigma more closely (#524, #531, #532, #534, #537, #539, #540, #541).
+* Conversion and reliability: native backends preserve condition precedence, encoding variants, regex flags, typed values, negation, filters, and ordered temporal correlations, with regression tests in PostgreSQL, LynxDB, Fibratus, and pySigma (#528, #530, #542).
+* Breaking: parser errors move earlier, `HIR_SCHEMA_VERSION` is 3, processing-pipeline and correlation APIs change, and the PostgreSQL `case_sensitive_re` option is removed. See the migration notes in the entries below.
+* Platform and docs: Rust 1.96.0 is pinned across development and release builds; deployment, tutorial, troubleshooting, version-tag, architecture, and visual documentation are refreshed; CI, release publishing, dependency, performance, and container scanning workflows are hardened (#516 through #521, #533, #538, #544, #545, #550).
+
 ### Rust toolchain pinned to 1.96.0 (#545)
 
 The workspace MSRV rises from Rust 1.95.0 to 1.96.0. Local development, CI, release binaries, crates.io publishing, performance runs, backend engine tests, and the Docker builder now use the exact compiler pinned in `rust-toolchain.toml` instead of floating `stable`; fuzzing remains on its separately pinned nightly. A shared workflow action installs only each job's required components and targets, and CI rejects version drift across Cargo metadata, the toolchain file, Docker, the README badge, and the contributing guide.
@@ -218,6 +228,8 @@ The README and docs diagram now draws the loop as an infinity ribbon with a clea
 ### Publish rstix before the crates that depend on it (#516)
 
 The crates.io publish workflow now publishes `rstix` first, followed by an index wait. Since `rsigma-runtime` and `rsigma` gained an `rstix` dependency, publishing it last made the `rsigma-runtime` upload fail to resolve the new `rstix` version.
+
+[v0.23.0...v0.24.0](https://github.com/timescale/rsigma/compare/v0.23.0...v0.24.0)
 
 ## [0.23.0] - 2026-09-30
 
@@ -3198,6 +3210,7 @@ First release of rsigma -- a Sigma detection toolkit in Rust. Ships a parser, ev
 
 Initial crates.io publish. Reserved the `rsigma` crate name with a minimal CLI binary (parser + evaluator only, no linter/LSP/pipelines/correlation). Superseded the same day by v0.2.0, which is the first feature-complete release.
 
+[0.24.0]: https://github.com/timescale/rsigma/releases/tag/v0.24.0
 [0.23.0]: https://github.com/timescale/rsigma/releases/tag/v0.23.0
 [0.22.0]: https://github.com/timescale/rsigma/releases/tag/v0.22.0
 [0.21.0]: https://github.com/timescale/rsigma/releases/tag/v0.21.0

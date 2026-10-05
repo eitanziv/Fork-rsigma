@@ -31,7 +31,7 @@ Defaults:
 
 The state key `index` is validated identically to PostgreSQL identifiers (`^[A-Za-z_][A-Za-z0-9_$]*$`). A custom index gets baked into the `FROM <index>` prefix of every generated query.
 
-## Search or where {{ added "unreleased" }}
+## Search or where {{ added "0.24.0" }}
 
 LynxDB's `search` matches tokens case-insensitively and only knows the `*` wildcard. Each rule condition renders as `FROM <index> | search ...` when every value in it is one `search` matches exactly:
 
@@ -89,7 +89,7 @@ EventID=4625
 * | where match(CommandLine, "(?i) /c ")
 ```
 
-`minimal` output strips the leading `FROM <index> | search ` from the corresponding `default` query. A `where` query becomes `* | where ...`, which searches every event and filters it. {{ added "unreleased" }} Use it as the value of LynxDB's saved-query `q` field or any context that expects only the search expression.
+`minimal` output strips the leading `FROM <index> | search ` from the corresponding `default` query. A `where` query becomes `* | where ...`, which searches every event and filters it. {{ added "0.24.0" }} Use it as the value of LynxDB's saved-query `q` field or any context that expects only the search expression.
 
 ## Boolean precedence
 
@@ -97,9 +97,9 @@ LynxDB's `search` evaluates Boolean operators in the order `NOT > OR > AND`, whi
 
 - An `AND` nested under an `OR` is parenthesized: `(A and B) or C` becomes `(A AND B) OR C`.
 - An `OR` nested under an `AND` stays bare, because it already binds tighter: `(A or B) and C` becomes `A OR B AND C`.
-- A compound operand of `NOT` is always parenthesized: `A and not 1 of filter_*` becomes `A AND NOT (filter_1 OR filter_2)`. {{ added "unreleased" }}
+- A compound operand of `NOT` is always parenthesized: `A and not 1 of filter_*` becomes `A AND NOT (filter_1 OR filter_2)`. {{ added "0.24.0" }}
 
-`where` expressions use standard precedence (`NOT > AND > OR`) and are grouped accordingly. {{ added "unreleased" }}
+`where` expressions use standard precedence (`NOT > AND > OR`) and are grouped accordingly. {{ added "0.24.0" }}
 
 ## Examples
 
@@ -150,7 +150,7 @@ rsigma backend convert rules/ -t lynxdb -p pipeline.yml
 FROM security_logs | search CommandLine=*"whoami"*
 ```
 
-### Regex {{ added "unreleased" }}
+### Regex {{ added "0.24.0" }}
 
 ```yaml
 detection:
@@ -165,7 +165,7 @@ FROM main | where match(CommandLine, "^cmd.*whoami")
 
 A `where` query reads every event in the index rather than using the inverted index, so rules that render as `where` are slower than rules that stay in `search`.
 
-### CIDR with combination {{ added "unreleased" }}
+### CIDR with combination {{ added "0.24.0" }}
 
 ```yaml
 detection:
@@ -185,12 +185,12 @@ The CIDR check puts the whole condition in `where`, so the `Action` equality ren
 
 | Feature | Status |
 |---------|--------|
-| Correlation rules | Not supported. Each correlation fails with `UnsupportedCorrelation`; the detection rules it references still convert. {{ added "unreleased" }} |
+| Correlation rules | Not supported. Each correlation fails with `UnsupportedCorrelation`; the detection rules it references still convert. {{ added "0.24.0" }} |
 | Field-to-field comparison (`fieldref`) | Not supported. |
-| Fields with mixed value types | LynxDB stores each column with a single type, so a field holding numbers in some events and strings or booleans in others loses values once events are flushed to segments. For example, a boolean in a numeric field turns every value into 0 or 1. {{ added "unreleased" }} |
-| Keywords that are part of a word | LynxDB skips a segment whose bloom filter lacks the tokens of a keyword, so a keyword such as `hoami` misses `whoami` in events flushed to segments, in both `search` and `where` queries. {{ added "unreleased" }} |
-| Keywords in a `where` query | The regex runs on the event's raw JSON and assumes serde_json's escaping: `"`, `\`, and control characters escaped, other characters verbatim. A producer that escapes non-ASCII characters or `/` writes text the keyword does not match. {{ added "unreleased" }} |
-| `exists` in a `where` query | A field that is present with a null value counts as missing, while `engine eval` counts it as present. In a `search` query, `field=*` counts it as present. {{ added "unreleased" }} |
+| Fields with mixed value types | LynxDB stores each column with a single type, so a field holding numbers in some events and strings or booleans in others loses values once events are flushed to segments. For example, a boolean in a numeric field turns every value into 0 or 1. {{ added "0.24.0" }} |
+| Keywords that are part of a word | LynxDB skips a segment whose bloom filter lacks the tokens of a keyword, so a keyword such as `hoami` misses `whoami` in events flushed to segments, in both `search` and `where` queries. {{ added "0.24.0" }} |
+| Keywords in a `where` query | The regex runs on the event's raw JSON and assumes serde_json's escaping: `"`, `\`, and control characters escaped, other characters verbatim. A producer that escapes non-ASCII characters or `/` writes text the keyword does not match. {{ added "0.24.0" }} |
+| `exists` in a `where` query | A field that is present with a null value counts as missing, while `engine eval` counts it as present. In a `search` query, `field=*` counts it as present. {{ added "0.24.0" }} |
 | Continuous aggregates | LynxDB-equivalent (scheduled saved queries) lives on the LynxDB side. RSigma emits the SPL2; LynxDB schedules it. |
 
 ## See also

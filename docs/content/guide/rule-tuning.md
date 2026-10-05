@@ -61,7 +61,7 @@ filter:
 
 ## Filter targets and selector scope
 
-`filter.rules` resolves each target by rule `id` or `name`. Referencing an exact title remains supported for compatibility, but `rule lint` reports `filter_reference_by_title` so the filter can be migrated to a stable identity. A selector in the filter condition is evaluated only against the filter's own detection items after they are injected into the target. For example, `not 1 of selection_*` selects the filter's `selection_*` items, not similarly named items in the target rule, and `all of them` means all filter items whose names do not start with `_`, the same rule a detection condition follows. `rule tune` writes the target's `id`, or its `name` when the rule has no id, so generated filters only fall back to a title for rules that have neither. {{ added "unreleased" }}
+`filter.rules` resolves each target by rule `id` or `name`. Referencing an exact title remains supported for compatibility, but `rule lint` reports `filter_reference_by_title` so the filter can be migrated to a stable identity. A selector in the filter condition is evaluated only against the filter's own detection items after they are injected into the target. For example, `not 1 of selection_*` selects the filter's `selection_*` items, not similarly named items in the target rule, and `all of them` means all filter items whose names do not start with `_`, the same rule a detection condition follows. `rule tune` writes the target's `id`, or its `name` when the rule has no id, so generated filters only fall back to a title for rules that have neither. {{ added "0.24.0" }}
 
 ## Closed verification
 

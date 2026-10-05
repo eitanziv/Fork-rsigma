@@ -105,7 +105,7 @@ Apply to detection rules (`detection:` block + `condition:`).
 | `empty_value_list` | `warning` | none | A detection item with a list value is empty. |
 | `condition_references_unknown` | `error` | none | The `condition:` expression references a selection name that is not in `detection:`. |
 | `deprecated_aggregation_syntax` | `warning` | none | The condition uses the deprecated aggregation pipe syntax (`condition: selection \| count() > 5`). Use the modern `correlation:` block instead. |
-| `deprecated_detection_timeframe` | `warning` | none | The `detection:` block has a v1.x `timeframe:` key, which has no effect. Use a correlation rule with a `timespan` instead. {{ added "unreleased" }} |
+| `deprecated_detection_timeframe` | `warning` | none | The `detection:` block has a v1.x `timeframe:` key, which has no effect. Use a correlation rule with a `timespan` instead. {{ added "0.24.0" }} |
 | `flattened_array_correlation` | `warning` | none | Two or more sibling keys share a quantified array prefix (e.g. `connections[any].protocol` and `connections[any].ip`). Each opens an independent scope, so they do **not** correlate on the same array element. Use an object-scope block (`connections[any]:` with the fields nested) to require one element to satisfy all of them. See [Array Matching](../guide/array-matching.md). |
 
 ## Correlation rules (18)
@@ -130,7 +130,7 @@ Apply to correlation rules (`correlation:` block).
 | `condition_value_not_numeric` | `error` | none | The numeric threshold in `correlation.condition` is not a number. |
 | `missing_group_by` | `error` | none | `correlation:` has no `group-by:` (required once `type:` is set). |
 | `generate_not_boolean` | `error` | none | The `generate:` field is not a boolean. |
-| `correlation_only_references` | `info` | none | The correlation omits `generate: true`, so referenced rules, detections or correlations, produce no standalone output. {{ added "unreleased" }} |
+| `correlation_only_references` | `info` | none | The correlation omits `generate: true`, so referenced rules, detections or correlations, produce no standalone output. {{ added "0.24.0" }} |
 | `invalid_condition_operator` | `error` | none | A key in `correlation.condition` is not one of `gt`, `gte`, `lt`, `lte`, `eq`, `neq` (the `field` and `percentile` keys are exempt). |
 
 ## Filter rules (9 IDs, 8 emitted)
@@ -146,7 +146,7 @@ Apply to filter rules (`kind: filter` with a `filter:` block). The ninth row (`e
 | `missing_filter_condition` | `error` | none | `filter:` has no `condition:`. |
 | `filter_has_level` | `warning` | yes | Filter rules should not carry `level:`. The fix removes the field. |
 | `filter_has_status` | `warning` | yes | Filter rules should not carry `status:`. The fix removes the field. |
-| `filter_reference_by_title` | `warning` | none | A `filter.rules` entry matches a rule title. Title references are deprecated; use the rule `id` or `name`. {{ added "unreleased" }} |
+| `filter_reference_by_title` | `warning` | none | A `filter.rules` entry matches a rule title. Title references are deprecated; use the rule `id` or `name`. {{ added "0.24.0" }} |
 | `empty_filter_rules` | reserved | none | Variant declared in the enum and asserted in a regression test, but no production code emits it today. |
 
 ## Modifier and `related:` hygiene (7)
@@ -346,7 +346,7 @@ No auto-fix because the migration is structural (split into a base detection plu
 
 ### `deprecated_detection_timeframe`
 
-{{ added "unreleased" }}
+{{ added "0.24.0" }}
 
 Trigger:
 

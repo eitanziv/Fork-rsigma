@@ -14,7 +14,7 @@ rsigma rule validate [OPTIONS] <PATH>
 
 Parses a single Sigma file, or walks a directory and parses every `*.yml`/`*.yaml` Sigma file, with `rsigma-parser`, optionally applies one or more processing pipelines, and compiles each rule with the evaluator's compiler. Reports the counts on stdout (human summary by default). Pass `--output-format json|ndjson|table|csv|tsv` for a structured envelope or `PATH,STATUS,ERRORS` rows. Exits with code `2` if any rule fails to parse or compile. See [Output Formats](../../reference/output.md).
 
-Correlation references are checked as compile errors too. A correlation fails validation when it references a rule `id` or `name` that no detection or correlation rule carries. A reference that resolves to more than one rule also fails validation, which happens when rules share the referenced `id` or `name`, or when one rule's `name` equals another rule's `id`. {{ added "unreleased" }}
+Correlation references are checked as compile errors too. A correlation fails validation when it references a rule `id` or `name` that no detection or correlation rule carries. A reference that resolves to more than one rule also fails validation, which happens when rules share the referenced `id` or `name`, or when one rule's `name` equals another rule's `id`. {{ added "0.24.0" }}
 
 This is the cheapest CI gate: no events are evaluated, just rules and pipelines. Wire it as the first step of every detection-as-code pipeline before [`rule lint`](lint.md) and [`engine eval`](../engine/eval.md) fixture tests.
 
@@ -24,7 +24,7 @@ For narrative coverage see [Linting Rules](../../guide/linting-rules.md) and [CI
 
 | Flag | Description |
 |------|-------------|
-| `<PATH>` | A Sigma YAML file, or a directory searched recursively for Sigma YAML files. Single files are accepted. {{ added "unreleased" }} |
+| `<PATH>` | A Sigma YAML file, or a directory searched recursively for Sigma YAML files. Single files are accepted. {{ added "0.24.0" }} |
 | `-v, --verbose` | Show details for each file, not just the summary. |
 | `-p, --pipeline <PIPELINES>` | Processing pipeline(s) to apply. Builtin names (`ecs_windows`, `fibratus_windows`, `sysmon`) or YAML file paths. Repeatable. |
 | `--source <FILE_OR_DIR>` | External source file(s) or directory of source files. Repeatable. Same standalone `sources:` YAML shape as the daemon's `--source`. Required for meaningful `--resolve-sources` runs after the v1.0 removal of pipeline-embedded `sources:`. |
@@ -53,7 +53,7 @@ Parsed 24 documents from rules/
 
 ### Validate a single file
 
-{{ added "unreleased" }}
+{{ added "0.24.0" }}
 
 ```bash
 rsigma rule validate rules/windows/proc_creation_whoami.yml
